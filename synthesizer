@@ -5,13 +5,13 @@
 
     Example:
 
-    $ pipeline_radmc3d.py --sphfile snap_001.dat --ncells 100 --bbox 50
+    $ synthesizer --sphfile snap_001.dat --ncells 100 --bbox 50
         --show-grid-2d --show-grid-3d --raytrace --lam 3000 --amax 10 
         --polarization --opacity --material p --amin 0.1 --amax 10 --na 100 
         --show-rt --synobs --show-synobs
 
     For details, run:
-    $ pipeline_radmc3d.py --help
+    $ synthesizer --help
 
     Requisites:
         Software:   python3, CASA, RADMC3D, 
@@ -24,6 +24,7 @@
 """
 
 import argparse
+
 import utils
 from pipeline import Pipeline
 
@@ -54,15 +55,23 @@ def synthesizer(cli):
 
     # Run a ray-tracing on the new grid and generate an image
     if cli.raytrace:
-        pipeline.raytrace(lam=cli.lam, incl=cli.incl, npix=cli.npix, 
+        pipeline.raytrace(incl=cli.incl, npix=cli.npix, distance=cli.distance,
             sizeau=cli.sizeau, show=cli.show_rt, noscat=cli.noscat,
             radmc3d_cmds=cli.radmc3d)
 
     # Run a synthetic observation of the new image by calling CASA
     if cli.synobs:
         pipeline.synthetic_observation(show=cli.show_synobs, script=cli.script, 
-            simobserve=cli.simobserve, clean=cli.clean, 
-            exportfits=cli.exportfits, verbose=not cli.quiet)
+            simobserve=not cli.dont_observe, clean=not cli.dont_clean, 
+            exportfits=not cli.dont_export, obstime=cli.obs_time,  
+            resolution=cli.resolution, verbose=not cli.quiet)
+
+    if not cli.grid and not cli.opacity and not cli.monte_carlo and \
+        not cli.raytrace and not cli.synobs:
+
+        utils.print_('Nothing to do. Main options: ' +\
+            '--grid, --monte-carlo, --raytrace or --synobs')
+        utils.print_('Run synthesizer --help for details.')
 
 
 if __name__ == "__main__":
@@ -113,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument('-op', '--opacity', action='store_true', default=False,
         help='Call dustmixer to generate a dust opacity table')
 
-    parser.add_argument('--material', action='store', default='sg',
+    parser.add_argument('--material', action='store', default='s',
         help='Dust optical constants. Can be a predefined key, a path or a url')
 
     parser.add_argument('--amin', action='store', type=float, default=0.1,
@@ -153,12 +162,12 @@ if __name__ == "__main__":
         help='Wavelength used to generate an image in units of micron')
 
     parser.add_argument('--lmin', action='store', type=float, default=0.1,
-        help='Lower end of the wavelength grid.')
+        help='Lower end of the wavelength grid in microns.')
 
     parser.add_argument('--lmax', action='store', type=float, default=1e6,
-        help='Upper end of the wavelength grid.')
+        help='Upper end of the wavelength grid in microns.')
 
-    parser.add_argument('--nlam', action='store', type=float, default=200,
+    parser.add_argument('--nlam', action='store', type=int, default=200,
         help='Number of wavelengths to build a logarithmically spaced grid.')
 
     parser.add_argument('--npix', action='store', type=int, default=300,
@@ -169,6 +178,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--sizeau', action='store', type=int, default=100,
         help='Physical size of the image in AU')
+
+    parser.add_argument('--distance', action='store', type=float, default=141,
+        help='Physical distance in pc, used to convert fluxes into Jy/pixel.')
 
     parser.add_argument('--star', action='store', default=None, nargs=6, 
         help='6 params to define a radiating star (cgs): x y z Rstar Mstar Teff')
@@ -200,14 +212,20 @@ if __name__ == "__main__":
     parser.add_argument('--synobs', action='store_true', default=False,
         help='Call CASA to run a synthetic observation from the new image')
 
-    parser.add_argument('--simobserve', action='store', default=True,
-        help="Run CASA's Simobserve task from a model fits file.")
+    parser.add_argument('--dont-observe', action='store_true', default=False,
+        help="Skips CASA's Simobserve task.")
 
-    parser.add_argument('--clean', action='store', default=True,
-        help="Run CASA's tclean task to clean and image simobserve's output.")
+    parser.add_argument('--dont-clean', action='store_true', default=False,
+        help="Skips CASA's tclean task to clean and image simobserve's output.")
 
-    parser.add_argument('--exportfits', action='store', default=True,
-        help="Run CASA's tclean task to clean and image simobserve's output.")
+    parser.add_argument('--dont-export', action='store_true', default=False,
+        help="Don't export tclean's output as a fits image.")
+
+    parser.add_argument('--obs-time', action='store', type=float, default=None,
+        help="Set the observing time in hours.")
+
+    parser.add_argument('--resolution', action='store', type=float, default=None,
+        help="Set a desired angular resolution in arcseconds.")
 
     parser.add_argument('--script', action='store', default=None,
         help='Name, path or url to a CASA script for the synthetic observation.')

@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from glob import glob
 
-import utils
-import dustmixer
-import gridder
-import synobs
+from synthesizer import utils
+from synthesizer import dustmixer
+from synthesizer import gridder
+from synthesizer import synobs
 
 
 class Pipeline:
@@ -65,6 +65,9 @@ class Pipeline:
             self.mstar = star[4]
             self.tstar = star[5]
 
+        self.npix = None
+        self.incl = None
+        self.sizeau = None
         self.overwrite = overwrite
         self.verbose = verbose
 
@@ -159,37 +162,37 @@ class Pipeline:
         
         if self.material == 's':
             mix = dustmixer.Dust(name='Silicate')
-            mix.set_nk('astrosil-Draine2003.lnk', skip=1, get_density=True)
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+            mix.set_nk('astrosil-Draine2003.lnk', skip=1, get_density=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'g':
             mix = dustmixer.Dust(name='Graphite')
-            mix.set_nk('c-gra-Draine2003.lnk', skip=1, get_density=True)
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+            mix.set_nk('c-gra-Draine2003.lnk', skip=1, get_density=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
         elif self.material == 'p':
             mix = dustmixer.Dust(name='Pyroxene')
+            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
             mix.set_nk('pyrmg70.lnk', get_density=False)
             mix.set_density(3.01, cgs=True)
-            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
             mix = dustmixer.Dust(name='Organics')
+            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
             mix.set_nk('organics.nk', get_density=False)
             mix.set_density(1.50, cgs=True)
-            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'sg':
             sil = dustmixer.Dust(name='Silicate')
             gra = dustmixer.Dust(name='Graphite')
-            sil.set_nk('astrosil-Draine2003.lnk', skip=1, get_density=True)
-            gra.set_nk('c-gra-Draine2003.lnk', skip=1, get_density=True)
             sil.set_lgrid(self.lmin, self.lmax, self.nlam)
             gra.set_lgrid(self.lmin, self.lmax, self.nlam)
+            sil.set_nk('astrosil-Draine2003.lnk', skip=1, get_density=True)
+            gra.set_nk('c-gra-Draine2003.lnk', skip=1, get_density=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
@@ -199,8 +202,8 @@ class Pipeline:
         else:
             try:
                 mix = dustmixer.Dust(self.material.split('/')[-1].split('.')[0])
-                mix.set_nk(path=self.material, skip=1, get_density=True)
                 mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+                mix.set_nk(path=self.material, skip=1, get_density=True)
                 mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
                 self.material = mix.name
 
@@ -340,8 +343,8 @@ class Pipeline:
         self.steps.append('monte_carlo')
 
     @utils.elapsed_time
-    def raytrace(self, incl, npix, sizeau, lam=None, show=True, noscat=False, 
-            fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
+    def raytrace(self, lam=None, incl=None, npix=None, sizeau=None, distance=141,
+            show=True, noscat=True, fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
@@ -350,8 +353,16 @@ class Pipeline:
         utils.print_("Ray-tracing the model density and temperature ...\n", 
             bold=True)
 
+        self.distance = distance
+
         if lam is not None:
             self.lam = lam
+        if npix is not None:
+            self.npix = npix
+        if sizeau is not None:
+            self.sizeau = sizeau
+        if incl is not None:
+            self.incl = incl
 
         # To do: What's the diff. between passing noscat and setting scatmode=0
         if noscat: self.scatmode = 0
@@ -382,7 +393,7 @@ class Pipeline:
         if self.alignment:
             if 'dustmixer' not in self.steps:
                 # If not manually provided, download it from the repo
-                if len(glob('dustkapalignfact*')) == 0 or self.overwrite:
+                if len(glob('dustkapalignfact*')) == 0:
                     self.generate_input_files(dustkapalignfact=True)
 
             if not os.path.exists('grainalign_dir.inp'):
@@ -403,14 +414,14 @@ class Pipeline:
  
         # Explicitly the model rotate by 180.
         # Only for the current model. This line should be later removed.
-        incl = 180 - int(incl)
+        self.incl = 180 - int(self.incl)
 
         # Set the RADMC3D command by concatenating options
         cmd = f'radmc3d image '
-        cmd += f'lambda {lam} ' if lam is not None else ' '
-        cmd += f'incl {incl} ' if incl is not None else ' '
-        cmd += f'npix {npix} ' if npix is not None else ' '
-        cmd += f'sizeau {sizeau} ' if sizeau is not None else ' '
+        cmd += f'lambda {self.lam} '
+        cmd += f'incl {self.incl} ' if self.incl is not None else ' '
+        cmd += f'npix {self.npix} ' if self.npix is not None else ' '
+        cmd += f'sizeau {self.sizeau} ' if self.sizeau is not None else ' '
         cmd += f'stokes ' if self.polarization else ' '
         cmd += f'{" ".join(radmc3d_cmds)} '
         
@@ -434,14 +445,10 @@ class Pipeline:
     
         # Generate a FITS file from the image.out
         if os.path.exists(fitsfile): os.remove(fitsfile)
-        utils.radmc3d_casafits(fitsfile, stokes='I')
+        utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
 
         # Clean extra keywords from the header to avoid APLPy axis errors
-        utils.edit_header(fitsfile, 'CDELT3', 'del', False)
-        utils.edit_header(fitsfile, 'CRVAL3', 'del', False)
-        utils.edit_header(fitsfile, 'CUNIT3', 'del', False)
-        utils.edit_header(fitsfile, 'CTYPE3', 'del', False)
-        utils.edit_header(fitsfile, 'CRPIX3', 'del', False)
+        utils.fix_header_axes(fitsfile)
 
         # Also for Q and U Stokes components if considering polarization
         if self.polarization:
@@ -450,14 +457,10 @@ class Pipeline:
                 stokesfile = f'radmc3d_{s}.fits'
                 if os.path.exists(stokesfile):
                         os.remove(stokesfile)
-                utils.radmc3d_casafits(stokesfile, stokes=s)
+                utils.radmc3d_casafits(stokesfile, stokes=s, dpc=distance)
 
                 # Clean extra keywords from the header to avoid APLPy errors 
-                utils.edit_header(stokesfile, 'CDELT3', 'del', False)
-                utils.edit_header(stokesfile, 'CRVAL3', 'del', False)
-                utils.edit_header(stokesfile, 'CUNIT3', 'del', False)
-                utils.edit_header(stokesfile, 'CTYPE3', 'del', False)
-                utils.edit_header(stokesfile, 'CRPIX3', 'del', False)
+                utils.fix_header_axes(stokesfile)
 
         # Plot the new image in Jy/pixel
         if show:
@@ -467,7 +470,7 @@ class Pipeline:
                 fig = utils.polarization_map(
                     source='radmc3d',
                     render='I', 
-                    rotate=0, 
+                    rotate=90 if self.alignment else 0, 
                     step=15, 
                     scale=10, 
                     min_pfrac=0, 
@@ -475,6 +478,7 @@ class Pipeline:
                     vector_color='white',
                     vector_width=1, 
                     verbose=False,
+                    block=True, 
                 )
             else:
                 fig = utils.plot_map(
@@ -489,7 +493,7 @@ class Pipeline:
     @utils.elapsed_time
     def synthetic_observation(self, show=False, cleanup=True, 
             script=None, simobserve=True, clean=True, exportfits=True, 
-            graphic=True, verbose=False):
+            obstime=None, resolution=None, graphic=True, verbose=False):
         """ 
             Prepare the input for the CASA simulator from the RADMC3D output,
             and call CASA to run a synthetic observation.
@@ -500,14 +504,17 @@ class Pipeline:
 
         if script is None:
             # Create a minimal template CASA script
-            script = synobs.CasaScript()
-            script.lam = self.lam
-            script.polarization = polarization
+            script = synobs.CasaScript(lam=self.lam)
+            script.polarization = self.polarization
             script.simobserve = simobserve
             script.clean = clean
             script.graphic = graphic
             script.verbose = verbose
-            script.overwrite = overwrite
+            script.overwrite = self.overwrite
+            script.resolution = resolution
+            if self.npix is not None: script.npix = int(self.npix + 20)
+            if obstime is not None: script.totaltime = f'{obstime}h'
+            script.verbose = verbose
             script.write('casa_script.py')
 
         elif 'http' in script: 
@@ -524,31 +531,43 @@ class Pipeline:
         # Show the new synthetic image
         if show:
             utils.print_(f'Plotting the new synthetic image')
-                
-            if self.polarization:
-                fig = utils.polarization_map(
-                    render='I', 
-                    stokes_I=script.fitsI, 
-                    stokes_Q=script.fitsQ, 
-                    stokes_U=script.fitsU, 
-                    rotate=0, 
-                    step=15, 
-                    scale=10, 
-                    const_pfrac=True, 
-                    vector_color='white',
-                    vector_width=1, 
-                    verbose=False,
-                )
-            else:
-                fig = utils.plot_map(
-                    filename=script.fitsI,  
-                    bright_temp=False,
-                    verbose=False,
-                )
+
+            try:
+                utils.file_exists(script.fitsimage('I'))
+                utils.fix_header_axes(script.fitsimage('I'))
+                    
+                if self.polarization:
+                    utils.file_exists(script.fitsimage('Q'))
+                    utils.fix_header_axes(script.fitsimage('Q'))
+                    utils.fix_header_axes(script.fitsimage('U'))
+
+                    fig = utils.polarization_map(
+                        source='obs', 
+                        render='I', 
+                        stokes_I=script.fitsimage('I'), 
+                        stokes_Q=script.fitsimage('I'), 
+                        stokes_U=script.fitsimage('I'), 
+                        rotate=0, 
+                        step=15, 
+                        scale=10, 
+                        const_pfrac=True, 
+                        vector_color='white',
+                        vector_width=1, 
+                        verbose=True,
+                    )
+                else:
+                    fig = utils.plot_map(
+                        filename=script.fitsimage('I'),
+                        bright_temp=False,
+                        verbose=False,
+                    )
+            except Exception as e:
+                utils.print_(
+                    f'Unable to plot {script.fitsimage("I")}:\n{e}', bold=True)
 
         # Clean-up and remove unnecessary files created by CASA
         if cleanup:
-            subprocess.run('rm *.last casa-*.log', shell=True)
+            script.cleanup()
 
         # Register the pipeline step 
         self.steps.append('synobs')

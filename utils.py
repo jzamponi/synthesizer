@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+from glob import glob
 from functools import wraps
 from pathlib import Path, PosixPath
 
@@ -88,18 +89,30 @@ def elapsed_time(caller):
     return wrapper
 
 
-def file_exists(filename):
+def file_exists(filename, raise_=True):
     """ Raise an error if a file doesnt exist. Supports linux wildcards. """
 
     msg = f'{color.red}{filename} not found.{color.none}'
-
+    
     if '*' in filename:
         if len(glob(filename)) == 0:
-            raise FileNotFoundError(msg)
+            if raise_:
+                raise FileNotFoundError(msg)
+            else:
+                return False
+        else:
+            if not raise_:
+                return True
         
-    elif not os.path.exists(filename): 
-        raise FileNotFoundError(msg)
-
+    else:
+        if not os.path.exists(filename): 
+            if raise_:
+                raise FileNotFoundError(msg)
+            else:
+                return False
+        else:
+            if not raise_:
+                return True
 
 def download_file(url, msg=None, verbose=True, *args, **kwargs):
     """ Perform an HTTP GET request to fetch files from internet """ 
@@ -409,7 +422,7 @@ def convert_opacity_file(
     
 
 def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmcimage='image.out',
-        stokes='I'):
+        stokes='I', dpc=141):
     """ Read in an image.out file created by RADMC3D and generate a
         FITS file with a CASA-compatible header, ready for a 
         synthetic observation.
@@ -420,7 +433,7 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmcimage='image.out',
     
     im.writeFits(
         fitsfile,
-        dpc=141, 
+        dpc=dpc, 
         coord='16h32m22.63s -24d28m31.8s', 
         casa=False,
         stokes=stokes,
@@ -541,6 +554,27 @@ def edit_header(filename, key, value, verbose=True):
         header[key] = value
 
     write_fits(filename, data=data, header=header, overwrite=True, verbose=verbose)
+
+
+def fix_header_axes(file):
+    """ Removes a third axis when NAXIS is 2, to avoid APLPy errors """
+    
+    header = fits.getheader(file)
+    
+    if 'CDELT3' in header and header['NAXIS'] == 2:
+        # Clean extra keywords from the header to avoid APLPy errors 
+        edit_header(file, 'CDELT3', 'del', False)
+        edit_header(file, 'CRVAL3', 'del', False)
+        edit_header(file, 'CUNIT3', 'del', False)
+        edit_header(file, 'CTYPE3', 'del', False)
+        edit_header(file, 'CRPIX3', 'del', False)
+
+    if 'PC3_3' in header and header['NAXIS'] == 2:
+        edit_header(file, 'PC3_1', 'del', False)
+        edit_header(file, 'PC3_2', 'del', False)
+        edit_header(file, 'PC1_3', 'del', False)
+        edit_header(file, 'PC2_3', 'del', False)
+        edit_header(file, 'PC3_3', 'del', False)
 
 
 @elapsed_time
@@ -784,10 +818,6 @@ def polarization_map(
     mapsize=None, 
     vector_color="white",
     vector_width=1, 
-    add_thermal=False,
-    add_scattered=False,
-    add_bfield=False,
-    const_bfield=False,
     const_pfrac=False,
     min_pfrac=0, 
     rms_I=None, 
@@ -796,7 +826,7 @@ def polarization_map(
     rescale=None,
     savefig=None,
     show=True,
-    block=False, 
+    block=True, 
     verbose=True,
     *args,
     **kwargs,
@@ -824,123 +854,15 @@ def polarization_map(
         V = np.zeros(U.shape)
         tau = np.zeros(I.shape)
         
-    elif 'polaris' in source:
-        filename = 'polaris_detector_nr0001.fits.gz'
-        data = fits.getdata(filename).squeeze()
-        hdr = fits.getheader(filename)
-
-        I = data[0]
-        Q = data[1]
-        U = data[2]
-        V = data[3]
-
-        try:
-            tau = data[4]
-        except:
-            tau = np.zeros(I.shape)
-
-        # Add thermal flux to the scattered flux.
-        # If add_thermal is a path, then read the flux from file
-        if isinstance(add_thermal, (str,PosixPath)):
-            try:
-                I_th = fits.getdata(add_thermal)
-                if 'polaris_detector' in add_thermal:
-                    I_th = I_th[0][0]
-            except OSError:
-                raise FileNotFoundError(
-                    f"File with thermal flux does not exist.\n" + f"File: {add_thermal}"
-                )
-
-        # If add_thermal is True, assume the path to scattered flux file is similarly structured 
-        elif add_thermal:
-            if "thermal emission" in hdr.get("ETYPE", ""):
-                print_("You are adding thermal flux to the thermal flux. Not gonna happen.", bold=True)
-                I_th = np.zeros(I.shape)
-
-            elif "scattered emission" in hdr.get("ETYPE", ""):
-                print_("Adding thermal flux to the self-scattered flux.", bold=True)
-
-                if 'dust_scattering' in pwd:
-                    thermal_file = pwd.replace("dust_scattering", "dust_emission")
-                    thermal_file = thermal_file.replace("data", "dust_scat/data")
-                    print_(f'pwd: {pwd}', verbose=True, bold=True)
-                elif 'dust_mc' in pwd:
-                    thermal_file = pwd.replace("dust_mc", "dust_th")
-
-                print_(f"File: {thermal_file + '/' + filename}", bold=True)
-                try:
-                    I_th = fits.getdata(thermal_file + "/" + filename)[0][0]
-                except OSError:
-                    raise FileNotFoundError(
-                        f'File with thermal flux does not exist.\n\
-                                            File: {thermal_file+"/"+filename}'
-                    )
-        # If not provided, set to zero
-        else:
-            I_th = np.zeros(I.shape)
-
-        # Add self-scattered emission to the thermal emission if required
-        if isinstance(add_scattered, (str,PosixPath)):
-            try:
-                I_ss = fits.getdata(add_scattered)
-            except OSError:
-                raise FileNotFoundError(
-                    f"File with thermal flux does not exist.\n" + \
-                    "File: {add_thermal}"
-                )
-
-        # If add_thermal is True, assume the path to scattered flux file is 
-        # similarly structured 
-        elif add_scattered:
-            if "scattered emission" in hdr.get("ETYPE", ""):
-                print_("You are adding scattered flux to the scattered flux. "+\
-                    "Not gonna happen.", bold=True)
-                I_ss = np.zeros(I.shape)
-
-            elif "thermal emission" in hdr.get("ETYPE", ""):
-                print_("Adding scattered flux to the thermal flux.", bold=True)
-
-                try:
-                    if os.path.isfile(f'{pwd}/../dust_scat/data/' + 
-                        'polaris_detector_nr0001.fits.gz'):
-                        # Get the full flux from results of CMD_DUST_EMISSION incl. scat.
-                            I_ss = fits.getdata(f'{pwd}/../dust_scat/data/' +
-                             'polaris_detector_nr0001.fits.gz')[0][0]
-                            # Remove thermal flux, since this file has both.
-                            I_ss = I_ss - I
-                    else:
-                        # Look for it in results from CMD_DUST_SCATTERING mode 
-                        if 'dust_alignment' in pwd:
-                            scattered_file = pwd.replace("dust_alignment", "dust_scattering")
-                            scattered_file = scattered_file.replace("pa/", "")
-                        elif 'dust_emission' in pwd:
-                            scattered_file = pwd.replace("dust_emission", "dust_scattering")
-                        elif 'dust_mc' in pwd:
-                            scattered_file = pwd.replace("dust_mc", "dust_th")
-
-                        print_(f"File: {scattered_file + '/' + filename}", bold=True)
-                        I_ss = fits.getdata(scattered_file + "/" + filename)[0][0]
-                except OSError:
-                    raise FileNotFoundError(
-                        f'File with scattered flux does not exist.\n\
-                         File: {scattered_file+"/"+filename}')
-
-        # If not provided, set scattered flux to zero
-        else:
-            I_ss = np.zeros(I.shape)
-
-        # Add all sources of flux: thermal and scattered emission
-        I = I + I_th + I_ss
-
     else:
         # Assume the name of the source files for I, Q and U is given manually
-        source = 'obs'
+        source = stokes_I.split('_')[0]
 
         print_('Reading files from an external source ...', True)
         hdr = fits.getheader('obs_I.fits' if stokes_I is None else stokes_I)
-        I = fits.getdata('obs_I.fits' if stokes_I is None else stokes_I).squeeze()
-        Q = fits.getdata('obs_Q.fits' if stokes_Q is None else stokes_Q).squeeze()
-        U = fits.getdata('obs_U.fits' if stokes_U is None else stokes_U).squeeze()
+        I = fits.getdata(stokes_I).squeeze()
+        Q = fits.getdata(stokes_Q).squeeze()
+        U = fits.getdata(stokes_U).squeeze()
         V = np.zeros(U.shape)
         tau = np.zeros(I.shape)
 
@@ -1001,11 +923,6 @@ def polarization_map(
             print_(f'Ignoring const_pfrac = {const_pfrac}', verbose)
         else:
             pfrac = np.ones(pfrac.shape) 
-
-    # Edit the header of the models to set the phasecenter from IRAS16293B
-    if source == 'polaris':
-        hdr = set_hdr_to_iras16293B(hdr, keep_wcs=True, verbose=True)
-        hdr['BUNIT'] = 'Jy/pixel'
 
     # Write quantities into fits files
     quantities = {
@@ -1084,7 +1001,7 @@ def polarization_map(
         bright_temp=bright_temp, 
         scalebar=scalebar, 
         verbose=verbose, 
-        block=block,
+        block=False,
         *args,
         **kwargs,
     )
@@ -1122,27 +1039,6 @@ def polarization_map(
     )
     fig.refresh()
 
-    # Add B-field vectors
-    # TO DO: ADD A LABEL TO INDICATE WHAT VECTORS ARE WHAT
-    if add_bfield:
-        print_("Adding magnetic field lines.")
-
-        B = Bfield()
-
-        write_fits("B.fits", data=B.get_strength(const_pfrac), header=hdr)
-        write_fits("Bangle.fits", data=B.get_angle(), header=hdr)
-
-        fig.show_vectors(
-            "B.fits",
-            "Bangle.fits",
-            step=step,
-            scale=scale,
-            rotate=0,
-            color="tab:green",
-            zorder=1,
-            layer="B_vectors",
-        )
-    
     # Plot the tau = 1 contour when optical depth is plotted    
     if render.lower() in ["tau", "optical depth"]:
         fig.show_contour(

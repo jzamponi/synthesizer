@@ -31,7 +31,9 @@ from time import time, strftime, gmtime
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from scipy.interpolate import interp1d, splrep, splev
-import utils
+
+from synthesizer import utils
+from synthesizer.dustmixer import bhmie, bhcoat
 
 
 class Dust():
@@ -55,6 +57,7 @@ class Dust():
         self.ksca = None
         self.kabs = None
         self.nlam = None
+        self.l = np.logspace(-1, 4, 200)
 
     def __str__(self):
         print(f'{self.name}')
@@ -71,9 +74,6 @@ class Dust():
 
         dust = Dust(self)
 
-        # Set the quantities from both objects to a common wavelength grid
-
-        # Add the quantities of both materials
         dust.kext = self.kext + other.kext
         dust.ksca = self.ksca + other.ksca
         dust.kabs = self.kabs + other.kabs
@@ -170,18 +170,19 @@ class Dust():
         self.lmin = lmin
         self.lmax = lmax
         self.nlam = nlam
-        self.lgrid = np.logspace(self.lmin, self.lmax, self.nlam)
+        self.l = np.logspace(np.log10(lmin), np.log10(lmax), nlam)
+        self.l = self.l * u.micron.to(u.cm)
 
-    def interpolate(self, q):
-        """ Interpolate quantities within the wavelength grid. """
+    def interpolate(self, l_in, q):
+        """ Interpolate optical constants within the wavelength grid. """
 
-        return splev(self.lgrid, splrep(self.lgrid, self.q))
+        return splev(self.l, splrep(l_in, q))
 
     def set_nk(self, path, skip=0, meters=False, cm=False, get_density=False):
         """ Set n and k values by reading them from file. 
             Assumes wavelength is provided in microns unless specified otherwise
             Also, can optionally read the density from the file, assuming it is
-            the second number in the header and comes in g/cm^3.
+            the second number in the header and comes in g/cm3.
          """
         
         # Download the optical constants from the internet if path is a url
@@ -193,6 +194,12 @@ class Dust():
         utils.print_(f'Reading optical constants from: {path}')
         self.datafile = ascii.read(path, data_start=skip)
 
+        # Optionally read the density as the second number from the file header
+        if get_density:
+            dens = float(ascii.read(path, data_end=1)['col2'])
+            utils.print_(f'Reading in density from file: {dens} g/cm3')
+            self.set_density(dens)
+                
         # Override the default column names used by astropy.io.ascii.read
         column_name = {'l': 'col1', 'n': 'col2', 'k': 'col3'}
         self.n = self.datafile[column_name['n']]
@@ -200,24 +207,19 @@ class Dust():
         
         # Parse the wavelength units to ensure they are in cm
         if meters:
-            self.l = self.datafile[column_name['l']] * u.m.to(u.cm)
+            self.l_nk = self.datafile[column_name['l']] * u.m.to(u.cm)
         elif cm:
-            self.l = self.datafile[column_name['l']]
+            self.l_nk = self.datafile[column_name['l']]
         else:
-            self.l = self.datafile[column_name['l']] * u.micron.to(u.cm)
+            self.l_nk = self.datafile[column_name['l']] * u.micron.to(u.cm)
 
-        # Optionally read the density as the second number from the file header
-        if get_density:
-            dens = float(ascii.read(path, data_end=1)['col2'])
-            utils.print_(f'Reading in density from file: {dens} g/cm^3')
-            self.set_density(dens)
-                
-    def mix(self, other, nlam=200):
+        # Interpolate and extrapolate optical constants to the wavelenght grid
+        self.n = self.interpolate(l_in=self.l_nk, q=self.n).clip(min=1e-10)
+        self.k = self.interpolate(l_in=self.l_nk, q=self.k).clip(min=1e-10)
+
+    def mix(self, other):
         """
             Mix two dust components using the bruggeman rule. 
-
-            It initially creates a common wavelength grid by interpolating
-            the entered n and k values within the min and max wavelenth.
 
             *** This feature is currently incomplete. ***
         """
@@ -226,23 +228,9 @@ class Dust():
         mixture = Dust(self)
         mixture.name = " + ".join([self.name,other.name])
 
-        # Create a wavelength grid covering the range of both input tables
-        self.l_min = np.max([np.min(self.l), np.min(other.l)])
-        self.l_max = np.min([np.max(self.l), np.max(other.l)])
-        self.l = np.logspace(
-            np.log10(self.l_min), np.log10(self.l_max), nlam)
-        
-        # Interpolate n and k values using cubic spline
-        self.n1_interp = splev(self.l, splrep(self.l, self.n)).clip(min=0.0)
-        self.k1_interp = splev(self.l, splrep(self.l, self.k)).clip(min=0.0)
-        self.n2_interp = splev(self.l, splrep(other.l, other.n)).clip(min=0.0)
-        self.k2_interp = splev(self.l, splrep(other.l, other.k)).clip(min=0.0)
-
         # Apply the Bruggeman rule for n & k mixing
-        self.n_mixed, self.k_mixed = self.bruggeman_mixing([self.vf, other.vf])
+        mixture.n, mixture.k = self.bruggeman_mixing([self.vf, other.vf])
 
-        mixture.n = self.n_mixed
-        mixture.k = self.k_mixed
         mixture.dens = np.dot([self.dens, other.dens], [self.vf, other.vf])
 
         return mixture
@@ -257,8 +245,8 @@ class Dust():
 
         # Let epsilon = m^2 = (n+ik)^2
         eps = np.array([ 
-                [complex(n,k)**2 for (n,k) in zip(self.n1_interp, self.k1_interp)], 
-                [complex(n,k)**2 for (n,k) in zip(self.n2_interp, self.k2_interp)]
+                [complex(n,k)**2 for (n,k) in zip(self.n1, self.k)], 
+                [complex(n,k)**2 for (n,k) in zip(self.n2, self.k)]
         ])
         
         # Let f_i be the vol. fractions of each material
@@ -268,8 +256,8 @@ class Dust():
         eps_mean = np.empty(np.shape(self.l)).astype('complex')
         for i, l in enumerate(self.l):
             # Define the expresion for mixing and solve for eps_mean
-            expression = lambda x: sum(f_i * ((eps[:,i]-x) / (eps[:,i]+2*x)))
-            eps_mean[i] = complex(findroot(expression, complex(0.5,0.5)))
+            expression = lambda x: sum(f_i * ((eps[:,i]-x) / (eps[:,i] + 2*x)))
+            eps_mean[i] = complex(findroot(expression, complex(0.5, 0.5)))
         
         eps_mean = np.sqrt(eps_mean)
 
@@ -318,7 +306,6 @@ class Dust():
 
         # Calculate dust efficiencies for a bare grain
         if algorithm.lower() == 'bhmie':
-            from bhmie import bhmie
             
             # Iterate over wavelength
             for i, l_ in enumerate(self.l):
@@ -329,7 +316,7 @@ class Dust():
                 self.m = complex(self.n[i], self.k[i])
                 
                 # Call BHMie (Bohren & Huffman 1986)
-                bhmie_ = bhmie(self.x, self.m, self.angles)
+                bhmie_ = bhmie.bhmie(self.x, self.m, self.angles)
                 
                 # Store the Mueller matrix elements and dust efficiencies
                 s1 = bhmie_[0]
@@ -362,7 +349,6 @@ class Dust():
 
         # Calculate dust efficiencies for a coated grain
         elif algorithm.lower() == 'bhcoat':
-            from bhcoat import bhcoat
 
             utils.print_('The implementation for coated grains is currently '+\
                 'incomplete.', red=True)
@@ -400,7 +386,7 @@ class Dust():
                 self.m_mant = complex(coat.n_interp[i], coat.k_interp[i])
                 
                 # Calculate the efficiencies for a coated grain
-                bhcoat_ = bhcoat(self.x, self.y, self.m_core, self.m_mant)
+                bhcoat_ = bhcoat.bhcoat(self.x, self.y, self.m_core, self.m_mant)
                 
                 self.Qext[i] = bhcoat_[0]
                 self.Qsca[i] = bhcoat_[1]
@@ -603,7 +589,8 @@ class Dust():
 
             if self.nang < 5:
                 self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
-                self.gsca[i] = np.trapz(Csca * gsca_a[i] * phi) / self.ksca[i]
+                self.gsca[i] = \
+                    np.trapz(Csca * self.gsca_a[i] * phi) / self.ksca[i]
             else:
                 self.ksca[i] = 2 * np.pi * int_Z11_dmu
                 self.gsca[i] = 2 * np.pi * int_Z11_mu_dmu / self.ksca[i]
