@@ -41,7 +41,12 @@ class CartesianGrid():
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
 
     def read_sph(self, filename, source='sphng-bin'):
-        """ Read SPH data """
+        """ Read SPH data. 
+            Below are defined small interfaces to read in data from SPH codes.
+
+            To add new code sources, synthesizer needs (all values in CGS):
+                self.x, self.y, self.z, self.dens and self.temp (optional) 
+         """
 
         import h5py
 
@@ -63,13 +68,12 @@ class CartesianGrid():
 
         elif source.lower() == 'gizmo':
             self.sph = h5py.File(filename, 'r')['PartType0']
-            h = 0.7
-            code_length = h**-1 * u.kpc.to(u.cm)
-            code_dens = 6.77e-22 * h**-2
-            coords = np.array(self.sph['Coordinates']) * code_length
-            self.x = coords[:, 0]
-            self.y = coords[:, 1]
-            self.z = coords[:, 2]
+            code_length = u.pc.to(u.cm)
+            code_dens = 1.3816326620099363e-23
+            coords = np.array(self.sph['Coordinates'])
+            self.x = coords[:, 0] * code_length
+            self.y = coords[:, 1] * code_length
+            self.z = coords[:, 2] * code_length
             self.dens = np.array(self.sph['Density']) * code_dens / self.g2d
             self.npoints = len(self.dens)
             if self.add_temp: 
@@ -92,6 +96,33 @@ class CartesianGrid():
             utils.not_implemented()
             
         elif source.lower() == 'gandalf':
+            utils.not_implemented()
+            
+        else:
+            raise ValueError(f'Source = {source} is currently not supported')
+
+    def read_amr(self, filename, sourle='athena++'):
+        """ Read SPH data """
+
+        import h5py
+
+        utils.print_(f'Reading data from: {filename} | Format: {source}')
+        if not os.path.exists(filename): 
+            raise FileNotFoundError('Input AMR file does not exist')
+
+        if source.lower() == 'athena++':
+            utils.not_implemented()
+
+        elif source.lower() == 'zeustw':
+            utils.not_implemented()
+
+        elif source.lower() == 'flash':
+            utils.not_implemented()
+
+        elif source.lower() == 'enzo':
+            utils.not_implemented()
+            
+        elif source.lower() == 'ramses':
             utils.not_implemented()
             
         else:
@@ -274,7 +305,6 @@ class CartesianGrid():
                     else:
                         f.write(f'{(d * self.subl_mfrac):13.6e}\n')
 
-
     def write_temperature_file(self):
         """ Write the temperature file """
         utils.print_('Writing dust temperature file')
@@ -290,38 +320,75 @@ class CartesianGrid():
                 for t in temperature:
                     f.write(f'{t:13.6e}\n')
 
-    def write_vector_field(self, morphology):
+    def write_vector_field(self, vector_field):
         """ Create a vector field for dust alignment """
 
         utils.print_('Writing grain alignment direction file')
 
-        self.vector_field = morphology
+        x = self.X
+        y = self.Y
+        z = self.Z
+        self.vector_field = vector_field.lower()
         field = np.zeros((self.ncells, self.ncells, self.ncells, 3))
-        xx = self.X
-        yy = self.Y
-        zz = self.Z
+ 
+        if self.vector_field == 'x':
+            field[..., 0] = np.ones(x.shape)
+ 
+        elif self.vector_field == 'y':
+            field[..., 1] = np.ones(y.shape)
+ 
+        elif self.vector_field == 'z':
+            field[..., 2] = np.ones(z.shape)
+ 
+        elif self.vector_field in ['t', 'toroidal']:
+            r = np.sqrt(x**2 + y**2)
+            field[..., 0] = y / r
+            field[..., 1] = -x / r
+ 
+        elif self.vector_field in ['r', 'radial']:
+            r = np.sqrt(x**2 + y**2 + z**2)
+            field[..., 0] = x / r
+            field[..., 1] = y / r
+            field[..., 2] = z / r
+ 
+        elif self.vector_field in ['h', 'hourglass']:
+            a = 0.1
+            factor = np.sqrt(
+                1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
+            field[..., 0] = a * x * z * np.exp(-a * z*z) / factor
+            field[..., 1] = a * y * z * np.exp(-a * z*z) / factor
+            field[..., 2] = np.ones(z.shape)
 
-        if morphology in ['t', 'toroidal']:
-            rrc = np.sqrt(xx**2 + yy**2)
-            field[..., 0] = yy / rrc
-            field[..., 1] = -xx / rrc
+        elif self.vector_field in ['hel', 'helicoidal']:
+            # Helicoidal = Superpoistion of Toroidal & Helicoidal
+            r = np.sqrt(x**2 + y**2)
+            toro = np.array([y/r, -x/r, np.zeros(z.shape)])
+            a = 0.1
+            factor = np.sqrt(
+                1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
 
-        elif morphology in ['r', 'radial']:
-            field[..., 0] = yy
-            field[..., 1] = xx
+            hour = np.array([
+                a * x * z * np.exp(-a * z*z) / factor, 
+                a * y * z * np.exp(-a * z*z) / factor,
+                np.ones(z.shape)
+            ])
+            heli = (toro + hour) / np.linalg.norm(toro + hour)
+            field[..., 0] = heli[0]
+            field[..., 1] = heli[1]
+            field[..., 2] = heli[2]
 
-        elif morphology in ['h', 'hourglass']:
-            pass
+        elif self.vector_field in ['d', 'dipole']:
+            r5 = np.sqrt(x**2 + y**2 + z**2)**5
+            field[..., 0] = (3 * x * z) / r5
+            field[..., 1] = (3 * y * z) / r5
+            field[..., 2] = (2*z*z - x*x - y*y) / r5
+ 
+        elif self.vector_field in ['q', 'quadrupole']:
+            r7 = 2 * np.sqrt(x**2 + y**2 + z**2)**7 
+            field[..., 0] = (-3*x*(x**2 + y**2 - 4*z**2)) / r7
+            field[..., 1] = (-3*y*(x**2 + y**2 - 4*z**2)) / r7
+            field[..., 2] = (3*z*(-3*x**2 - 3*y**2 + 2*z**2)) / r7
         
-        elif morphology == 'x':
-            field[..., 0] = 1.0
-
-        elif morphology == 'y':
-            field[..., 1] = 1.0
-
-        elif morphology == 'z':
-            field[..., 2] = 1.0
-
         # Normalize the field
         l = np.sqrt(field[..., 0]**2 + field[..., 1]**2 + field[..., 2]**2)
         field[..., 0] = np.squeeze(field[..., 0]) / l

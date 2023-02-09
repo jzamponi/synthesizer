@@ -40,11 +40,11 @@ def synthesizer(cli):
 
     # Generate the input grid for RADMC3D
     if cli.grid:
-        pipeline.create_grid(sphfile=cli.sphfile, source=cli.source,   
-            model=cli.model, ncells=cli.ncells, bbox=cli.bbox, rout=cli.rout, 
-            g2d=cli.g2d, temperature=cli.temperature, render=cli.render, 
-            vtk=cli.vtk, show_2d=cli.show_grid_2d, show_3d=cli.show_grid_3d, 
-            vector_field=cli.vector_field)
+        pipeline.create_grid(sphfile=cli.sphfile, amrfile=cli.amrfile, 
+            source=cli.source, model=cli.model, ncells=cli.ncells, g2d=cli.g2d, 
+            bbox=cli.bbox, rout=cli.rout, temperature=cli.temperature, 
+            render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
+            show_3d=cli.show_grid_3d, vector_field=cli.vector_field)
 
     # Generate the dust opacity tables
     if cli.opacity:
@@ -58,7 +58,8 @@ def synthesizer(cli):
     # Run a ray-tracing on the new grid and generate an image
     if cli.raytrace:
         pipeline.raytrace(incl=cli.incl, npix=cli.npix, distance=cli.distance,
-            sizeau=cli.sizeau, show=cli.show_rt, noscat=cli.noscat,
+            sizeau=cli.sizeau, show=cli.show_rt, noscat=cli.noscat, tau=cli.tau,
+            tau_surf=cli.tau_surf, show_tau_surf=cli.show_tau_surf, 
             radmc3d_cmds=cli.radmc3d)
 
     # Run a synthetic observation of the new image by calling CASA
@@ -69,7 +70,7 @@ def synthesizer(cli):
             resolution=cli.resolution, verbose=not cli.quiet)
 
     if not cli.grid and not cli.opacity and not cli.monte_carlo and \
-        not cli.raytrace and not cli.synobs:
+        not cli.raytrace and not cli.synobs and not cli.quiet:
 
         utils.print_('Nothing to do. Main options: ' +\
             '--grid, --opacity, --monte-carlo, --raytrace or --synobs')
@@ -88,15 +89,19 @@ if __name__ == "__main__":
 
     exc_grid = parser.add_mutually_exclusive_group() 
     exc_grid.add_argument('--model', action='store', default=None, 
-        choices=['plaw', 'ppdisk', 'constant'], 
+        choices=['constant', 'plaw', 'ppdisk', 'pcore'], 
         help='Keyword for a predefined density model.')
 
     exc_grid.add_argument('--sphfile', action='store', default=None, 
-        help='Name of the input SPH file')
+        help='Name of the input SPH file (snapshot from a particle-based code')
+
+    exc_grid.add_argument('--amrfile', action='store', default=None, 
+        help='Name of the input AMR grid file (snapshot from a grid-based code)')
 
     parser.add_argument('--source', action='store', default='sphng-bin', 
-        choices=['sphng-bin', 'gizmo', 'gadget', 'arepo', 'gandalf', 'gradsph'], 
-        help='Name of the code used to generate the sphfile.')
+        choices=['sphng-bin', 'gizmo', 'gadget', 'arepo', 'gandalf', 'gradsph',
+            'athena', 'zeustw', 'flash', 'enzo', 'ramses'], 
+        help='Name of the code used to generate the inputfile.')
 
     parser.add_argument('--ncells', action='store', type=int, default=100,
         help='Number of cells in every direction')
@@ -112,7 +117,8 @@ if __name__ == "__main__":
         help='Set the gas-to-dust mass ratio.')
 
     parser.add_argument('--vector-field', action='store', type=str, default=None, 
-        choices=['t', 'toroidal', 'r', 'radial', 'h', 'hourglass', 'x', 'y', 'z'], 
+        choices=['x', 'y', 'z', 't', 'toroidal', 'r', 'radial', 'h', 'hourglass', 
+        'hel', 'helicoidal', 'd', 'dipole', 'q', 'quadrupole'], 
         help='Create a vectory field for alignment of elongated grains.')
 
     parser.add_argument('--temperature', action='store_true', default=False,
@@ -194,7 +200,17 @@ if __name__ == "__main__":
         help='Physical distance in pc, used to convert fluxes into Jy/pixel.')
 
     parser.add_argument('--star', action='store', default=None, nargs=6, 
-        help='6 params to define a radiating star (cgs): x y z Rstar Mstar Teff')
+        metavar=('x', 'y', 'z', 'Rstar', 'Mstar', 'Teff'), 
+        help='6 parameters used to define a radiating star (values should be given in cgs)')
+        
+    parser.add_argument('--tau', action='store_true', default=False,  
+        help='Generate a 2D optical depth map.')
+
+    parser.add_argument('--tau-surf', default=None, type=float, metavar=('tau'), 
+        help='Generate a 3D surface at optical depth = %(metavar)s.')
+
+    parser.add_argument('--show-tau-surf', action='store_true', default=False, 
+        help='Render the 3D the optical depth = tau surface.')
 
     parser.add_argument('--polarization', action='store_true', default=False,
         help='Enable polarized RT and full scattering matrix opacity tables')
@@ -249,6 +265,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--quiet', action='store_true', default=False,
         help='Disable verbosity.')
+
+    parser.add_argument('--version', action='version', version='%(prog)s 1.0')
 
 
     # Store the command-line given arguments

@@ -74,17 +74,18 @@ class Pipeline:
         self.verbose = verbose
 
     @utils.elapsed_time
-    def create_grid(self, model=None, sphfile=None, source='sphng', bbox=None, 
-            rout=None, ncells=None, vector_field=None, show_2d=False, 
-            show_3d=False, vtk=False, render=False, g2d=100, temperature=True):
+    def create_grid(self, model=None, sphfile=None, amrfile=None, 
+            source='sphng-bin', bbox=None, rout=None, ncells=None, 
+            vector_field=None, show_2d=False, show_3d=False, vtk=False, 
+            render=False, g2d=100, temperature=True):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
         self.model = model
         self.sphfile = sphfile
+        self.amrfile = amrfile
         self.ncells = ncells
         self.bbox = bbox
         self.rout = rout
-        self.vector_field = vector_field
         self.g2d = g2d
 
         # Create a grid instance
@@ -101,6 +102,7 @@ class Pipeline:
                 temp=temperature, 
             )
             
+            # Create a model density grid 
             self.grid.create_model()
 
         elif sphfile is not None:
@@ -116,7 +118,7 @@ class Pipeline:
             )
 
             # Read the SPH data
-            self.grid.read_sph(self.sphfile, source=source.lower())
+            self.grid.read_sph(self.sphfile, source=source)
 
             # Set a bounding box to trim the new grid
             if self.bbox is not None:
@@ -132,6 +134,21 @@ class Pipeline:
             if temperature:
                 self.grid.interpolate_points('temp', 'linear', fill='min')
 
+        elif amrfile is not None:
+            self.grid = gridder.CartesianGrid(
+                ncells=self.ncells, 
+                bbox=self.bbox, 
+                rout=self.rout,
+                csubl=self.csubl, 
+                nspec=self.nspec, 
+                sootline=self.sootline, 
+                g2d=self.g2d, 
+                temp=temperature,
+            )
+            
+            # Read the AMR data
+            self.grid.read_amr(self.amrfile, source=source)
+
         # Write the new cartesian grid to radmc3d file format
         self.grid.write_grid_file()
 
@@ -142,8 +159,8 @@ class Pipeline:
             # Write the dust temperature distribution to radmc3d file format
             self.grid.write_temperature_file()
 
-        if self.vector_field is not None:
-            self.grid.write_vector_field(morphology=self.vector_field)
+        if vector_field is not None:
+            self.grid.write_vector_field(vector_field)
 
         # Plot the density midplane
         if show_2d:
@@ -388,8 +405,9 @@ class Pipeline:
         self.steps.append('monte_carlo')
 
     @utils.elapsed_time
-    def raytrace(self, lam=None, incl=None, npix=None, sizeau=None, distance=141,
-            show=True, noscat=True, fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
+    def raytrace(self, lam=None, incl=None, npix=None, sizeau=None, show=True, 
+            distance=141, tau=False, tau_surf=None, show_tau_surf=False, 
+            noscat=True, fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
@@ -399,6 +417,8 @@ class Pipeline:
             bold=True)
 
         self.distance = distance
+        self.tau = tau
+        self.tau_surf = tau_surf
 
         if lam is not None:
             self.lam = lam
@@ -408,6 +428,62 @@ class Pipeline:
             self.sizeau = sizeau
         if incl is not None:
             self.incl = incl
+
+        # Explicitly the model rotate by 180.
+        # Only for the current model. This line should be later removed.
+        self.incl = 180 - int(self.incl)
+
+        # Generate a 2D optical depth map
+        if self.tau:
+            utils.print_(
+                f'Generating optical depth map at {self.lam} microns')
+            utils.file_exists('dust_density.inp')
+            rho = np.loadtxt('dust_density.inp', skiprows=3)
+            amr = np.loadtxt('amr_grid.inp', skiprows=6)
+            dl = np.diff(amr)[0]
+            nx = int(np.cbrt(rho.size))
+            rho = rho.reshape((nx, nx, nx))
+            #tau2d = np.sum(rho * self.get_opacity(lam) * dl, axis=0).T
+            tau2d = np.sum(rho * 1 * dl, axis=0).T
+            if show:
+                plt.rcParams['text.usetex'] = True
+                plt.rcParams['font.family'] = 'Times New Roman'
+                plt.rcParams['xtick.direction'] = 'in'
+                plt.rcParams['ytick.direction'] = 'in'
+                plt.rcParams['xtick.top'] = True
+                plt.rcParams['ytick.right'] = True
+                plt.rcParams['xtick.minor.visible'] = True
+                plt.rcParams['ytick.minor.visible'] = True
+                plt.title(
+                    fr'Optical depth at $\lambda = ${self.lam}$\mu$m')
+                plt.imshow(tau2d, origin='lower')
+                plt.yticks([])
+                plt.xticks([])
+                plt.colorbar()
+                plt.show()
+
+            utils.write_fits('tau.fits', data=tau2d, overwrite=True)
+            
+        # Generate a 3D surface at tau = tau_surf
+        if self.tau_surf is not None:
+            try:
+                utils.print_(
+                    'Generating tau surface at tau = {self.tau_surf}')
+                os.system(f'radmc3d tausurf {self.tau_surf} ' +\
+                f'lambda {self.lam} noscat '
+                f'npix {self.npix} ' if self.npix is not None else ' ' +\
+                f'sizeau {self.sizeau} ' if self.sizeau is not None else ' '+\
+                f'incl {self.incl} ' if self.incl is not None else ' ')
+
+                os.rename('image.out', 'tauimage.out')
+            except Exception as e:
+                utils.print_(f'Unable to generate tau surface.\n{e}\n', red=True)
+
+        # Render the 3D surface in 
+        if show_tau_surf:
+            utils.not_implemented()
+            from mayavi import mlab
+            utils.file_exists('tausurface_3d.out')
 
         # To do: What's the diff. between passing noscat and setting scatmode=0
         if noscat: self.scatmode = 0
@@ -466,10 +542,6 @@ class Pipeline:
             utils.file_exists('dustkapalignfact*')
             utils.file_exists('grainalign_dir.inp')
  
-        # Explicitly the model rotate by 180.
-        # Only for the current model. This line should be later removed.
-        self.incl = 180 - int(self.incl)
-
         # Set the RADMC3D command by concatenating options
         cmd = f'radmc3d image '
         cmd += f'lambda {self.lam} '
