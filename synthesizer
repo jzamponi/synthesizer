@@ -23,6 +23,7 @@
 
 """
 
+import sys
 import argparse
 
 import utils
@@ -39,10 +40,11 @@ def synthesizer(cli):
 
     # Generate the input grid for RADMC3D
     if cli.grid:
-        pipeline.create_grid(sphfile=cli.sphfile, source=cli.source,  
-            ncells=cli.ncells, bbox=cli.bbox, rout=cli.rout, g2d=cli.g2d,  
-            render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
-            show_3d=cli.show_grid_3d, vector_field=cli.vector_field)
+        pipeline.create_grid(sphfile=cli.sphfile, source=cli.source,   
+            model=cli.model, ncells=cli.ncells, bbox=cli.bbox, rout=cli.rout, 
+            g2d=cli.g2d, temperature=cli.temperature, render=cli.render, 
+            vtk=cli.vtk, show_2d=cli.show_grid_2d, show_3d=cli.show_grid_3d, 
+            vector_field=cli.vector_field)
 
     # Generate the dust opacity tables
     if cli.opacity:
@@ -70,7 +72,7 @@ def synthesizer(cli):
         not cli.raytrace and not cli.synobs:
 
         utils.print_('Nothing to do. Main options: ' +\
-            '--grid, --monte-carlo, --raytrace or --synobs')
+            '--grid, --opacity, --monte-carlo, --raytrace or --synobs')
         utils.print_('Run synthesizer --help for details.')
 
 
@@ -84,28 +86,37 @@ if __name__ == "__main__":
     parser.add_argument('-g', '--grid', action='store_true', default=False, 
         help='Create an input grid for the radiative transfer')
 
-    parser.add_argument('--sphfile', action='store', default='', 
+    exc_grid = parser.add_mutually_exclusive_group() 
+    exc_grid.add_argument('--model', action='store', default=None, 
+        choices=['plaw', 'ppdisk', 'constant'], 
+        help='Keyword for a predefined density model.')
+
+    exc_grid.add_argument('--sphfile', action='store', default=None, 
         help='Name of the input SPH file')
 
-    parser.add_argument('--source', action='store', default='sphng', 
+    parser.add_argument('--source', action='store', default='sphng-bin', 
+        choices=['sphng-bin', 'gizmo', 'gadget', 'arepo', 'gandalf', 'gradsph'], 
         help='Name of the code used to generate the sphfile.')
 
     parser.add_argument('--ncells', action='store', type=int, default=100,
         help='Number of cells in every direction')
 
-    exclusive = parser.add_mutually_exclusive_group() 
-    exclusive.add_argument('--bbox', action='store', type=float, default=None, 
-        help='Size of the half-lenght of a bounding box in au (i.e., zoom in)')
+    exc_trim = parser.add_mutually_exclusive_group() 
+    exc_trim.add_argument('--bbox', action='store', type=float, default=None, 
+        help='Size of the half-lenght of a bounding box in au.')
 
-    exclusive.add_argument('--rout', action='store', type=float, default=None, 
+    exc_trim.add_argument('--rout', action='store', type=float, default=None, 
         help='Size of the outer radial boundary in au (i.e., zoom in)')
 
-    exclusive.add_argument('--g2d', action='store', type=float, default=100, 
+    parser.add_argument('--g2d', action='store', type=float, default=100, 
         help='Set the gas-to-dust mass ratio.')
 
     parser.add_argument('--vector-field', action='store', type=str, default=None, 
         choices=['t', 'toroidal', 'r', 'radial', 'h', 'hourglass', 'x', 'y', 'z'], 
         help='Create a vectory field for alignment of elongated grains.')
+
+    parser.add_argument('--temperature', action='store_true', default=False,
+        help='Write the dust temperature from the model.')
 
     parser.add_argument('--show-grid-2d', action='store_true', default=False,
         help='Plot the midplane of the newly created grid')
@@ -164,7 +175,7 @@ if __name__ == "__main__":
     parser.add_argument('--lmin', action='store', type=float, default=0.1,
         help='Lower end of the wavelength grid in microns.')
 
-    parser.add_argument('--lmax', action='store', type=float, default=1e6,
+    parser.add_argument('--lmax', action='store', type=float, default=1e5,
         help='Upper end of the wavelength grid in microns.')
 
     parser.add_argument('--nlam', action='store', type=int, default=200,

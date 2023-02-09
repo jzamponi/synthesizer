@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 
-import os, sys
+import os
+import sys
+import random
 import requests
 import subprocess
 import numpy as np
+from glob import glob
 from pathlib import Path
 import astropy.units as u
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from glob import glob
 
 from synthesizer import utils
-from synthesizer import dustmixer
-from synthesizer import gridder
 from synthesizer import synobs
+from synthesizer import gridder
+from synthesizer import dustmixer
 
 
 class Pipeline:
     
     def __init__(self, lam=1300, amax=10, nphot=1e5, nthreads=1, sootline=300,
-            lmin=0.1, lmax=1e6, nlam=200, star=None, dgrowth=False, csubl=0, 
+            lmin=0.1, lmax=1e5, nlam=200, star=None, dgrowth=False, csubl=0, 
             material='sg', polarization=False, alignment=False, overwrite=False, verbose=True):
         self.steps = []
         self.lam = int(lam)
@@ -72,11 +74,12 @@ class Pipeline:
         self.verbose = verbose
 
     @utils.elapsed_time
-    def create_grid(self, sphfile, source='sphng', ncells=None, bbox=None,  
-            rout=None, vector_field=None, show_2d=False, show_3d=False, 
-            vtk=False, render=False, g2d=100):
+    def create_grid(self, model=None, sphfile=None, source='sphng', bbox=None, 
+            rout=None, ncells=None, vector_field=None, show_2d=False, 
+            show_3d=False, vtk=False, render=False, g2d=100, temperature=True):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
+        self.model = model
         self.sphfile = sphfile
         self.ncells = ncells
         self.bbox = bbox
@@ -84,36 +87,50 @@ class Pipeline:
         self.vector_field = vector_field
         self.g2d = g2d
 
-        # Register the pipeline step 
-        self.steps.append('create_grid')
-
         # Create a grid instance
         print('')
         utils.print_('Creating model grid ...\n', bold=True)
-        self.grid = gridder.CartesianGrid(
-            ncells=self.ncells, 
-            bbox=self.bbox, 
-            rout=self.rout,
-            csubl=self.csubl, 
-            nspec=self.nspec, 
-            sootline=self.sootline, 
-            g2d=self.g2d, 
-        )
+    
+        if model is not None:
+            self.grid = gridder.AnalyticalModel(
+                model=self.model,
+                bbox=self.bbox, 
+                ncells=self.ncells, 
+                g2d=self.g2d,
+                nspec=self.nspec,
+                temp=temperature, 
+            )
+            
+            self.grid.create_model()
 
-        # Read the SPH data
-        self.grid.read_sph(self.sphfile, source=source.lower())
+        elif sphfile is not None:
+            self.grid = gridder.CartesianGrid(
+                ncells=self.ncells, 
+                bbox=self.bbox, 
+                rout=self.rout,
+                csubl=self.csubl, 
+                nspec=self.nspec, 
+                sootline=self.sootline, 
+                g2d=self.g2d, 
+                temp=temperature,
+            )
 
-        # Set a bounding box to trim the new grid
-        if self.bbox is not None:
-            self.grid.trim_box(bbox=self.bbox * u.au.to(u.cm))
+            # Read the SPH data
+            self.grid.read_sph(self.sphfile, source=source.lower())
 
-        # Set a radius at which to trim the new grid
-        if self.rout is not None:
-            self.grid.trim_box(rout=self.rout * u.au.to(u.cm))
+            # Set a bounding box to trim the new grid
+            if self.bbox is not None:
+                self.grid.trim_box(bbox=self.bbox * u.au.to(u.cm))
 
-        # Interpolate the SPH points onto a regular cartesian grid
-        self.grid.interpolate_points(field='dens', show_2d=show_2d, show_3d=show_3d)
-        self.grid.interpolate_points(field='temp', show_2d=show_2d, show_3d=show_3d)
+            # Set a radius at which to trim the new grid
+            if self.rout is not None:
+                self.grid.trim_box(rout=self.rout * u.au.to(u.cm))
+    
+            # Interpolate the SPH points onto a regular cartesian grid
+            self.grid.interpolate_points('dens', 'linear', fill='min')
+
+            if temperature:
+                self.grid.interpolate_points('temp', 'linear', fill='min')
 
         # Write the new cartesian grid to radmc3d file format
         self.grid.write_grid_file()
@@ -121,11 +138,28 @@ class Pipeline:
         # Write the dust density distribution to radmc3d file format
         self.grid.write_density_file()
         
-        # Write the dust temperature distribution to radmc3d file format
-        self.grid.write_temperature_file()
+        if temperature:
+            # Write the dust temperature distribution to radmc3d file format
+            self.grid.write_temperature_file()
 
         if self.vector_field is not None:
             self.grid.write_vector_field(morphology=self.vector_field)
+
+        # Plot the density midplane
+        if show_2d:
+            self.grid.plot_dens_midplane()
+
+        # Plot the temperature midplane
+        if show_2d and temperature:
+            self.grid.plot_temp_midplane()
+
+        # Render the density volume in 3D using Mayavi
+        if show_3d:
+            self.grid.plot_dens_3d()
+
+        # Render the temperature volume in 3D using Mayavi
+        if show_3d and temperature:
+            self.grid.plot_temp_3d()
         
         # Call RADMC3D to read the grid file and generate a VTK representation
         if vtk:
@@ -134,6 +168,10 @@ class Pipeline:
         # Visualize the VTK grid file using ParaView
         if render:
             self.grid.render()
+
+        # Register the pipeline step 
+        self.steps.append('create_grid')
+
 
     @utils.elapsed_time
     def dust_opacity(self, amin, amax, na, q=-3.5, nang=3, material=None, 
@@ -156,33 +194,36 @@ class Pipeline:
             self.nang = 181
         else:
             self.nang = nang
-        #nth = self.nthreads
-        # use 1 until the parallelization of polarization is properly implemented
-        nth = 1
+
+        # Use 1 until the parallelization of polarization is properly implemented
+        nth = self.nthreads if not self.polarization else 1
+
+        repo = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
+                f'opacity_tables/'
         
         if self.material == 's':
             mix = dustmixer.Dust(name='Silicate')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk('astrosil-Draine2003.lnk', skip=1, get_density=True)
+            mix.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'g':
             mix = dustmixer.Dust(name='Graphite')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk('c-gra-Draine2003.lnk', skip=1, get_density=True)
+            mix.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
         elif self.material == 'p':
             mix = dustmixer.Dust(name='Pyroxene')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk('pyrmg70.lnk', get_density=False)
+            mix.set_nk(f'{repo}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
             mix.set_density(3.01, cgs=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
             mix = dustmixer.Dust(name='Organics')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk('organics.nk', get_density=False)
+            mix.set_nk(f'{repo}/organics.nk', get_dens=False)
             mix.set_density(1.50, cgs=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
@@ -191,8 +232,8 @@ class Pipeline:
             gra = dustmixer.Dust(name='Graphite')
             sil.set_lgrid(self.lmin, self.lmax, self.nlam)
             gra.set_lgrid(self.lmin, self.lmax, self.nlam)
-            sil.set_nk('astrosil-Draine2003.lnk', skip=1, get_density=True)
-            gra.set_nk('c-gra-Draine2003.lnk', skip=1, get_density=True)
+            sil.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
+            gra.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
@@ -203,7 +244,7 @@ class Pipeline:
             try:
                 mix = dustmixer.Dust(self.material.split('/')[-1].split('.')[0])
                 mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-                mix.set_nk(path=self.material, skip=1, get_density=True)
+                mix.set_nk(path=self.material, skip=1, get_dens=True)
                 mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
                 self.material = mix.name
 
@@ -235,6 +276,7 @@ class Pipeline:
             dustopac=False, dustkappa=False, dustkapalignfact=False,
             grainalign=False):
         """ Generate the necessary input files for radmc3d """
+
         if inpfile:
             # Create a RADMC3D input file
             with open('radmc3d.inp', 'w+') as f:
@@ -242,9 +284,12 @@ class Pipeline:
                 f.write(f'istar_sphere = 0\n')
                 f.write(f'modified_random_walk = 1\n')
                 f.write(f'setthreads = {self.nthreads}\n')
+                f.write(f'nphot = {self.nphot}\n')
                 f.write(f'nphot_scat = {self.nphot}\n')
+                f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
-                if self.alignment: f.write(f'alignment_mode = 1\n')
+                if self.alignment: 
+                    f.write(f'alignment_mode = 1\n')
 
         if wavelength: 
             # Create a wavelength grid in micron
@@ -336,7 +381,7 @@ class Pipeline:
         self.nphot = nphot
         self.radmc3d_banner()
         subprocess.run(
-            f'radmc3d mctherm nphot {self.nphot} {radmc3d_cmds}'.split())
+            f'radmc3d mctherm {radmc3d_cmds}'.split())
         self.radmc3d_banner()
 
         # Register the pipeline step 
@@ -387,7 +432,16 @@ class Pipeline:
             # If not manually provided, download it from the repo
             if not self.polarization:
                 if len(glob('dustkappa*')) == 0 or self.overwrite:
-                    self.generate_input_files(dustkappa=True)
+                    try:
+                        self.generate_input_files(dustkappa=True)
+                    except Exception as e:
+                        utils.print_(
+                            f'Unable to download opacity table. I will call ' +\
+                            'dustmixer, as in synthesizer --opacity.', bold=True
+                        )
+                        Pipeline.dust_opacity(amin=0.1, amax=10, na=100, q=3.5, 
+                            nang=181, material='s')
+                        
 
         # If align factors were calculated within the pipeline, don't overwrite
         if self.alignment:

@@ -5,11 +5,11 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 
-import utils
+from synthesizer import utils
 
 class CartesianGrid():
-    def __init__(self, ncells, bbox=None, rout=None, fill='min', csubl=0, 
-            nspec=1, sootline=300, g2d=100):
+    def __init__(self, ncells, bbox=None, rout=None, nspec=1, csubl=0, 
+            sootline=300, g2d=100, temp=False):
         """ 
         Create a cartesian grid from a set of 3D points.
 
@@ -26,48 +26,73 @@ class CartesianGrid():
                   rout = 50
 
         """
+
+        self.dens = np.zeros((ncells, ncells, ncells))
+        self.temp = np.zeros((ncells, ncells, ncells))
+        self.add_temp = temp
         self.ncells = ncells
         self.bbox = bbox
         self.rout = rout
         self.g2d = g2d
-        self.fill = fill
-        self.csubl = csubl
         self.nspec = nspec
+        self.csubl = csubl
         self.sootline = sootline
         self.carbon = 0.375
-        self.subl_mfrac = 1 - self.carbon * self.csubl/100
+        self.subl_mfrac = 1 - self.carbon * self.csubl / 100
 
-    def read_sph(self, filename, source='sphng'):
+    def read_sph(self, filename, source='sphng-bin'):
         """ Read SPH data """
+
+        import h5py
 
         utils.print_(f'Reading data from: {filename} | Format: {source}')
         if not os.path.exists(filename): 
             raise FileNotFoundError('Input SPH file does not exist')
 
-        if source == 'sphng':
+        if source.lower() == 'sphng-bin':
             self.sph = utils.read_sph(filename, remove_sink=True, cgs=True)
             self.x = self.sph[:, 2]
             self.y = self.sph[:, 3]
             self.z = self.sph[:, 4]
             self.dens = self.sph[:, 10] / self.g2d
-            self.temp = self.sph[:, 11]
             self.npoints = len(self.dens)
+            if self.add_temp:
+                self.temp = self.sph[:, 11]
+            else:
+                self.temp = np.zeros(self.dens.shape)
 
-        elif source == 'gizmo':
-            import h5py
+        elif source.lower() == 'gizmo':
             self.sph = h5py.File(filename, 'r')['PartType0']
-            coords = np.array(self.sph['Coordinates']) * 1.43 * u.kpc.to(u.cm)
+            h = 0.7
+            code_length = h**-1 * u.kpc.to(u.cm)
+            code_dens = 6.77e-22 * h**-2
+            coords = np.array(self.sph['Coordinates']) * code_length
             self.x = coords[:, 0]
             self.y = coords[:, 1]
             self.z = coords[:, 2]
-            self.dens = np.array(self.sph['Density']) * 1.382e-21 / self.g2d
-            self.temp = np.array(self.sph['KromeTemperature'])
+            self.dens = np.array(self.sph['Density']) * code_dens / self.g2d
             self.npoints = len(self.dens)
+            if self.add_temp: 
+                self.temp = np.array(self.sph['KromeTemperature'])
+            else:
+                self.temp = np.zeros(self.dens.shape)
 
             # Recenter the particles based on the center of mass
             self.x -= np.average(self.x, weights=self.dens)
             self.y -= np.average(self.y, weights=self.dens)
             self.z -= np.average(self.z, weights=self.dens)
+
+        elif source.lower() == 'gadget':
+            utils.not_implemented()
+
+        elif source.lower() == 'arepo':
+            utils.not_implemented()
+
+        elif source.lower() == 'gradsph':
+            utils.not_implemented()
+            
+        elif source.lower() == 'gandalf':
+            utils.not_implemented()
             
         else:
             raise ValueError(f'Source = {source} is currently not supported')
@@ -111,7 +136,6 @@ class CartesianGrid():
                 if self.z[k] < z1 or self.z[k] > z2:
                     to_remove.append(k)
 
-        
         if rout is not None and bbox is None:
             # Override any previous value of rout
             self.rout = rout
@@ -134,7 +158,7 @@ class CartesianGrid():
         utils.print_(f'{self.npoints - self.x.size} ' +
             'particles were not included in the grid')
 
-    def interpolate_points(self, field='temp', show_2d=False, show_3d=False):
+    def interpolate_points(self, field, method='linear', fill='min'):
         """
             Interpolate a set of points in cartesian coordinates along with their
             values into a rectangular grid.
@@ -143,6 +167,7 @@ class CartesianGrid():
         # Construct the rectangular grid
         utils.print_('Creating a box of ' +
             f'{self.ncells} x {self.ncells} x {self.ncells} cells')
+
         rmin = np.min([self.x.min(), self.y.min(), self.z.min()])
         rmax = np.max([self.x.max(), self.y.max(), self.z.max()])
         self.xc = np.linspace(rmin, rmax, self.ncells)
@@ -157,64 +182,20 @@ class CartesianGrid():
         elif field == 'temp':
             utils.print_(f'Interpolating temperature values onto the grid')
             values = self.temp
+        else:
+            raise ValueError('field must be "dens" or "temp".')
 
         # Interpolate the point values at the grid points
-        fill = np.min(values) if self.fill == 'min' else self.fill
+        fill = np.min(values) if fill == 'min' else fill
         xyz = np.vstack([self.x, self.y, self.z]).T
-        interp = griddata(xyz, values, (self.X, self.Y, self.Z), 
-            method='linear', fill_value=fill)
-
-        # Plot the midplane at z=0 using Matplotlib
-        if show_2d:
-            try:
-                from matplotlib.colors import LogNorm
-                utils.print_(f'Plotting the {field} grid midplane at z = 0')
-                plt.rcParams['text.usetex'] = True
-                plt.rcParams['font.family'] = 'Times New Roman'
-
-                if self.bbox is None:
-                    extent = self.bbox
-                else:
-                    extent = [-self.bbox*u.cm.to(u.au), 
-                            self.bbox*u.cm.to(u.au)] * 2
-
-                if field == 'dens':
-                    plt.imshow(interp[:,:,self.ncells//2-1].T * 100, 
-                        norm=LogNorm(vmin=None, vmax=None),
-                        cmap='BuPu',
-                        extent=extent,
-                    )
-                else:
-                    plt.imshow(interp[:,:,self.ncells//2-1].T, 
-                        norm=LogNorm(vmin=None, vmax=None),
-                        cmap='inferno',
-                        extent=extent,
-                    )
-                plt.colorbar()
-                plt.xlabel('AU')
-                plt.ylabel('AU')
-                plt.title({
-                    'dens': r'Density Midplane at $z=0$ (g cm$^-3$)', 
-                    'temp': r'Temperature Midplane at $z=0$ (K)'
-                }[field])
-                plt.show()
-
-            except Exception as e:
-                utils.print_('Unable to show the 2D grid slices.',  bold=True)
-                utils.print_(e, bold=True)
-        
-        if show_3d:
-            # Render the interpolated 3D field using Mayavi
-            try:
-                utils.print_('Visualizing the interpolated field ...')
-                from mayavi import mlab
-                mlab.contour3d(interp, contours=20, opacity=0.2)
-                mlab.show()
-
-            except Exception as e:
-                utils.print_('Unable to show the 3D grid.',  bold=True)
-                utils.print_(e, bold=True)
-
+        interp = griddata(
+            points=xyz, 
+            values=values, 
+            xi=(self.X, self.Y, self.Z), 
+            method=method, 
+            fill_value=fill
+        )
+ 
         # Store the interpolated field
         if field == 'dens':
             self.interp_dens = interp
@@ -309,42 +290,6 @@ class CartesianGrid():
                 for t in temperature:
                     f.write(f'{t:13.6e}\n')
 
-
-    def create_vtk(self, dust_density=False, dust_temperature=True, rename=False):
-        """ Call radmc3d to create a VTK file of the grid """
-        self.radmc3d_banner()
-
-        if dust_density:
-            subprocess.run('radmc3d vtk_dust_density 1'.split())
-            if rename:
-                subprocess.run('mv model.vtk model_dust_density.vtk'.split())
-
-        if dust_temperature:
-            subprocess.run('radmc3d vtk_dust_temperature 1'.split())
-            if rename:
-                subprocess.run('mv model.vtk model_dust_temperature.vtk'.split())
-
-        if not dust_density and not dust_temperature:
-            subprocess.run('radmc3d vtk_grid'.split())
-
-        self.radmc3d_banner()
-
-    def render(self, state=None, dust_density=False, dust_temperature=True):
-        """ Render the new grid in 3D using ParaView """
-        if isinstance(state, str):
-            subprocess.run(f'paraview --state {state} 2>/dev/null'.split())
-        else:
-            try:
-                if dust_density:
-                    subprocess.run(
-                    f'paraview model_dust_density.vtk 2>/dev/null'.split())
-                elif dust_temperature:
-                    subprocess.run(
-                    f'paraview model_dust_temperature.vtk 2>/dev/null'.split())
-            except Exception as e:
-                utils.print_('Unable to render using ParaView.',  bold=True)
-                utils.print_(e, bold=True)
-
     def write_vector_field(self, morphology):
         """ Create a vector field for dust alignment """
 
@@ -400,6 +345,138 @@ class CartesianGrid():
                                 f'{field[ix, iy, iz, 1]:13.6e} ' +\
                                 f'{field[ix, iy, iz, 2]:13.6e}\n')
 
+    def plot_dens_midplane(self):
+        """ Plot the density midplane at z=0 using Matplotlib """
+        try:
+            from matplotlib.colors import LogNorm
+            utils.print_(f'Plotting the density grid midplane at z = 0')
+            plt.rcParams['text.usetex'] = True
+            plt.rcParams['font.family'] = 'Times New Roman'
+            plt.rcParams['xtick.direction'] = 'in'
+            plt.rcParams['ytick.direction'] = 'in'
+            plt.rcParams['xtick.top'] = True
+            plt.rcParams['ytick.right'] = True
+            plt.rcParams['xtick.minor.visible'] = True
+            plt.rcParams['ytick.minor.visible'] = True
+
+            if self.bbox is None:
+                extent = self.bbox
+            else:
+                extent = [-self.bbox*u.cm.to(u.au), 
+                        self.bbox*u.cm.to(u.au)] * 2
+
+            plt.imshow(self.interp_dens[:,:,self.ncells//2-1].T, 
+                norm=LogNorm(vmin=None, vmax=None),
+                cmap='BuPu',
+                extent=extent,
+            )
+            plt.colorbar()
+            plt.xlabel('AU')
+            plt.ylabel('AU')
+            plt.title(r'Dust Density Midplane at $z=0$ (g cm$^{-3}$)')
+            plt.show()
+
+        except Exception as e:
+            utils.print_('Unable to show the 2D grid slice.',  red=True)
+            utils.print_(e, bold=True)
+
+    def plot_temp_midplane(self):
+        """ Plot the temperature midplane at z=0 using Matplotlib """
+        try:
+            from matplotlib.colors import LogNorm
+            utils.print_(f'Plotting the temperature grid midplane at z = 0')
+            plt.rcParams['text.usetex'] = True
+            plt.rcParams['font.family'] = 'Times New Roman'
+            plt.rcParams['xtick.direction'] = 'in'
+            plt.rcParams['ytick.direction'] = 'in'
+            plt.rcParams['xtick.top'] = True
+            plt.rcParams['ytick.right'] = True
+            plt.rcParams['xtick.minor.visible'] = True
+            plt.rcParams['ytick.minor.visible'] = True
+
+            if self.bbox is None:
+                extent = self.bbox
+            else:
+                extent = [-self.bbox*u.cm.to(u.au), 
+                        self.bbox*u.cm.to(u.au)] * 2
+
+            plt.imshow(self.interp_temp[:,:,self.ncells//2-1].T, 
+                norm=LogNorm(vmin=None, vmax=None),
+                cmap='inferno',
+                extent=extent,
+            )
+            plt.colorbar()
+            plt.xlabel('AU')
+            plt.ylabel('AU')
+            plt.title(r'Temperature Midplane at $z=0$ (K)')
+            plt.show()
+
+        except Exception as e:
+            utils.print_('Unable to show the 2D grid slice.',  red=True)
+            utils.print_(e, bold=True)
+
+
+    def plot_dens_3d(self): 
+        """ Render the interpolated 3D field using Mayavi """
+        try:
+            utils.print_('Visualizing the interpolated field ...')
+            from mayavi import mlab
+            mlab.contour3d(self.interp_dens, contours=20, opacity=0.2)
+            mlab.show()
+
+        except Exception as e:
+            utils.print_('Unable to show the 3D grid.',  red=True)
+            utils.print_(e, bold=True)
+
+
+    def plot_temp_3d(self): 
+        """ Render the interpolated 3D field using Mayavi """
+        try:
+            utils.print_('Visualizing the interpolated field ...')
+            from mayavi import mlab
+            mlab.contour3d(self.interp_temp, contours=20, opacity=0.2)
+            mlab.show()
+
+        except Exception as e:
+            utils.print_('Unable to show the 3D grid.',  red=True)
+            utils.print_(e, bold=True)
+
+
+    def create_vtk(self, dust_density=False, dust_temperature=True, rename=False):
+        """ Call radmc3d to create a VTK file of the grid """
+        self.radmc3d_banner()
+
+        if dust_density:
+            subprocess.run('radmc3d vtk_dust_density 1'.split())
+            if rename:
+                subprocess.run('mv model.vtk model_dust_density.vtk'.split())
+
+        if dust_temperature:
+            subprocess.run('radmc3d vtk_dust_temperature 1'.split())
+            if rename:
+                subprocess.run('mv model.vtk model_dust_temperature.vtk'.split())
+
+        if not dust_density and not dust_temperature:
+            subprocess.run('radmc3d vtk_grid'.split())
+
+        self.radmc3d_banner()
+
+    def render(self, state=None, dust_density=False, dust_temperature=True):
+        """ Render the new grid in 3D using ParaView """
+        if isinstance(state, str):
+            subprocess.run(f'paraview --state {state} 2>/dev/null'.split())
+        else:
+            try:
+                if dust_density:
+                    subprocess.run(
+                    f'paraview model_dust_density.vtk 2>/dev/null'.split())
+                elif dust_temperature:
+                    subprocess.run(
+                    f'paraview model_dust_temperature.vtk 2>/dev/null'.split())
+            except Exception as e:
+                utils.print_('Unable to render using ParaView.',  red=True)
+                utils.print_(e, bold=True)
+
 
 class SphericalGrid():
     def __init__(self):
@@ -409,4 +486,5 @@ class SphericalGrid():
             src:https://github.com/dullemond/radmc3d-2.0/blob/master/python/
                 radmc3d_tools/sph_to_sphergrid.py
          """
-        raise ValueError('Spherical grids are yet to be implemented.')
+
+        utils.not_implemented()

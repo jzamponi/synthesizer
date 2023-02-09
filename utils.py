@@ -47,6 +47,10 @@ def print_(string, verbose=True, bold=False, red=False, fname=None, *args, **kwa
                 *args, **kwargs)
 
 
+def not_implemented(msg=''): 
+    raise NotImplementedError(f'This feature is not yet implemented.\n{msg}')
+
+
 def write_fits(filename, data, header=None, overwrite=True, verbose=False):
     # Get the name of the calling function by tracing one level up in the stack
     caller = sys._getframe(1).f_code.co_name
@@ -77,11 +81,12 @@ def elapsed_time(caller):
         f = caller(*args, **kwargs)
 
         # Measure time difference after it finishes
-        run_time = time.time() - start
+        runtime = time.time() - start
 
         # Print the elapsed time nicely formatted
+        tformat = "%H:%M:%S"
         print_(
-            f'Elapsed time: {time.strftime("%H:%M:%S", time.gmtime(run_time))}',
+            f'Elapsed time: {time.strftime(tformat, time.gmtime(runtime))}',
             verbose = True, 
             fname = caller.__name__
         )

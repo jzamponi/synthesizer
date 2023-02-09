@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 from time import time, strftime, gmtime
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from scipy.interpolate import interp1d, splrep, splev
+from scipy.interpolate import interp1d
 
 from synthesizer import utils
 from synthesizer.dustmixer import bhmie, bhcoat
@@ -57,7 +57,7 @@ class Dust():
         self.ksca = None
         self.kabs = None
         self.nlam = None
-        self.l = np.logspace(-1, 4, 200)
+        self.l = np.logspace(-1, 5, 200) * u.micron.to(u.cm)
 
     def __str__(self):
         print(f'{self.name}')
@@ -174,11 +174,19 @@ class Dust():
         self.l = self.l * u.micron.to(u.cm)
 
     def interpolate(self, l_in, q):
-        """ Interpolate optical constants within the wavelength grid. """
+        """ Linearly interpolate a quantity within the wavelength grid. """
 
-        return splev(self.l, splrep(l_in, q))
+        return interp1d(l_in, q)(self.l)
 
-    def set_nk(self, path, skip=0, meters=False, cm=False, get_density=False):
+    def extrapolate(self, lim, q, boundary):
+        """ Extrapolate a quantity within the wavelength grid. """
+        if boundary == 'lower':
+           utils.not_implemented() 
+
+        elif boundary == 'upper':
+           utils.not_implemented() 
+
+    def set_nk(self, path, skip=0, meters=False, cm=False, get_dens=False):
         """ Set n and k values by reading them from file. 
             Assumes wavelength is provided in microns unless specified otherwise
             Also, can optionally read the density from the file, assuming it is
@@ -195,7 +203,7 @@ class Dust():
         self.datafile = ascii.read(path, data_start=skip)
 
         # Optionally read the density as the second number from the file header
-        if get_density:
+        if get_dens:
             dens = float(ascii.read(path, data_end=1)['col2'])
             utils.print_(f'Reading in density from file: {dens} g/cm3')
             self.set_density(dens)
@@ -213,9 +221,19 @@ class Dust():
         else:
             self.l_nk = self.datafile[column_name['l']] * u.micron.to(u.cm)
 
-        # Interpolate and extrapolate optical constants to the wavelenght grid
-        self.n = self.interpolate(l_in=self.l_nk, q=self.n).clip(min=1e-10)
-        self.k = self.interpolate(l_in=self.l_nk, q=self.k).clip(min=1e-10)
+        # Extrapolate lower and upper boundaries
+        if self.l.min() < self.l_nk.min(): 
+            self.n = self.extrapolate(self.l.min(), self.n, boundary='lower')
+            self.k = self.extrapolate(self.l.min(), self.k, boundary='lower')
+
+        
+        if self.l.max() > self.l_nk.max():
+            self.n = self.extrapolate(self.l.max(), self.n, boundary='upper')
+            self.k = self.extrapolate(self.l.max(), self.k, boundary='upper')
+
+        # Interpolate optical constants within the wavelenght grid
+        self.n = self.interpolate(self.l_nk, self.n).clip(min=1e-10)
+        self.k = self.interpolate(self.l_nk, self.k).clip(min=1e-10)
 
     def mix(self, other):
         """
