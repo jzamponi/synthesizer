@@ -362,30 +362,6 @@ def read_sph(snapshot="snap_541.dat", write_hdf5=False, remove_sink=True, cgs=Tr
     return data
 
 
-def radmc3d_data(file_='image.out', npix=300, sizeau=50, distance=3.086e18 * u.m.to(u.cm)):
-    """
-    Function to read image files resulting from an RT with RADMC3D.
-    """
-
-    img = ascii.read(file_, data_start=5, guess=False)["1"]
-
-    # Make a squared map
-    img = img.reshape(npix, npix)
-
-    # Rescale to Jy/sr
-    img = img * (u.erg * u.s ** -1 * u.cm ** -2 * u.Hz ** -1 * u.sr ** -1).to(
-        u.Jy * u.sr ** -1
-    )
-
-    # Obtain the pixel size
-    pixsize = (sizeau / npix) * u.au.to(u.cm)
-
-    # Convert sr into pixels (Jy/sr --> Jy/pixel)
-    img = img * ((pixsize) ** 2 / (distance) ** 2)
-
-    return img
-
-
 def convert_opacity_file(
     infile='dust_mixture_001.dat', 
     outfile='dustkappa_polaris.inp', 
@@ -424,6 +400,43 @@ def convert_opacity_file(
         plt.xlim(1e-1, 1e5)
         plt.ylim(1e-2, 1e4)
         plt.tight_layout()
+
+
+def radmc3d_data(file_='image.out', stokes='I', distance=3.086e20):
+    """
+    Function to read image files resulting from an RT with RADMC3D.
+    """
+
+    with open(file_, 'r') as f:
+        iformat = int(f.readline())
+        line = f.readline().split()
+        nx = int(line[0])
+        ny = int(line[1])
+        nlam = int(f.readline())
+        line = f.readline().split()
+        pixsize_x = float(line[0])
+        pixsize_y = float(line[1])
+        lam = float(f.readline())
+        
+    img = np.loadtxt(file_, skiprows=5)
+
+    # Select Stokes map
+    if iformat == 3:
+        img = img[:, {'I': 0, 'Q': 1, 'U': 2, 'V': 3}[stokes]]
+        
+    # Make a squared map
+    img = img.reshape(nx, ny)
+
+    # Rescale to Jy/sr
+    img = img * (
+        u.erg * u.s ** -1 * u.cm ** -2 * u.Hz ** -1 * u.sr ** -1).to(
+        u.Jy * u.sr ** -1
+    )
+
+    # Convert sr into pixels (Jy/sr --> Jy/pixel)
+    img = img * (pixsize_x**2 / distance**2)
+
+    return img
     
 
 def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmcimage='image.out',
@@ -432,17 +445,10 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmcimage='image.out',
         FITS file with a CASA-compatible header, ready for a 
         synthetic observation.
     """
-    from radmc3dPy import image
 
-    im = image.readImage(radmcimage)
-    
-    im.writeFits(
-        fitsfile,
-        dpc=dpc, 
-        coord='16h32m22.63s -24d28m31.8s', 
-        casa=False,
-        stokes=stokes,
-    )
+    img = radmc3d_data(radmcimage, stokes=stokes, distance=dpc * u.pc.to(u.cm))
+    write_fits(fitsfile, data=img, overwrite=True)
+
 
 def stats(data, verbose=False, slice=None):
     """

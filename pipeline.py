@@ -588,12 +588,12 @@ class Pipeline:
 
         # Repeat for Q and U Stokes components if considering polarization
         if self.polarization:
-            if os.path.exists('ramc3d_Q.fits'): os.remove('ramc3d_Q.fits')
-            if os.path.exists('ramc3d_U.fits'): os.remove('ramc3d_U.fits')
-            utils.radmc3d_casafits('ramc3d_Q.fits', stokes='Q', dpc=distance)
-            utils.radmc3d_casafits('ramc3d_U.fits', stokes='U', dpc=distance)
-            utils.fix_header_axes('ramc3d_Q.fits')
-            utils.fix_header_axes('ramc3d_U.fits')
+            if os.path.exists('radmc3d_Q.fits'): os.remove('radmc3d_Q.fits')
+            if os.path.exists('radmc3d_U.fits'): os.remove('radmc3d_U.fits')
+            utils.radmc3d_casafits('radmc3d_Q.fits', stokes='Q', dpc=distance)
+            utils.radmc3d_casafits('radmc3d_U.fits', stokes='U', dpc=distance)
+            utils.fix_header_axes('radmc3d_Q.fits')
+            utils.fix_header_axes('radmc3d_U.fits')
 
         # Plot the new image in Jy/pixel
         if show:

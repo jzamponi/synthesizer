@@ -73,16 +73,27 @@ class AnalyticalModel():
             
         # Protoplanetary disk: Shakura & Sunyaev 1973
         elif self.model == 'ppdisk':
-            #utils.not_implemented()
             rho_slope = 2
             flaring = 2.5
             r_0 = 100 * u.au.to(u.cm)
             h_0 = 10 * u.au.to(u.cm)
             rho_0 = 1e-12
+            sigma_g = 100 
+            M_star = 2.4 * u.Msun.to(u.g)
+            T_star = 1500 
+            mu_g = 2.3 * (c.m_p + c.m_e).cgs.value
+            kB = c.k_B.cgs.value
+            G = c.G.cgs.value
             r = np.sqrt(x**2 + y**2)
+
+            # Flared disk
             h = lambda r: h_0 * (r / r_0)**flaring
-            rho = rho_0 * (r / r_0)**-rho_slope * np.exp(-0.5 * (z / h(r))**2)
-            self.dens = rho / self.g2d
+            rho_g = rho_0 * (r / r_0)**-rho_slope * np.exp(-0.5 * (z / h(r))**2)
+
+            # From hydrostatic equilibrium
+            h = lambda r: np.sqrt(kB * T_star * r**3 / mu_g / G / M_star)
+            rho_g = sigma_g / (2*np.pi)**0.5 / h(r) * np.exp(-0.5*(z / h(r))**2)
+            self.dens = rho_g / self.g2d
 
 
     def write_grid_file(self):
@@ -269,10 +280,10 @@ class AnalyticalModel():
             else:
                 slice_ = self.dens[..., self.ncells//2-1].T
 
-            vmin = slice_.min()
-            vmax = slice_.max()
+            vmin = slice_.min() if slice_.min() > 0 else None
+            vmax = slice_.max() if slice_.max() < np.inf else None
             plt.imshow(slice_, 
-                norm=LogNorm(vmin=vmin, vmax=vmax) if vmin > 0 else None, 
+                norm=LogNorm(vmin=vmin, vmax=vmax), 
                 cmap='CMRmap',
                 extent=extent,
             )
