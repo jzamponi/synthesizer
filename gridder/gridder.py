@@ -417,7 +417,6 @@ class CartesianGrid():
         try:
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the density grid midplane at z = 0')
-            plt.rcParams['text.usetex'] = True
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
@@ -452,7 +451,6 @@ class CartesianGrid():
         try:
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the temperature grid midplane at z = 0')
-            plt.rcParams['text.usetex'] = True
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'

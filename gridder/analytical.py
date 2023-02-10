@@ -52,7 +52,7 @@ class AnalyticalModel():
         # Constant density  
         if self.model == 'constant':          
             self.dens = 1e-12 * np.ones(self.dens.shape)
-            if add_temp:
+            if self.add_temp:
                 self.temp = 15 * np.ones(self.temp.shape)
 
         # Radial power-law 
@@ -61,6 +61,8 @@ class AnalyticalModel():
             rho_c = 9e-18 / self.g2d
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * (r / r_c)**(-slope)
+            if self.add_temp:
+                self.temp = 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / r)
 
         # Prestellar Core: Bonnort-Eber sphere
         elif self.model == 'pcore':
@@ -71,20 +73,16 @@ class AnalyticalModel():
             
         # Protoplanetary disk: Shakura & Sunyaev 1973
         elif self.model == 'ppdisk':
-            utils.not_implemented()
-            rho_slope = 1.25
-            flaring = 2.6
-            aspect_ratio = 0.1
+            #utils.not_implemented()
+            rho_slope = 2
+            flaring = 2.5
             r_0 = 100 * u.au.to(u.cm)
-            n_0 = 1e8 
-            h_0 = r_0 * aspect_ratio
+            h_0 = 10 * u.au.to(u.cm)
+            rho_0 = 1e-12
             r = np.sqrt(x**2 + y**2)
-            r = r.clip(min=r.min())
-            h = lambda r: h_0 * np.divide(r, r_0, where=r != 0)**flaring
-            n_g = n_0 * (r_0 / r)**rho_slope * np.exp(-0.5 * z / h(r))**2
-            n_d = n_g / self.g2d
-            m_H2 = 2 * (c.m_p + c.m_e).cgs.value
-            self.dens = n_d * m_H2 
+            h = lambda r: h_0 * (r / r_0)**flaring
+            rho = rho_0 * (r / r_0)**-rho_slope * np.exp(-0.5 * (z / h(r))**2)
+            self.dens = rho / self.g2d
 
 
     def write_grid_file(self):
@@ -266,7 +264,11 @@ class AnalyticalModel():
                 extent = [-self.bbox*u.cm.to(u.au), 
                         self.bbox*u.cm.to(u.au)] * 2
 
-            slice_ = self.dens[..., self.ncells//2-1].T
+            if self.model == 'ppdisk':
+                slice_ = self.dens[:, self.ncells//2-1, :].T
+            else:
+                slice_ = self.dens[..., self.ncells//2-1].T
+
             vmin = slice_.min()
             vmax = slice_.max()
             plt.imshow(slice_, 
@@ -318,7 +320,15 @@ class AnalyticalModel():
         try:
             utils.print_('Visualizing the 3D field ...')
             from mayavi import mlab
-            mlab.contour3d(self.dens, contours=20, opacity=0.7)
+            fig = mlab.figure(
+                size=(900, 700) , bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
+
+            mlab.contour3d(self.dens, contours=15, opacity=0.7)
+
+            if self.vector_field is not None:
+                # Add streamlines to mayavi
+                pass
+
             mlab.show()
 
         except Exception as e:

@@ -289,8 +289,8 @@ class Pipeline:
     def radmc3d_banner(self):
         utils.print_(f'{"="*21}  <RADMC3D>  {"="*21}', bold=True)
 
-    def generate_input_files(self, inpfile=False, wavelength=False, stars=False, 
-            dustopac=False, dustkappa=False, dustkapalignfact=False,
+    def generate_input_files(self, mc=False, inpfile=False, wavelength=False, 
+            stars=False, dustopac=False, dustkappa=False, dustkapalignfact=False,
             grainalign=False):
         """ Generate the necessary input files for radmc3d """
 
@@ -301,11 +301,11 @@ class Pipeline:
                 f.write(f'istar_sphere = 0\n')
                 f.write(f'modified_random_walk = 1\n')
                 f.write(f'setthreads = {self.nthreads}\n')
-                f.write(f'nphot = {self.nphot}\n')
-                f.write(f'nphot_scat = {self.nphot}\n')
+                f.write(f'nphot = {int(self.nphot)}\n')
+                f.write(f'nphot_scat = {int(self.nphot)}\n')
                 f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
-                if self.alignment: 
+                if self.alignment and not mc: 
                     f.write(f'alignment_mode = 1\n')
 
         if wavelength: 
@@ -378,12 +378,12 @@ class Pipeline:
             # radmc3d table to my github repo and download it from here
             
             raise ImportError(f'{utils.color.red}There is no ' +\
-                f'dustkapalignfact_*.inp file. Run the pipeline again with ' +\
+                f'dustkapalignfact_*.inp file. Run synthesizer again with ' +\
                 f'the option --opacity --alignment.{utils.color.none}')
 
         if grainalign:
             raise ImportError(f'{utils.color.red}There is no ' +\
-                f'grainalign_dir.inp file. Run the pipeline again adding ' +\
+                f'grainalign_dir.inp file. Run synthesizer again adding ' +\
                 f'--vector-field to --grid to create the alignment field ' +\
                 f'from the input model.{utils.color.none}')
 
@@ -396,6 +396,17 @@ class Pipeline:
         print('')
         utils.print_("Running a thermal Monte Carlo ...", bold=True)
         self.nphot = nphot
+
+        # Generate only the input files that are not available in the directory
+        if not os.path.exists('radmc3d.inp') or self.overwrite:
+            self.generate_input_files(inpfile=True, mc=True)
+
+        if not os.path.exists('wavelength_micron.inp') or self.overwrite:
+            self.generate_input_files(wavelength=True)
+
+        if not os.path.exists('stars.inp') or self.overwrite:
+            self.generate_input_files(stars=True)
+
         self.radmc3d_banner()
         subprocess.run(
             f'radmc3d mctherm {radmc3d_cmds}'.split())
@@ -446,7 +457,6 @@ class Pipeline:
             #tau2d = np.sum(rho * self.get_opacity(lam) * dl, axis=0).T
             tau2d = np.sum(rho * 1 * dl, axis=0).T
             if show:
-                plt.rcParams['text.usetex'] = True
                 plt.rcParams['font.family'] = 'Times New Roman'
                 plt.rcParams['xtick.direction'] = 'in'
                 plt.rcParams['ytick.direction'] = 'in'
@@ -576,21 +586,20 @@ class Pipeline:
         # Clean extra keywords from the header to avoid APLPy axis errors
         utils.fix_header_axes(fitsfile)
 
-        # Also for Q and U Stokes components if considering polarization
+        # Repeat for Q and U Stokes components if considering polarization
         if self.polarization:
-            for s in ['Q', 'U']:
-                # Write FITS file for each component
-                stokesfile = f'radmc3d_{s}.fits'
-                if os.path.exists(stokesfile):
-                        os.remove(stokesfile)
-                utils.radmc3d_casafits(stokesfile, stokes=s, dpc=distance)
-
-                # Clean extra keywords from the header to avoid APLPy errors 
-                utils.fix_header_axes(stokesfile)
+            if os.path.exists('ramc3d_Q.fits'): os.remove('ramc3d_Q.fits')
+            if os.path.exists('ramc3d_U.fits'): os.remove('ramc3d_U.fits')
+            utils.radmc3d_casafits('ramc3d_Q.fits', stokes='Q', dpc=distance)
+            utils.radmc3d_casafits('ramc3d_U.fits', stokes='U', dpc=distance)
+            utils.fix_header_axes('ramc3d_Q.fits')
+            utils.fix_header_axes('ramc3d_U.fits')
 
         # Plot the new image in Jy/pixel
         if show:
             utils.print_('Plotting image.out')
+            if self.alignment:
+                utils.print_(f'Rotating vectors by 90 deg.')
 
             if self.polarization:
                 fig = utils.polarization_map(

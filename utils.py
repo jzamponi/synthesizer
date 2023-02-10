@@ -566,8 +566,8 @@ def fix_header_axes(file):
     
     header = fits.getheader(file)
     
+    # Clean extra keywords from the header to avoid APLPy errors 
     if 'CDELT3' in header and header['NAXIS'] == 2:
-        # Clean extra keywords from the header to avoid APLPy errors 
         edit_header(file, 'CDELT3', 'del', False)
         edit_header(file, 'CRVAL3', 'del', False)
         edit_header(file, 'CUNIT3', 'del', False)
