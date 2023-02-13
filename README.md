@@ -5,7 +5,10 @@ Synthesizer is a program to calculate synthetic ALMA/JVLA images from an SPH mod
 It interpolates SPH particle positions into a rectangular grid and then uses RADMC3D to do the Monte-Carlo and raytracing. It can use CASA to generate a final synthetic observation. It can also include the effects of polarization either by scattering or grain alignment.
 Additionally, Synthesizer includes Dustmixer. This is a tool to generate dust opacity tables, including full scattering matrices, for a given dust composition (via optical constants) and allows to experiment with the mixing of different materials.  
 
-Example:
+## Instalation
+   $ python3 -m pip install -e . 
+
+## Example:
 
 
     $ synthesizer --grid --model ppdisk --ncells 100 --bbox 300
