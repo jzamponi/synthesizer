@@ -27,3 +27,6 @@ Requisites:
     Modules:    python3-aplpy, python3-scipy, python3-numpy, python3-h5py
                 python3-matplotlib, python3-astropy, python3-mayavi,
 
+## Feedback
+
+If you have any feedback, please reach out at jzamponi@mpe.mpg.de

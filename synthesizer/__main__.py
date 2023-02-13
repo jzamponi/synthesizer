@@ -27,57 +27,11 @@ import sys
 import argparse
 
 import utils
-from pipeline import Pipeline
+from synthesizer.pipeline import Pipeline
+
 
 @utils.elapsed_time
-def synthesizer(cli):
-    # Initialize the pipeline
-    pipeline = Pipeline(lam=cli.lam, amax=cli.amax, nphot=cli.nphot, 
-        lmin=cli.lmin, lmax=cli.lmax, nlam=cli.nlam, nthreads=cli.nthreads, 
-        csubl=cli.sublimation, sootline=cli.soot_line, dgrowth=cli.dust_growth,
-        polarization=cli.polarization, alignment=cli.alignment, star=cli.star, 
-        material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet)
-
-    # Generate the input grid for RADMC3D
-    if cli.grid:
-        pipeline.create_grid(sphfile=cli.sphfile, amrfile=cli.amrfile, 
-            source=cli.source, model=cli.model, ncells=cli.ncells, g2d=cli.g2d, 
-            bbox=cli.bbox, rout=cli.rout, temperature=cli.temperature, 
-            render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
-            show_3d=cli.show_grid_3d, vector_field=cli.vector_field)
-
-    # Generate the dust opacity tables
-    if cli.opacity:
-        pipeline.dust_opacity(cli.amin, cli.amax, cli.na, cli.q, cli.nang,
-            show_nk=cli.show_nk, show_opac=cli.show_opacity)
-
-    # Run a thermal Monte-Carlo
-    if cli.monte_carlo:
-        pipeline.monte_carlo(nphot=cli.nphot, radmc3d_cmds=cli.radmc3d)
-
-    # Run a ray-tracing on the new grid and generate an image
-    if cli.raytrace:
-        pipeline.raytrace(incl=cli.incl, npix=cli.npix, distance=cli.distance,
-            sizeau=cli.sizeau, show=cli.show_rt, noscat=cli.noscat, tau=cli.tau,
-            tau_surf=cli.tau_surf, show_tau_surf=cli.show_tau_surf, 
-            radmc3d_cmds=cli.radmc3d)
-
-    # Run a synthetic observation of the new image by calling CASA
-    if cli.synobs:
-        pipeline.synthetic_observation(show=cli.show_synobs, script=cli.script, 
-            simobserve=not cli.dont_observe, clean=not cli.dont_clean, 
-            exportfits=not cli.dont_export, obstime=cli.obs_time,  
-            resolution=cli.resolution, verbose=not cli.quiet)
-
-    if not cli.grid and not cli.opacity and not cli.monte_carlo and \
-        not cli.raytrace and not cli.synobs and not cli.quiet:
-
-        utils.print_('Nothing to do. Main options: ' +\
-            '--grid, --opacity, --monte-carlo, --raytrace or --synobs')
-        utils.print_('Run synthesizer --help for details.')
-
-
-if __name__ == "__main__":
+def synthesizer():
 
     # Initialize the argument parser
     parser = argparse.ArgumentParser(prog='Synthesizer',
@@ -272,6 +226,47 @@ if __name__ == "__main__":
     # Store the command-line given arguments
     cli = parser.parse_args()
 
-    # Run
-    synthesizer(cli)
+    # Initialize the pipeline
+    pipeline = Pipeline(lam=cli.lam, amax=cli.amax, nphot=cli.nphot, 
+        lmin=cli.lmin, lmax=cli.lmax, nlam=cli.nlam, nthreads=cli.nthreads, 
+        csubl=cli.sublimation, sootline=cli.soot_line, dgrowth=cli.dust_growth,
+        polarization=cli.polarization, alignment=cli.alignment, star=cli.star, 
+        material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet)
 
+    # Generate the input grid for RADMC3D
+    if cli.grid:
+        pipeline.create_grid(sphfile=cli.sphfile, amrfile=cli.amrfile, 
+            source=cli.source, model=cli.model, ncells=cli.ncells, g2d=cli.g2d, 
+            bbox=cli.bbox, rout=cli.rout, temperature=cli.temperature, 
+            render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
+            show_3d=cli.show_grid_3d, vector_field=cli.vector_field)
+
+    # Generate the dust opacity tables
+    if cli.opacity:
+        pipeline.dust_opacity(cli.amin, cli.amax, cli.na, cli.q, cli.nang,
+            show_nk=cli.show_nk, show_opac=cli.show_opacity)
+
+    # Run a thermal Monte-Carlo
+    if cli.monte_carlo:
+        pipeline.monte_carlo(nphot=cli.nphot, radmc3d_cmds=cli.radmc3d)
+
+    # Run a ray-tracing on the new grid and generate an image
+    if cli.raytrace:
+        pipeline.raytrace(incl=cli.incl, npix=cli.npix, distance=cli.distance,
+            sizeau=cli.sizeau, show=cli.show_rt, noscat=cli.noscat, tau=cli.tau,
+            tau_surf=cli.tau_surf, show_tau_surf=cli.show_tau_surf, 
+            radmc3d_cmds=cli.radmc3d)
+
+    # Run a synthetic observation of the new image by calling CASA
+    if cli.synobs:
+        pipeline.synthetic_observation(show=cli.show_synobs, script=cli.script, 
+            simobserve=not cli.dont_observe, clean=not cli.dont_clean, 
+            exportfits=not cli.dont_export, obstime=cli.obs_time,  
+            resolution=cli.resolution, verbose=not cli.quiet)
+
+    if not cli.grid and not cli.opacity and not cli.monte_carlo and \
+        not cli.raytrace and not cli.synobs and not cli.quiet:
+
+        utils.print_('Nothing to do. Main options: ' +\
+            '--grid, --opacity, --monte-carlo, --raytrace or --synobs')
+        utils.print_('Run synthesizer --help for details.')

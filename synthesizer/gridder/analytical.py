@@ -3,6 +3,7 @@ import astropy.units as u
 import astropy.constants as c
 import matplotlib.pyplot as plt
 
+from .vector_field import VectorField
 from synthesizer import utils 
 
 class AnalyticalModel():
@@ -15,6 +16,7 @@ class AnalyticalModel():
 
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
+        self.vfield = None
         self.add_temp = temp
         self.model = model 
         self.ncells = ncells
@@ -43,11 +45,13 @@ class AnalyticalModel():
         xc = 0.5 * (self.xw[0: self.ncells] + self.xw[1: self.ncells + 1])
         yc = 0.5 * (self.yw[0: self.ncells] + self.yw[1: self.ncells + 1])
         zc = 0.5 * (self.zw[0: self.ncells] + self.zw[1: self.ncells + 1])
-        x, y, z = np.meshgrid(xc, yc, zc, indexing='ij')
+        x, y, z = np.meshgrid(xc, yc, zc, indexing='xy')
         self.X = x
         self.Y = y
         self.Z = z
         r_c = self.bbox
+        self.plotmin = None
+        self.plotmax = None
 
         # Constant density  
         if self.model == 'constant':          
@@ -63,6 +67,7 @@ class AnalyticalModel():
             self.dens = rho_c * (r / r_c)**(-slope)
             if self.add_temp:
                 self.temp = 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / r)
+            self.plotmin = 1e-19
 
         # Prestellar Core: Bonnort-Eber sphere
         elif self.model == 'pcore':
@@ -70,14 +75,22 @@ class AnalyticalModel():
             r_c = 1100 * u.au.to(u.cm)
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * r_c**2 / (r**2 + r_c**2)
+            self.plotmin = 1e-15
             
-        # Protoplanetary disk: Shakura & Sunyaev 1973
-        elif self.model == 'ppdisk':
-            rho_slope = 2
-            flaring = 2.5
+        # Flared Protoplanetary disk: Shakura & Sunyaev 1973
+        elif self.model == 'ppdiski':
+            rho_slope = 1.8
+            flaring = 2.6
             r_0 = 100 * u.au.to(u.cm)
             h_0 = 10 * u.au.to(u.cm)
             rho_0 = 1e-12
+            r = np.sqrt(x**2 + y**2)
+            h = lambda r: h_0 * (r / r_0)**flaring
+            rho_g = rho_0 * (r / r_0)**-rho_slope * np.exp(-0.5 * (z / h(r))**2)
+            self.plotmin = 1e-16
+    
+        elif self.model == 'ppdisk':
+            # From hydrostatic equilibrium
             sigma_g = 100 
             M_star = 2.4 * u.Msun.to(u.g)
             T_star = 1500 
@@ -85,15 +98,10 @@ class AnalyticalModel():
             kB = c.k_B.cgs.value
             G = c.G.cgs.value
             r = np.sqrt(x**2 + y**2)
-
-            # Flared disk
-            h = lambda r: h_0 * (r / r_0)**flaring
-            rho_g = rho_0 * (r / r_0)**-rho_slope * np.exp(-0.5 * (z / h(r))**2)
-
-            # From hydrostatic equilibrium
             h = lambda r: np.sqrt(kB * T_star * r**3 / mu_g / G / M_star)
             rho_g = sigma_g / (2*np.pi)**0.5 / h(r) * np.exp(-0.5*(z / h(r))**2)
             self.dens = rho_g / self.g2d
+            self.plotmin = 1e-16
 
 
     def write_grid_file(self):
@@ -169,119 +177,59 @@ class AnalyticalModel():
                 for t in temperature:
                     f.write(f'{t:13.6e}\n')
 
-    def write_vector_field(self, vector_field):
+    def write_vector_field(self, morphology):
         """ Create a vector field for dust alignment """
  
         utils.print_('Writing grain alignment direction file')
  
-        x = self.X
-        y = self.Y
-        z = self.Z
-        self.vector_field = vector_field.lower()
-        field = np.zeros((self.ncells, self.ncells, self.ncells, 3))
+        self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
  
-        if self.vector_field == 'x':
-            field[..., 0] = np.ones(x.shape)
- 
-        elif self.vector_field == 'y':
-            field[..., 1] = np.ones(y.shape)
- 
-        elif self.vector_field == 'z':
-            field[..., 2] = np.ones(z.shape)
- 
-        elif self.vector_field in ['t', 'toroidal']:
-            r = np.sqrt(x**2 + y**2)
-            field[..., 0] = y / r
-            field[..., 1] = -x / r
- 
-        elif self.vector_field in ['r', 'radial']:
-            r = np.sqrt(x**2 + y**2 + z**2)
-            field[..., 0] = x / r
-            field[..., 1] = y / r
-            field[..., 2] = z / r
- 
-        elif self.vector_field in ['h', 'hourglass']:
-            a = 0.1
-            factor = np.sqrt(
-                1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
-            field[..., 0] = a * x * z * np.exp(-a * z*z) / factor
-            field[..., 1] = a * y * z * np.exp(-a * z*z) / factor
-            field[..., 2] = np.ones(z.shape)
-
-        elif self.vector_field in ['hel', 'helicoidal']:
-            # Helicoidal = Superpoistion of Toroidal & Helicoidal
-            r = np.sqrt(x**2 + y**2)
-            toro = np.array([y/r, -x/r, np.zeros(z.shape)])
-            a = 0.1
-            factor = np.sqrt(
-                1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
-
-            hour = np.array([
-                a * x * z * np.exp(-a * z*z) / factor, 
-                a * y * z * np.exp(-a * z*z) / factor,
-                np.ones(z.shape)
-            ])
-            heli = (toro + hour) / np.linalg.norm(toro + hour)
-            field[..., 0] = heli[0]
-            field[..., 1] = heli[1]
-            field[..., 2] = heli[2]
-
-        elif self.vector_field in ['d', 'dipole']:
-            r5 = np.sqrt(x**2 + y**2 + z**2)**5
-            field[..., 0] = (3 * x * z) / r5
-            field[..., 1] = (3 * y * z) / r5
-            field[..., 2] = (2*z*z - x*x - y*y) / r5
- 
-        elif self.vector_field in ['q', 'quadrupole']:
-            r7 = 2 * np.sqrt(x**2 + y**2 + z**2)**7 
-            field[..., 0] = (-3*x*(x**2 + y**2 - 4*z**2)) / r7
-            field[..., 1] = (-3*y*(x**2 + y**2 - 4*z**2)) / r7
-            field[..., 2] = (3*z*(-3*x**2 - 3*y**2 + 2*z**2)) / r7
-
-        # Normalize the field
-        l = np.sqrt(field[..., 0]**2 + field[..., 1]**2 + field[..., 2]**2)
-        field[..., 0] = np.squeeze(field[..., 0]) / l
-        field[..., 1] = np.squeeze(field[..., 1]) / l
-        field[..., 2] = np.squeeze(field[..., 2]) / l
- 
-        # Assume perfect alignment (a_eff = 1). We can change it in the future
-        a_eff = 1
-        field[..., 0] *= a_eff
-        field[..., 1] *= a_eff
-        field[..., 2] *= a_eff
- 
-        # Write the vector field 
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
             f.write(f'{int(self.ncells**3)}\n')
             for iz in range(self.ncells):
                 for iy in range(self.ncells):
                     for ix in range(self.ncells):
-                        f.write(f'{field[ix, iy, iz, 0]:13.6e} ' +\
-                                f'{field[ix, iy, iz, 1]:13.6e} ' +\
-                                f'{field[ix, iy, iz, 2]:13.6e}\n')
+                        f.write(f'{self.vfield.vx[ix, iy, iz]:13.6e} ' +\
+                                f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
+                                f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
     def plot_dens_midplane(self):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the density grid midplane at z = 0')
-            plt.rcParams['text.usetex'] = True
+            utils.print_(f'Plotting the density grid midplane')
             plt.rcParams['font.family'] = 'Times New Roman'
+            plt.rcParams['xtick.direction'] = 'in'
+            plt.rcParams['ytick.direction'] = 'in'
+            plt.rcParams['xtick.top'] = True
+            plt.rcParams['ytick.right'] = True
+            plt.rcParams['xtick.minor.visible'] = True
+            plt.rcParams['ytick.minor.visible'] = True
 
             if self.bbox is None:
                 extent = self.bbox
             else:
-                extent = [-self.bbox*u.cm.to(u.au), 
-                        self.bbox*u.cm.to(u.au)] * 2
-
-            if self.model == 'ppdisk':
-                slice_ = self.dens[:, self.ncells//2-1, :].T
+                bbox = self.bbox * u.cm.to(u.au)
+                extent = [-bbox, bbox] * 2
+        
+            midplane = self.ncells//2 - 1
+            if self.model == 'ppdiskp':
+                slice_ = self.dens[:, midplane, :].T
             else:
-                slice_ = self.dens[..., self.ncells//2-1].T
+                slice_ = self.dens[..., midplane].T
 
-            vmin = slice_.min() if slice_.min() > 0 else None
-            vmax = slice_.max() if slice_.max() < np.inf else None
+            if slice_.min() > 0:
+                vmin = slice_.min() if self.plotmin is None else self.plotmin 
+            else:
+                vmin = None
+
+            if slice_.max() < np.inf:
+                vmin = slice_.max() if self.plotmin is None else self.plotmax 
+            else:
+                vmax = None
+
+            plt.title(r'Dust Density Midplane (g cm$^-3$)')
             plt.imshow(slice_, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
                 cmap='CMRmap',
@@ -290,7 +238,23 @@ class AnalyticalModel():
             plt.colorbar()
             plt.xlabel('AU')
             plt.ylabel('AU')
-            plt.title(r'Dust Density Midplane at $z=0$ (g cm$^-3$)')
+
+            if self.vfield is not None:
+                if self.model == 'ppdisk':
+                    v1 = self.vfield.vx[:, midplane, :].T, 
+                    v2 = self.vfield.vz[:, midplane, :].T,
+                else:
+                    v1 = self.vfield.vx[..., midplane].T, 
+                    v2 = self.vfield.vy[..., midplane].T,
+                plt.streamplot(
+                    np.linspace(-bbox, bbox, self.ncells), 
+                    np.linspace(-bbox, bbox, self.ncells), 
+                    v1, 
+                    v2,
+                    color='k', 
+                    density=0.7,
+                    arrowsize=0.1, 
+                )
             plt.show()
 
         except Exception as e:
@@ -302,7 +266,6 @@ class AnalyticalModel():
         try:
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the temperature grid midplane at z = 0')
-            plt.rcParams['text.usetex'] = True
             plt.rcParams['font.family'] = 'Times New Roman'
 
             if self.bbox is None:
@@ -334,11 +297,14 @@ class AnalyticalModel():
             fig = mlab.figure(
                 size=(900, 700) , bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
 
-            mlab.contour3d(self.dens, contours=15, opacity=0.7)
+            mlab.contour3d(
+                self.dens, vmin=self.plotmin, vmax=self.plotmax, opacity=0.7)
 
-            if self.vector_field is not None:
+            if self.vfield is not None:
                 # Add streamlines to mayavi
-                pass
+                utils.print_(
+                    'Plotting 3D vector fields is yet to be implemented.')
+                #mlab.flow(self.vfield.vx, self.vfield.vy, self.vfield.vz) 
 
             mlab.show()
 

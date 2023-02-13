@@ -402,12 +402,14 @@ def convert_opacity_file(
         plt.tight_layout()
 
 
-def radmc3d_data(file_='image.out', stokes='I', distance=3.086e20):
-    """
-    Function to read image files resulting from an RT with RADMC3D.
+def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
+        stokes='I', dpc=141, verbose=False):
+    """ Read in an image.out file created by RADMC3D and generate a
+        FITS file with a CASA-compatible header, ready for a 
+        synthetic observation.
     """
 
-    with open(file_, 'r') as f:
+    with open(radmc3dimage, 'r') as f:
         iformat = int(f.readline())
         line = f.readline().split()
         nx = int(line[0])
@@ -418,7 +420,7 @@ def radmc3d_data(file_='image.out', stokes='I', distance=3.086e20):
         pixsize_y = float(line[1])
         lam = float(f.readline())
         
-    img = np.loadtxt(file_, skiprows=5)
+    img = np.loadtxt(radmc3dimage, skiprows=5)
 
     # Select Stokes map
     if iformat == 3:
@@ -434,20 +436,30 @@ def radmc3d_data(file_='image.out', stokes='I', distance=3.086e20):
     )
 
     # Convert sr into pixels (Jy/sr --> Jy/pixel)
-    img = img * (pixsize_x**2 / distance**2)
+    img = img * (pixsize_x**2 / (dpc*u.pc.to(u.cm))**2)
 
-    return img
-    
-
-def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmcimage='image.out',
-        stokes='I', dpc=141):
-    """ Read in an image.out file created by RADMC3D and generate a
-        FITS file with a CASA-compatible header, ready for a 
-        synthetic observation.
-    """
-
-    img = radmc3d_data(radmcimage, stokes=stokes, distance=dpc * u.pc.to(u.cm))
-    write_fits(fitsfile, data=img, overwrite=True)
+    # Set a minimal header
+    header = fits.Header()
+    header.update({
+        'CRPIX1': f'{nx // 2}',
+        'CDELT1': f'',
+        'CRVAL1': f'', 
+        'CUNIT1': f'',
+        'CTYPE1': f'',
+        'CRPIX2': f'{nx // 2}',
+        'CDELT2': f'',
+        'CRVAL2': f'', 
+        'CUNIT2': f'DEG',
+        'CTYPE2': f'DEC--SIN',
+        'RESTFRQ': f'{c.c.cgs.value / (lam*u.micron.to(u.cm))}',
+        'BUNIT': 'Jy/pixel',
+        'BTYPE': 'Intensity', 
+        'BZERO': '1.0', 
+        'BSCALE': 'BSCALE', 
+        'LONPOLE': '180.0', 
+        'DISTANCE': f'{dpc}pc',
+    })
+    write_fits(fitsfile, img, header, True, verbose)
 
 
 def stats(data, verbose=False, slice=None):

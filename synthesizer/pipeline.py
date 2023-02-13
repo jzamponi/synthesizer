@@ -160,7 +160,7 @@ class Pipeline:
             self.grid.write_temperature_file()
 
         if vector_field is not None:
-            self.grid.write_vector_field(vector_field)
+            self.grid.write_vector_field(morphology=vector_field)
 
         # Plot the density midplane
         if show_2d:
@@ -579,21 +579,12 @@ class Pipeline:
                     raise Exception(
                         f'{utils.color.red}[RADMC3D] {line}{utils.color.none}')
     
-        # Generate a FITS file from the image.out
-        if os.path.exists(fitsfile): os.remove(fitsfile)
+        # Generate FITS files from the image.out
         utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
 
-        # Clean extra keywords from the header to avoid APLPy axis errors
-        utils.fix_header_axes(fitsfile)
-
-        # Repeat for Q and U Stokes components if considering polarization
         if self.polarization:
-            if os.path.exists('radmc3d_Q.fits'): os.remove('radmc3d_Q.fits')
-            if os.path.exists('radmc3d_U.fits'): os.remove('radmc3d_U.fits')
             utils.radmc3d_casafits('radmc3d_Q.fits', stokes='Q', dpc=distance)
             utils.radmc3d_casafits('radmc3d_U.fits', stokes='U', dpc=distance)
-            utils.fix_header_axes('radmc3d_Q.fits')
-            utils.fix_header_axes('radmc3d_U.fits')
 
         # Plot the new image in Jy/pixel
         if show:

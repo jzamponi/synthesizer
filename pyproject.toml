@@ -1,0 +1,35 @@
+[build-system]
+requires      = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synthesizer"
+version = "1.0.0"
+description = "Generate synthetic observations from 3D numerical simulations"
+readme = "README.md"
+authors = [{ name = "Joaquin Zamponi", email = "jzamponi@mpe.mpg.de" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["", "", ""]
+dependencies = [
+    "astropy",
+    "matplotlib",
+    "numpy",
+    "scipy",
+    "progressbar2",
+    "mayavi",
+    "aplpy",
+    "requests",
+    "mpmath",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/jzamponi/synthesizer"
+
+[project.scripts]
+synthesizer = "synthesizer.__main__:synthesizer"

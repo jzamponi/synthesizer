@@ -5,6 +5,7 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 
+from .vector_field import VectorField
 from synthesizer import utils
 
 class CartesianGrid():
@@ -29,6 +30,7 @@ class CartesianGrid():
 
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
+        self.vector_field = None
         self.add_temp = temp
         self.ncells = ncells
         self.bbox = bbox
@@ -320,97 +322,22 @@ class CartesianGrid():
                 for t in temperature:
                     f.write(f'{t:13.6e}\n')
 
-    def write_vector_field(self, vector_field):
+    def write_vector_field(self, morphology):
         """ Create a vector field for dust alignment """
-
+ 
         utils.print_('Writing grain alignment direction file')
-
-        x = self.X
-        y = self.Y
-        z = self.Z
-        self.vector_field = vector_field.lower()
-        field = np.zeros((self.ncells, self.ncells, self.ncells, 3))
  
-        if self.vector_field == 'x':
-            field[..., 0] = np.ones(x.shape)
+        self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
  
-        elif self.vector_field == 'y':
-            field[..., 1] = np.ones(y.shape)
- 
-        elif self.vector_field == 'z':
-            field[..., 2] = np.ones(z.shape)
- 
-        elif self.vector_field in ['t', 'toroidal']:
-            r = np.sqrt(x**2 + y**2)
-            field[..., 0] = y / r
-            field[..., 1] = -x / r
- 
-        elif self.vector_field in ['r', 'radial']:
-            r = np.sqrt(x**2 + y**2 + z**2)
-            field[..., 0] = x / r
-            field[..., 1] = y / r
-            field[..., 2] = z / r
- 
-        elif self.vector_field in ['h', 'hourglass']:
-            a = 0.1
-            factor = np.sqrt(
-                1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
-            field[..., 0] = a * x * z * np.exp(-a * z*z) / factor
-            field[..., 1] = a * y * z * np.exp(-a * z*z) / factor
-            field[..., 2] = np.ones(z.shape)
-
-        elif self.vector_field in ['hel', 'helicoidal']:
-            # Helicoidal = Superpoistion of Toroidal & Helicoidal
-            r = np.sqrt(x**2 + y**2)
-            toro = np.array([y/r, -x/r, np.zeros(z.shape)])
-            a = 0.1
-            factor = np.sqrt(
-                1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
-
-            hour = np.array([
-                a * x * z * np.exp(-a * z*z) / factor, 
-                a * y * z * np.exp(-a * z*z) / factor,
-                np.ones(z.shape)
-            ])
-            heli = (toro + hour) / np.linalg.norm(toro + hour)
-            field[..., 0] = heli[0]
-            field[..., 1] = heli[1]
-            field[..., 2] = heli[2]
-
-        elif self.vector_field in ['d', 'dipole']:
-            r5 = np.sqrt(x**2 + y**2 + z**2)**5
-            field[..., 0] = (3 * x * z) / r5
-            field[..., 1] = (3 * y * z) / r5
-            field[..., 2] = (2*z*z - x*x - y*y) / r5
- 
-        elif self.vector_field in ['q', 'quadrupole']:
-            r7 = 2 * np.sqrt(x**2 + y**2 + z**2)**7 
-            field[..., 0] = (-3*x*(x**2 + y**2 - 4*z**2)) / r7
-            field[..., 1] = (-3*y*(x**2 + y**2 - 4*z**2)) / r7
-            field[..., 2] = (3*z*(-3*x**2 - 3*y**2 + 2*z**2)) / r7
-        
-        # Normalize the field
-        l = np.sqrt(field[..., 0]**2 + field[..., 1]**2 + field[..., 2]**2)
-        field[..., 0] = np.squeeze(field[..., 0]) / l
-        field[..., 1] = np.squeeze(field[..., 1]) / l
-        field[..., 2] = np.squeeze(field[..., 2]) / l
-
-        # Assume perfect alignment (a_eff = 1). We can change it in the future
-        a_eff = 1
-        field[..., 0] *= a_eff
-        field[..., 1] *= a_eff
-        field[..., 2] *= a_eff
-        
-        # Write the vector field 
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
             f.write(f'{int(self.ncells**3)}\n')
             for iz in range(self.ncells):
                 for iy in range(self.ncells):
                     for ix in range(self.ncells):
-                        f.write(f'{field[ix, iy, iz, 0]:13.6e} ' +\
-                                f'{field[ix, iy, iz, 1]:13.6e} ' +\
-                                f'{field[ix, iy, iz, 2]:13.6e}\n')
+                        f.write(f'{self.vfield.vx[ix, iy, iz]:13.6e} ' +\
+                                f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
+                                f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
     def plot_dens_midplane(self):
         """ Plot the density midplane at z=0 using Matplotlib """
@@ -428,18 +355,34 @@ class CartesianGrid():
             if self.bbox is None:
                 extent = self.bbox
             else:
-                extent = [-self.bbox*u.cm.to(u.au), 
-                        self.bbox*u.cm.to(u.au)] * 2
+                bbox = self.bbox * u.cm.to(u.au)
+                extent = [-bbox, bbox] * 2
+        
+            plane = self.ncells//2 - 1
+            slice_ = self.dens[:, plane, :].T
 
-            plt.imshow(self.interp_dens[:,:,self.ncells//2-1].T, 
-                norm=LogNorm(vmin=None, vmax=None),
-                cmap='BuPu',
+            vmin = slice_.min() if slice_.min() > 0 else None
+            vmax = slice_.max() if slice_.max() < np.inf else None
+
+            plt.title(r'Dust Density Midplane at $z=0$ (g cm$^{-3}$)')
+            plt.imshow(slice_, 
+                norm=LogNorm(vmin=vmin, vmax=vmax), 
+                cmap='CMRmap',
                 extent=extent,
             )
             plt.colorbar()
             plt.xlabel('AU')
             plt.ylabel('AU')
-            plt.title(r'Dust Density Midplane at $z=0$ (g cm$^{-3}$)')
+
+            if self.vfield is not None:
+                plt.streamplot(
+                    np.linspace(-bbox, bbox, self.ncells), 
+                    np.linspace(-bbox, bbox, self.ncells), 
+                    self.vfield.vx[:, plane, :], 
+                    self.vfield.vz[:, plane, :],
+                    color='k', 
+                    density=0.7, 
+                )
             plt.show()
 
         except Exception as e:

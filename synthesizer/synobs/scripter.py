@@ -13,7 +13,7 @@ import numpy as np
 import astropy.units as u
 import astropy.constants as c
 
-from synthesizer import utils
+from .. import utils
 
 class CasaScript():
     
@@ -67,7 +67,7 @@ class CasaScript():
         self.niter = 1e4
         self.threshold = '5e-5Jy'
         self.interactive = False
-        self.verbose = True
+        self.verbose = False
 
         # exportfits
         self.dropstokes = True
