@@ -6,7 +6,8 @@ It interpolates SPH particle positions into a rectangular grid and then uses RAD
 Additionally, Synthesizer includes Dustmixer. This is a tool to generate dust opacity tables, including full scattering matrices, for a given dust composition (via optical constants) and allows to experiment with the mixing of different materials.  
 
 ## Instalation
-   $ python3 -m pip install -e . 
+
+    $ python3 -m pip install -e .
 
 ## Example:
 
@@ -33,3 +34,4 @@ Requisites:
 ## Feedback
 
 If you have any feedback, please reach out at jzamponi@mpe.mpg.de
+

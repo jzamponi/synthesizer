@@ -430,6 +430,8 @@ class CartesianGrid():
             utils.print_('Visualizing the interpolated field ...')
             from mayavi import mlab
             mlab.contour3d(self.interp_dens, contours=20, opacity=0.2)
+            utils.print_('HINT: If you wanna play with the figure, press '+\
+                'the nice icon in the upper left corner.', bold=True)
             mlab.show()
 
         except Exception as e:
@@ -443,6 +445,8 @@ class CartesianGrid():
             utils.print_('Visualizing the interpolated field ...')
             from mayavi import mlab
             mlab.contour3d(self.interp_temp, contours=20, opacity=0.2)
+            utils.print_('HINT: If you wanna play with the figure, press '+\
+                'the nice icon in the upper left corner.', bold=True)
             mlab.show()
 
         except Exception as e:
