@@ -1,10 +1,8 @@
 The following points are meant to be implemented within the pipeline, 
 dustmixer and utils modules ("-" means to be done, "+" means done):
 
-    - [synthesizer] conver the whole program into a python package.
-
-    + [pipeline] Rewrite utils.radmc3d_casafits() to be done manually and to 
-      eliminate the dependency of radmc3dPy from synthesizer.
+    - [scripter] Receive an angular resolution from the argparser and detect 
+      what antenna array best matches this resolution.
 
     - [analytical] Add the option to plot the vector_field midplane with 
       plt.streamplot and in 3D streamlines using Mayavi.
@@ -17,8 +15,10 @@ dustmixer and utils modules ("-" means to be done, "+" means done):
       two materials are mixed or summed. This will also let the user to adjust
       the resolution of the wavelength grid. Also extrapolate.
 
-    - [scripter] Receive an angular resolution from the argparser and detect 
-      what antenna array best matches this resolution.
+    + [synthesizer] conver the whole program into a python package.
+
+    + [pipeline] Rewrite utils.radmc3d_casafits() to be done manually and to 
+      eliminate the dependency of radmc3dPy from synthesizer.
 
     + [raytrace] Add a grid method to generate a 2D optical depth map. Read in 
       the 3D density grid, multiply by the opacity and apply np.cumsum(axis=2)
