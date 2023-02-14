@@ -7,6 +7,7 @@ Additionally, Synthesizer includes Dustmixer. This is a tool to generate dust op
 
 ## Instalation
 
+    $ cd synthesizer
     $ python3 -m pip install -e .
 
 ## Example:

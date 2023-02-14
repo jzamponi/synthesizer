@@ -22,10 +22,19 @@ pwd = Path(os.getcwd())
 
 class color:
     red = "\033[91m"
-    bold = "\033[1m"
+    green = '\033[92m'
+    warn = '\033[93m'
+    blue = '\033[94m'
+    header = '\033[95m'
+    cyan = '\033[96m'
     none = "\033[0m"
+    bold = "\033[1m"
+    gray = "\033[2m"
+    it = "\033[3m"
+    ul = '\033[4m'
 
-def print_(string, verbose=True, bold=False, red=False, fname=None, *args, **kwargs):
+def print_(string, verbose=True, bold=False, red=False, fname=None, blue=False, 
+    ul=False, *args, **kwargs):
 
     # Get the name of the calling function by tracing one level up in the stack
     fname = sys._getframe(1).f_code.co_name if fname is None else fname
@@ -42,13 +51,21 @@ def print_(string, verbose=True, bold=False, red=False, fname=None, *args, **kwa
         elif red:
             print(f"{color.red}[{fname}] {string} {color.none}", flush=True, 
                 *args, **kwargs)
+        elif blue:
+            print(f"{color.blue}[{fname}] {string} {color.none}", flush=True, 
+                *args, **kwargs)
+        elif ul:
+            print(f"{color.ul}[{fname}] {string} {color.ul}", flush=True, 
+                *args, **kwargs)
         else:
             print(f"[{fname}] {string}", flush=True, 
                 *args, **kwargs)
 
 
 def not_implemented(msg=''): 
-    raise NotImplementedError(f'This feature is not yet implemented.\n{msg}')
+    raise NotImplementedError(
+        f"{color.blue}I'm sorry, this feature is not yet implemented. " +\
+        f"{color.it}{msg}{color.none}")
 
 
 def write_fits(filename, data, header=None, overwrite=True, verbose=False):

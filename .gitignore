@@ -1,1 +1,4 @@
 __pycache__/
+synthesizer/to_do_list.txt
+*.egg-info*
+

@@ -52,16 +52,16 @@ class VectorField():
                 1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
             self.vx = a * x * z * np.exp(-a * z*z) / factor
             self.vy = a * y * z * np.exp(-a * z*z) / factor
-            self.vz = np.ones(z.shape)
+            self.vz = 1 / factor 
 
         elif self.morphology in ['hel', 'helicoidal']:
-            # Helicoidal = Superpoistion of Toroidal & Helicoidal
+            # Helicoidal = Superpoistion of Toroidal & Hourglass
             r = np.sqrt(x**2 + y**2)
             toro = np.array([y/r, -x/r, np.zeros(z.shape)])
+
             a = 0.1
             factor = np.sqrt(
                 1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
-
             hour = np.array([
                 a * x * z * np.exp(-a * z*z) / factor, 
                 a * y * z * np.exp(-a * z*z) / factor,

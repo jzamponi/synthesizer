@@ -1,6 +1,6 @@
 import numpy as np
 import astropy.units as u
-import astropy.constants as c
+import astropy.constants as const
 import matplotlib.pyplot as plt
 
 from .vector_field import VectorField
@@ -28,8 +28,14 @@ class AnalyticalModel():
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
 
         if bbox is None:
-            raise ValueError(
-                '--model requires a box half-size (au) to be given with --bbox')
+            # Set default half-box sizes for predefined models
+            self.bbox = {
+                'constant': 1 * u.au.to(u.cm), 
+                'plaw': 8500 * u.au.to(u.cm),    
+                'pcore': 0.1 * u.pc.to(u.cm), 
+                'ppdisk': 300 * u.au.to(u.cm),
+                'filament': 1 * u.pc.to(u.cm), 
+            }.get(model)
         else:
             self.bbox = bbox * u.au.to(u.cm)
 
@@ -37,7 +43,7 @@ class AnalyticalModel():
         """ Setup a density model box """
 
         utils.print_(f'Creating density model: {self.model}')
-
+    
         # Coordinate grid: cell walls and cell centers
         self.xw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
         self.yw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
@@ -49,7 +55,7 @@ class AnalyticalModel():
         self.X = x
         self.Y = y
         self.Z = z
-        r_c = self.bbox
+        r_c = self.bbox * 0.8
         self.plotmin = None
         self.plotmax = None
 
@@ -65,43 +71,101 @@ class AnalyticalModel():
             rho_c = 9e-18 / self.g2d
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * (r / r_c)**(-slope)
+            self.plotmin = 1e-19
             if self.add_temp:
                 self.temp = 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / r)
-            self.plotmin = 1e-19
 
         # Prestellar Core: Bonnort-Eber sphere
         elif self.model == 'pcore':
             rho_c = 1.07e-15
-            r_c = 1100 * u.au.to(u.cm)
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * r_c**2 / (r**2 + r_c**2)
-            self.plotmin = 1e-15
             
-        # Flared Protoplanetary disk: Shakura & Sunyaev 1973
-        elif self.model == 'ppdiski':
-            rho_slope = 1.8
-            flaring = 2.6
-            r_0 = 100 * u.au.to(u.cm)
-            h_0 = 10 * u.au.to(u.cm)
-            rho_0 = 1e-12
-            r = np.sqrt(x**2 + y**2)
-            h = lambda r: h_0 * (r / r_0)**flaring
-            rho_g = rho_0 * (r / r_0)**-rho_slope * np.exp(-0.5 * (z / h(r))**2)
-            self.plotmin = 1e-16
-    
         elif self.model == 'ppdisk':
-            # From hydrostatic equilibrium
-            sigma_g = 100 
-            M_star = 2.4 * u.Msun.to(u.g)
-            T_star = 1500 
-            mu_g = 2.3 * (c.m_p + c.m_e).cgs.value
-            kB = c.k_B.cgs.value
-            G = c.G.cgs.value
+            # Protoplanetary disk model 
+            rin = 1 * u.au.to(u.cm)
+            h_0 = 0.1 
+            rho_slope = 0.9
+            flaring = 0.0
+            Mdisk = 5e-3 * u.Msun.to(u.g)
+            Mstar = 1 * u.Msun.to(u.g)
+            rho_bg = 1e-30
+            T_0 = 30
+            T_slope = 3 / 7
+            G = const.G.cgs.value
+            kB = const.k_B.cgs.value
+            m_H2 = 2.6 * (const.m_p + const.m_e).cgs.value
+
+            # Inner rim and gap parameters
+            rim_rout = 0
+            srim_rout = 0.8
+            rim_slope = 0
+            sigma_gap = 5 * u.au.to(u.cm)
+            rin_gap = 10 * u.au.to(u.cm)
+            rout_gap = 50 * u.au.to(u.cm)
+            gap_c = 100 * u.au.to(u.cm)
+            gap_stddev = 5 * u.au.to(u.cm)
+            densredu_gap = 1e-7
+
+            # Surface density
             r = np.sqrt(x**2 + y**2)
-            h = lambda r: np.sqrt(kB * T_star * r**3 / mu_g / G / M_star)
-            rho_g = sigma_g / (2*np.pi)**0.5 / h(r) * np.exp(-0.5*(z / h(r))**2)
+            r3d = np.sqrt(x**2 + y**2 + z**2)
+            T_r = T_0 * (r3d/r_c)**-T_slope
+            c_s = np.sqrt(kB * T_r / m_H2)
+            v_K = np.sqrt(G * Mstar / r**3)
+            h = c_s / v_K * (r/r_c)**flaring
+            sigma_0 = (2 - rho_slope) * (Mdisk / 2 / np.pi / r_c**2)
+            sigma_g = sigma_0 * (r/r_c)**-rho_slope * \
+                np.exp(-(r/r_c)**(2-rho_slope))
+
+            # Add a smooth inner rim
+            if rim_rout > 0:
+                h_rin = np.sqrt(kB * T_0 * (rin/r_c)**-T_slope / m_H2) / \
+                    np.sqrt(G * Mstar / rin**3)
+                a = h_0 * (r/r_c)**rho_slope
+                b = h_0 * (rim_rout * rin / h_0)**rho_slope
+                c = h_rin * (r/rin)**(np.log10(b / h_rin) / np.log10(rim_rout))
+                h = (a**8 + c**8)**(1/8) * r
+                sigma_rim = sigma_0 * (srim_rout*rin/rout)**-rho_slope * \
+                    np.exp(-(r/rout)**(2-rho_slope)) * \
+                    (r/srim_rout/rin)**rim_slope
+                sigma_g = (sigma_g**-5 + sigma_rim**-5)**(1/-5)
+            
+            # Add a gap (as a radial gaussian density decrease)
+            gap = np.exp(-0.5 * (r-gap_c)**2 / sigma_gap**2) * (1/densredu_gap-1)
+            sigma_g /= (gap + 1)
+
+            # Density profile from hydrostatic equilibrium
+            rho_g = sigma_g / np.sqrt(2*np.pi) / h * np.exp(-z*z / (2*h*h))
+            rho_g = rho_g + rho_bg
             self.dens = rho_g / self.g2d
-            self.plotmin = 1e-16
+            self.plotmin = rho_bg
+
+            # Radial temperature profile
+            if self.add_temp:
+                self.temp = T_r
+
+        # Viscous gravitationally unstable accretion disk (Rafikov et al. 2015)
+        elif self.model == 'gidisk':
+            utils.not_implemented(f'Model: {self.model}')
+
+        # PP Disk with logarithmic spiral arms (Huang et al. 2018b,c)
+        elif self.model == 'spiral-disk':
+            utils.not_implemented(f'Model: {self.model}')
+            theta = np.tan(0.23)
+            r_theta = r_c * np.exp(b*theta)
+
+        # Gas filament, modelled as a Plummer distribution (Arzoumanian+ 2011)
+        # Or from Koertgen+2018 and Tasker and Tan 2009
+        elif self.model == 'filament':
+            utils.not_implemented(f'Model: {self.model}')
+            p = 2
+            r_flat = 0.03 * u.pc.to(u.cm) 
+            r = np.sqrt(x**2 + y**2)
+            rho_ridge = 4e-19
+            self.dens = rho_ridge / (1 + (r/r_flat)**2)**(p/2)
+            if self.add_temp:
+                self.temp = 15 * np.ones(self.temp.shape)
 
 
     def write_grid_file(self):
@@ -214,7 +278,7 @@ class AnalyticalModel():
                 extent = [-bbox, bbox] * 2
         
             midplane = self.ncells//2 - 1
-            if self.model == 'ppdiskp':
+            if self.model == 'ppdisk':
                 slice_ = self.dens[:, midplane, :].T
             else:
                 slice_ = self.dens[..., midplane].T
@@ -225,12 +289,13 @@ class AnalyticalModel():
                 vmin = None
 
             if slice_.max() < np.inf:
-                vmin = slice_.max() if self.plotmin is None else self.plotmax 
+                vmax = slice_.max() if self.plotmax is None else self.plotmax 
             else:
                 vmax = None
 
             plt.title(r'Dust Density Midplane (g cm$^-3$)')
-            plt.imshow(slice_, 
+            plt.imshow(
+                slice_, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
                 cmap='CMRmap',
                 extent=extent,
@@ -246,6 +311,7 @@ class AnalyticalModel():
                 else:
                     v1 = self.vfield.vx[..., midplane].T, 
                     v2 = self.vfield.vy[..., midplane].T,
+
                 plt.streamplot(
                     np.linspace(-bbox, bbox, self.ncells), 
                     np.linspace(-bbox, bbox, self.ncells), 
@@ -271,11 +337,24 @@ class AnalyticalModel():
             if self.bbox is None:
                 extent = self.bbox
             else:
-                extent = [-self.bbox*u.cm.to(u.au), 
-                        self.bbox*u.cm.to(u.au)] * 2
+                bbox = self.bbox * u.cm.to(u.au)
+                extent = [-bbox, bbox] * 2
 
-            plt.imshow(self.temp[..., self.ncells//2-1].T, 
+            midplane = self.ncells//2 - 1
+            if self.model == 'ppdisk':
+                slice_ = self.temp[:, midplane, :].T
+            else:
+                slice_ = self.temp[..., midplane].T
+
+            if np.all(slice_ == np.zeros(slice_.shape)): 
+                raise ValueError('Model temperature is exactly 0.')
+                
+            vmin = slice_.min() if slice_.min() > 0 else None 
+            vmax = slice_.max() if slice_.max() < np.inf else None 
+
+            plt.imshow(slice_, 
                 cmap='inferno',
+                norm=LogNorm(vmin=vmin, vmax=vmax), 
                 extent=extent,
             )
             plt.colorbar()
@@ -298,7 +377,12 @@ class AnalyticalModel():
                 size=(900, 700) , bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
 
             mlab.contour3d(
-                self.dens, vmin=self.plotmin, vmax=self.plotmax, opacity=0.7)
+                self.dens, 
+                vmin=self.plotmin, 
+                vmax=self.plotmax, 
+                opacity=0.7,
+                contours=20,
+            )
 
             if self.vfield is not None:
                 # Add streamlines to mayavi

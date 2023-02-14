@@ -32,4 +32,4 @@ requires-python = ">=3.8"
 Homepage = "https://github.com/jzamponi/synthesizer"
 
 [project.scripts]
-synthesizer = "synthesizer.__main__:synthesizer"
+synthesizer = "synthesizer.parser:synthesizer"
