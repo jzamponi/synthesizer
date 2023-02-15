@@ -55,7 +55,7 @@ class AnalyticalModel():
         self.X = x
         self.Y = y
         self.Z = z
-        r_c = self.bbox * 0.8
+        r_c = self.bbox
         self.plotmin = None
         self.plotmax = None
 
@@ -270,6 +270,7 @@ class AnalyticalModel():
             plt.rcParams['ytick.right'] = True
             plt.rcParams['xtick.minor.visible'] = True
             plt.rcParams['ytick.minor.visible'] = True
+            plt.close('all')
 
             if self.bbox is None:
                 extent = self.bbox
@@ -310,17 +311,22 @@ class AnalyticalModel():
                     v2 = self.vfield.vz[:, midplane, :].T,
                 else:
                     v1 = self.vfield.vx[..., midplane].T, 
-                    v2 = self.vfield.vy[..., midplane].T,
+                    v2 = self.vfield.vz[..., midplane].T,
 
-                plt.streamplot(
-                    np.linspace(-bbox, bbox, self.ncells), 
-                    np.linspace(-bbox, bbox, self.ncells), 
-                    v1, 
-                    v2,
-                    color='k', 
-                    density=0.7,
-                    arrowsize=0.1, 
-                )
+                try:
+                    plt.streamplot(
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        np.array(v1).squeeze(), 
+                        np.array(v2).squeeze(),
+                        color='white', 
+                        linewidth=0.5,
+                        density=0.7,
+                        arrowsize=0.1, 
+                    )
+                except Exception as e:
+                    utils.print_('Unable to add vector stream lines',  red=True)
+                    utils.print_(e, bold=True)
             plt.show()
 
         except Exception as e:
@@ -333,6 +339,13 @@ class AnalyticalModel():
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the temperature grid midplane at z = 0')
             plt.rcParams['font.family'] = 'Times New Roman'
+            plt.rcParams['xtick.direction'] = 'in'
+            plt.rcParams['ytick.direction'] = 'in'
+            plt.rcParams['xtick.top'] = True
+            plt.rcParams['ytick.right'] = True
+            plt.rcParams['xtick.minor.visible'] = True
+            plt.rcParams['ytick.minor.visible'] = True
+            plt.close('all')
 
             if self.bbox is None:
                 extent = self.bbox

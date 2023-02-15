@@ -1,5 +1,4 @@
 # Synthesizer
-# Synthesizer
 ## Generate synthetic observations from 3D numerical simulations
 
 Synthesizer is a program to calculate synthetic ALMA/JVLA images from an SPH model directly from the command-line. 
@@ -9,7 +8,7 @@ Additionally, Synthesizer includes Dustmixer. This is a tool to generate dust op
 ## Instalation
     $ git clone https://github.com/jzamponi/synthesizer.git
     $ cd synthesizer
-    $ python3 -m pip install -e .
+    $ python3 -m pip install .
 
 ## Run the code:
 
@@ -27,16 +26,16 @@ Synthesizer requires at least one of its five main options to run:
 Create a protoplanetary disk model, let radmc3d generate an image and then casa observe it.
 
     $ synthesizer --grid --model ppdisk --show-grid-2d 
-      --temperature --show-grid-3d --raytrace --polarization
-      --opacity --synobs --show-rt --show-synobs
+      --temperature --show-grid-3d --raytrace --synobs
+      --opacity --show-rt --show-synobs
 
 Given the --show-* flags, synthesizer will plot the results of every step. You can also read in snapshots from an SPH simulation:
 
 
 
     $ synthesizer --grid --sphfile snapshot_001.h5 --source gizmo  
-     --show-grid-2d --show-grid-3d --raytrace --polarization
-     --opacity --synobs --show-rt --show-synobs
+     --show-grid-2d --show-grid-3d --raytrace --synobs 
+     --opacity --show-rt --show-synobs
 
 
         
@@ -51,14 +50,10 @@ If you're interested in using synthesizer and your hydro code is not yet support
 
 #### Requisites:
 
-    Software:   python3, CASA, RADMC3D, 
-                Mayavi (optional), ParaView (optional)
+    Software:   python3, CASA, RADMC3D, ParaView (optional)
         
-    Modules:    python3-aplpy, python3-scipy, python3-numpy, python3-h5py
-                python3-matplotlib, python3-astropy, python3-mayavi,
-
 ### Feedback
 
-If you have any feedback, please reach out at jzamponi@mpe.mpg.de
+If you have any feedback, please reach out at jzamponi@mpe.mpg.de.
 
 

@@ -55,7 +55,7 @@ def print_(string, verbose=True, bold=False, red=False, fname=None, blue=False,
             print(f"{color.blue}[{fname}] {string} {color.none}", flush=True, 
                 *args, **kwargs)
         elif ul:
-            print(f"{color.ul}[{fname}] {string} {color.ul}", flush=True, 
+            print(f"{color.ul}[{fname}] {string} {color.none}", flush=True, 
                 *args, **kwargs)
         else:
             print(f"[{fname}] {string}", flush=True, 
@@ -455,29 +455,32 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
     # Convert sr into pixels (Jy/sr --> Jy/pixel)
     img = img * (pixsize_x**2 / (dpc*u.pc.to(u.cm))**2)
 
+    # Convert physical pixel size to angular size
+    cdelt1 = (pixsize_x / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
+    cdelt2 = (pixsize_y / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
+
     # Set a minimal header
     header = fits.Header()
     header.update({
-        'CRPIX1': f'{nx // 2}',
-        'CDELT1': f'',
-        'CRVAL1': f'', 
-        'CUNIT1': f'',
-        'CTYPE1': f'',
-        'CRPIX2': f'{nx // 2}',
-        'CDELT2': f'',
-        'CRVAL2': f'', 
-        'CUNIT2': f'DEG',
+        'CRPIX1': 1 + nx / 2,
+        'CDELT1': cdelt1,
+        'CRVAL1': 248.0943, 
+        'CUNIT1': f'deg',
+        'CTYPE1': f'RA---SIN',
+        'CRPIX2': 1 + ny / 2,
+        'CDELT2': cdelt2,
+        'CRVAL2': -24.4755, 
+        'CUNIT2': f'deg',
         'CTYPE2': f'DEC--SIN',
-        'RESTFRQ': f'{c.c.cgs.value / (lam*u.micron.to(u.cm))}',
+        'RESTFRQ': c.c.cgs.value / (lam*u.micron.to(u.cm)),
         'BUNIT': 'Jy/pixel',
         'BTYPE': 'Intensity', 
-        'BZERO': '1.0', 
+        'BZERO': 1.0, 
         'BSCALE': 'BSCALE', 
-        'LONPOLE': '180.0', 
+        'LONPOLE': 180.0, 
         'DISTANCE': f'{dpc}pc',
     })
     write_fits(fitsfile, img, header, True, verbose)
-
 
 def stats(data, verbose=False, slice=None):
     """
@@ -1145,338 +1148,5 @@ def Tb(data, outfile="", freq=0, bmin=0, bmaj=0, overwrite=False, verbose=False)
 
     return temp.value
 
-@elapsed_time
-def tau_surface(
-    densfile='dust_density_3d.fits.gz', 
-    tempfile='dust_temperature_3d.fits.gz', 
-    prefix='', 
-    tau=1, 
-    los=0, 
-    bin_factor=[1,1,1], 
-    render='temperature', 
-    plot_tau=True, 
-    amax='100um', 
-    convolve_map=True, 
-    plot2D=False, 
-    plot3D=True, 
-    savefig=None, 
-    verbose=True
-):
-    """ 
-        Compute and plot the surface with optical depth = 1 within a 3D 
-        density array from a FITS file.
-    """
 
-    # Prepend the prefix to the filenames
-    densfile = Path(prefix/Path(densfile))
-    tempfile = Path(prefix/Path(tempfile))
-
-    from astropy.nddata.blocks import block_reduce
-
-    print_(f'Reading density from FITS file: {densfile}', verbose)
-    print_(f'Reading temperature from FITS file: {tempfile}', verbose)
-    rho = fits.getdata(densfile).squeeze() * (u.kg/u.m**3).to(u.g/u.cm**3)
-    temp = fits.getdata(tempfile).squeeze()
-    hdr = fits.getheader(densfile)
-
-    # Read the delta length of a given axis from the header
-    dl = hdr[f'cdelt{[3, 2, 1][los]}'] * (u.m).to(u.cm)
-
-    # Bin the array down before plotting, if required
-    if bin_factor not in [1, [1,1,1]]:
-        if isinstance(bin_factor, (int, float)):
-            bin_factor = [bin_factor, bin_factor, bin_factor]
-
-        print_(f'Original array shape: {temp.shape}', verbose)
-
-        print_(f'Binning density grid ...', verbose)
-        rho = block_reduce(rho, bin_factor, func=np.nanmean)
-
-        print_(f'Binning temperature grid ...', verbose)
-        temp = block_reduce(temp, bin_factor, func=np.nanmean)
-
-        # Rescale also the delta length by the binning factor
-        dl *= bin_factor[0]
-
-        print_(f'Binned array shape: {temp.shape}', verbose)
-
-    # Dust opacities for a mixture of silicates and graphites in units of cm2/g
-    if amax == '10um':
-        # Extinction opacity at 1.3 and 3 mm for amax = 10um
-        kappa_1mm = 1.50
-        kappa_3mm = 0.60
-        kappa_7mm = 0.23
-        kappa_18mm = 0.07
-    elif amax == '100um':
-        # Extinction opacity at 1.3 and 3 mm for amax = 1000um
-        kappa_1mm = 2.30
-        kappa_3mm = 0.75
-        kappa_7mm = 0.31
-        kappa_18mm = 0.12
-    elif amax == '1000um':
-        # Extinction opacity at 1.3 and 3 mm for amax = 1000um
-        kappa_1mm = 12.88
-        kappa_3mm = 6.120
-        kappa_7mm = 1.27
-        kappa_18mm = 0.09
-
-    # In the case of grain growth, combine the optical depth of the 2 dust pops
-    if amax != '100-1000um':
-        print_(f'Plotting for amax = {amax}', verbose)
-        sigma_3d_1mm = (rho * kappa_1mm * dl)
-        sigma_3d_3mm = (rho * kappa_3mm * dl)
-        sigma_3d_7mm = (rho * kappa_7mm * dl)
-        sigma_3d_18mm = (rho * kappa_18mm * dl)
-
-    else:
-        print_(f'Plotting for combined amax = {amax}', verbose)
-        # The following opacities are for amax100um including organics 
-        # and amax1000um without organics (i.e., sublimated).
-        sigma_3d_1mm = np.where(temp > 300, rho * 12.88 * dl, rho * 1.80 * dl)
-        sigma_3d_3mm = np.where(temp > 300, rho * 6.120 * dl, rho * 0.55 * dl)
-
-    # Integrate the (density * opacity) product to calculate the optical depth
-    op_depth_1mm = np.cumsum(sigma_3d_1mm, axis=los)
-    op_depth_3mm = np.cumsum(sigma_3d_3mm, axis=los)
-    op_depth_7mm = np.cumsum(sigma_3d_7mm, axis=los)
-    op_depth_18mm = np.cumsum(sigma_3d_18mm, axis=los)
-
-    if plot2D and not plot3D:
-        from astropy.convolution import convolve, convolve_fft, Gaussian2DKernel
-
-        # Set all tau < 1 regions to a high number
-        op_thick_1mm = np.where(op_depth_1mm < 1, op_depth_1mm.max(), op_depth_1mm)
-        op_thick_3mm = np.where(op_depth_3mm < 1, op_depth_3mm.max(), op_depth_3mm)
-        op_thick_7mm = np.where(op_depth_7mm < 1, op_depth_7mm.max(), op_depth_7mm)
-        op_thick_18mm = np.where(op_depth_18mm < 1, op_depth_18mm.max(), op_depth_18mm)
-
-        # Find the position of the minimum for tau > 1
-        min_tau_pos_1mm = np.apply_along_axis(np.argmin, 0, op_thick_1mm).squeeze()
-        min_tau_pos_3mm = np.apply_along_axis(np.argmin, 0, op_thick_3mm).squeeze()
-        min_tau_pos_7mm = np.apply_along_axis(np.argmin, 0, op_thick_7mm).squeeze()
-        min_tau_pos_18mm = np.apply_along_axis(np.argmin, 0, op_thick_18mm).squeeze()
-    
-        Td_tau1_1mm = np.zeros(temp[0].shape)
-        Td_tau1_3mm = np.zeros(temp[0].shape)
-        Td_tau1_7mm = np.zeros(temp[0].shape)
-        Td_tau1_18mm = np.zeros(temp[0].shape)
-
-        # Fill the 2D arrays with the temp. at the position of tau=1
-        for i in range(min_tau_pos_1mm.shape[0]):
-            for j in range(min_tau_pos_1mm.shape[1]):
-                Td_tau1_1mm[i,j] = temp[min_tau_pos_1mm[i,j], i, j]
-                Td_tau1_3mm[i,j] = temp[min_tau_pos_3mm[i,j], i, j]
-                Td_tau1_7mm[i,j] = temp[min_tau_pos_7mm[i,j], i, j]
-                Td_tau1_18mm[i,j] = temp[min_tau_pos_18mm[i,j], i, j]
-        
-        # Convolve the array with the beam from the observations at 1.3 and 3 mm
-        def fwhm_to_std(obs):
-            scale = dl * u.cm.to(u.pc)
-            bmaj = obs.header['bmaj']*u.deg.to(u.rad) * (141 / scale) 
-            bmin = obs.header['bmin']*u.deg.to(u.rad) * (141 / scale) 
-            bpa = obs.header['bpa']
-            std_x = bmaj / np.sqrt(8 * np.log(2))
-            std_y = bmin / np.sqrt(8 * np.log(2))
-            return std_x, std_y, bpa
-            
-        if convolve_map:
-            print_('Convolving 2D temperature maps', verbose=True)
-            std_x, std_y, bpa = fwhm_to_std(Observation('1.3mm'))
-            Td_tau1_1mm = convolve_fft(Td_tau1_1mm, Gaussian2DKernel(std_x, std_y, bpa))
-
-            std_x, std_y, bpa = fwhm_to_std(Observation('3mm'))
-            Td_tau1_3mm = convolve_fft(Td_tau1_3mm, Gaussian2DKernel(std_x, std_y, bpa))
-
-            std_x, std_y, bpa = fwhm_to_std(Observation('7mm'))
-            Td_tau1_7mm = convolve_fft(Td_tau1_7mm, Gaussian2DKernel(std_x, std_y, bpa))
-        
-            std_x, std_y, bpa = fwhm_to_std(Observation('18mm'))
-            Td_tau1_18mm = convolve_fft(Td_tau1_18mm, Gaussian2DKernel(std_x, std_y, bpa))
-        return Td_tau1_1mm.T, Td_tau1_3mm.T, Td_tau1_7mm.T, Td_tau1_18mm.T
-
-        
-    if plot3D:
-        from mayavi import mlab
-        from mayavi.api import Engine
-        from mayavi.sources.parametric_surface import ParametricSurface
-        from mayavi.modules.text import Text
-
-        # Initialaze the Mayavi scene
-        engine = Engine()
-        engine.start()
-        fig = mlab.figure(size=(1500,1200), bgcolor=(1,1,1), fgcolor=(0.5,0.5,0.5))
-
-        # Select the quantity to render: density or temperature
-        if render in ['d', 'dens', 'density']:
-            render_quantity = rho 
-            plot_label = r'log(Dust density (kg m^-3))' 
-        elif render in ['t', 'temp', 'temperature']:
-            render_quantity = temp 
-            plot_label = r'Dust Temperature (K)' 
-
-        # Filter the optical depth lying outside of a given temperature isosurface, 
-        # e.g., at T > 100 K.
-        op_depth_1mm[temp < 150] = 0
-        op_depth_3mm[temp < 150] = 0
-        op_depth_7mm[temp < 150] = 0
-        op_depth_18mm[temp < 150] = 0
-
-        # Plot the temperature
-        rendplot = mlab.contour3d(
-            render_quantity, 
-            colormap='inferno', 
-            opacity=0.5, 
-            vmax=400, 
-            contours=10, 
-        )
-        figcb = mlab.colorbar(
-            rendplot, 
-            orientation='vertical', 
-            title='',
-        )
-
-        # Add the axes and outline of the box
-        mlab.axes(ranges=[-100, 100] * 3, 
-            xlabel='AU', ylabel='AU', zlabel='AU', nb_labels=5)
-
-        # Plot the temperature
-        densplot = mlab.contour3d(
-            rho, 
-            colormap='BuPu', 
-            opacity=0.5, 
-            contours=5, 
-        )
-        denscb = mlab.colorbar(
-            densplot, 
-            orientation='vertical', 
-            title='Dust Density (g/cm^3)',
-        )
-        if plot_tau:
-            # Plot optical depth at 1mm
-            tauplot_1mm = mlab.contour3d(
-                op_depth_1mm, 
-                contours=[tau], 
-                color=(0, 1, 0), 
-                opacity=0.5, 
-            )
-           # Plot optical depth at 3mm
-            tauplot_3mm = mlab.contour3d(
-                op_depth_3mm,  
-                contours=[tau], 
-                color=(0, 0, 1), 
-                opacity=0.7, 
-            )
-           # Plot optical depth at 7mm
-            tauplot_7mm = mlab.contour3d(
-                op_depth_7mm,  
-                contours=[tau], 
-                color=(0.59, 0.41, 0.27), 
-                opacity=0.7, 
-            )
-           # Plot optical depth at 7mm
-            tauplot_18mm = mlab.contour3d(
-                op_depth_18mm,  
-                contours=[tau], 
-                color=(0.75, 0.34, 0.79), 
-                opacity=0.7, 
-            )
-
-        # The following commands are meant to customize the scene and were 
-        # generated with the recording option of the interactive Mayavi GUI.
-
-        # Adjust the viewing angle for an edge-on projection
-        scene = engine.scenes[0]
-        scene.scene.camera.position = [114.123, -161.129, -192.886]
-        scene.scene.camera.focal_point = [123.410, 130.583, 115.488]
-        scene.scene.camera.view_angle = 30.0
-        scene.scene.camera.view_up = [-0.999, -0.017, 0.014]
-        scene.scene.camera.clipping_range = [90.347, 860.724]
-        scene.scene.camera.compute_view_plane_normal()
-        scene.scene.render()
-
-        # Adjust the light source of the scene to illuminate the disk from the viewer's POV 
-        #camera_light1 = engine.scenes[0].scene.light_manager.lights[0]
-        #camera_light1 = scene.scene.light_manager.lights[0]
-        #camera_light1.elevation = 90.0
-        #camera_light1.intensity = 1.0
-        ##camera_light2 = engine.scenes[0].scene_light.manager.lights[1]
-        #camera_light2 = scene.scene_light.manager.lights[1]
-        #camera_light2.elevation = 90.0
-        #camera_light2.elevation = 0.7
-
-        # Customize the iso-surfaces
-        module_manager = engine.scenes[0].children[0].children[0]
-        temp_surface = engine.scenes[0].children[0].children[0].children[0]
-#        temp_surface.contour.minimum_contour = 70.0
-#        temp_surface.contour.maximum_contour = 400.0
-        temp_surface.actor.property.representation = 'surface'
-        temp_surface.actor.property.line_width = 3.0
-        if plot_tau:
-            tau1_surface = engine.scenes[0].children[1].children[0].children[0]
-            tau3_surface = engine.scenes[0].children[2].children[0].children[0]
-            tau7_surface = engine.scenes[0].children[1].children[0].children[0]
-            tau18_surface = engine.scenes[0].children[2].children[0].children[0]
-            tau1_surface.actor.property.representation = 'wireframe'
-            tau3_surface.actor.property.representation = 'wireframe'
-            tau7_surface.actor.property.representation = 'wireframe'
-            tau18_surface.actor.property.representation = 'wireframe'
-            tau1_surface.actor.property.line_width = 3.0
-            tau3_surface.actor.property.line_width = 4.0
-            tau7_surface.actor.property.line_width = 3.0
-            tau18_surface.actor.property.line_width = 4.0
-
-        # Adjust the colorbar
-        lut = module_manager.scalar_lut_manager
-        lut.scalar_bar_representation.position = np.array([0.02, 0.2])
-        lut.scalar_bar_representation.position2 = np.array([0.1, 0.63])
-        lut.label_text_property.bold = False
-        lut.label_text_property.italic = False
-        lut.label_text_property.font_family = 'arial'
-        lut.data_range = np.array([70., 400.])
-
-        # Add labels as text objects to the scene
-        parametric_surface = ParametricSurface()
-        engine.add_source(parametric_surface, scene)        
-
-        label1 = Text()
-        engine.add_filter(label1, parametric_surface)
-        label1.text = plot_label
-        label1.property.font_family = 'arial'
-        label1.property.shadow = True
-        label1.property.color = (0.86, 0.72, 0.21)
-        label1.actor.position = np.array([0.02, 0.85])
-        label1.actor.width = 0.30
-
-        if plot_tau:
-            label2 = Text()
-            engine.add_filter(label2, parametric_surface)
-            label2.text = 'Optically thick surface at 1.3mm'
-            label1.property.font_family = 'arial'
-            label2.property.color = (0.31, 0.60, 0.02)
-            label2.actor.position = np.array([0.02, 0.95])
-            label2.actor.width = 0.38
-
-            label3 = Text()
-            engine.add_filter(label3, parametric_surface)
-            label3.text = 'Optically thick surface at 3mm'
-            label2.property.font_family = 'arial'
-            label3.property.color = (0.20, 0.40, 0.64)
-            label3.actor.position = [0.02, 0.915]
-            label3.actor.width = 0.355
-
-            label4 = Text()
-            engine.add_filter(label4, parametric_surface)
-            label4.text = 'Line of Sight'
-            label4.property.font_family = 'times'
-            label4.property.color = (0.8, 0.0, 0.0)
-            label4.actor.position = np.array([0.63, 0.90])
-            label4.actor.width = 0.20
-
-        if savefig is not None:
-            scene.scene.save(savefig)
-
-        if plot_tau:
-            return render_quantity, op_depth_1mm, op_depth_3mm, op_depth_7mm, op_depth_18mm
-        else:
-            return render_quantity
 

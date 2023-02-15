@@ -10,6 +10,7 @@ from glob import glob
 from pathlib import Path
 import astropy.units as u
 import matplotlib.pyplot as plt
+from astropy.io import ascii, fits
 from scipy.interpolate import griddata
 
 from synthesizer import utils
@@ -52,6 +53,8 @@ class Pipeline:
         self.dcomp = [material]*2 if self.csubl == 0 else [material, material+'o']
         self.sootline = sootline
         self.dgrowth = dgrowth
+        self.opacfile = 'dustkapscatmat_' if self.polarization else 'dustkappa_' 
+        self.k_ext = None
         if star is None:
             self.xstar = 0
             self.ystar = 0
@@ -240,8 +243,8 @@ class Pipeline:
         elif self.material == 'o':
             mix = dustmixer.Dust(name='Organics')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk(f'{repo}/organics.nk', get_dens=False)
-            mix.set_density(1.50, cgs=True)
+            mix.set_nk(f'{repo}/organics-Pollack1995.nk', meters=True, skip=1, 
+                get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'sg':
@@ -253,6 +256,24 @@ class Pipeline:
             gra.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+
+            # Sum the opacities weighted by their mass fractions
+            mix = sil * 0.625 + gra * 0.375
+
+        elif self.material == 'sgo':
+            sil = dustmixer.Dust(name='Silicate')
+            gra = dustmixer.Dust(name='Graphite')
+            org = dustmixer.Dust(name='Organics')
+            sil.set_lgrid(self.lmin, self.lmax, self.nlam)
+            gra.set_lgrid(self.lmin, self.lmax, self.nlam)
+            org.set_lgrid(self.lmin, self.lmax, self.nlam)
+            sil.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
+            gra.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
+            gra.set_nk(f'{repo}/organics-Pollack1995.lnk', meters=True, skip=1,
+                 get_dens=True)
+            sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
             # Sum the opacities weighted by their mass fractions
             mix = sil * 0.625 + gra * 0.375
@@ -286,9 +307,6 @@ class Pipeline:
         # Register the pipeline step 
         self.steps.append('dustmixer')
     
-    def radmc3d_banner(self):
-        utils.print_(f'{"="*21}  <RADMC3D>  {"="*21}', bold=True)
-
     def generate_input_files(self, mc=False, inpfile=False, wavelength=False, 
             stars=False, dustopac=False, dustkappa=False, dustkapalignfact=False,
             grainalign=False):
@@ -335,21 +353,14 @@ class Pipeline:
                 f.write('---------\n')
                 f.write(f'{self.inputstyle}\n')
                 f.write('0\n')
-                if self.csubl > 0:
-                    f.write(f'{self.dcomp[1]}-a{self.amax}um-'+ \
-                        '{int(self.csubl)}org\n')
-                else:
-                    f.write(f'{self.material}-a{self.amax}um\n')
+                f.write(f'{self._get_opac_file_name()}\n')
 
                 if self.nspec > 1:
                     # Define a second species 
                     f.write('---------\n')
                     f.write(f'{self.inputstyle}\n')
                     f.write('0\n')
-                    if self.dgrowth:
-                        f.write(f'{self.dcomp[0]}-a1000um\n')
-                    else:
-                        f.write(f'{self.dcomp[0]}-a{self.amax}um\n')
+                    f.write(f'{self._get_opac_file_name()}\n')
                 f.write('---------\n')
 
         if dustkappa:
@@ -407,10 +418,49 @@ class Pipeline:
         if not os.path.exists('stars.inp') or self.overwrite:
             self.generate_input_files(stars=True)
 
-        self.radmc3d_banner()
-        subprocess.run(
-            f'radmc3d mctherm {radmc3d_cmds}'.split())
-        self.radmc3d_banner()
+        # Write a new dustopac file only if dustmixer was used or if unexistent
+        if not os.path.exists('dustopac.inp') or \
+            'dustmixer' in self.steps or self.overwrite:
+            self.generate_input_files(dustopac=True)
+
+        # If opacites were calculated within the pipeline, don't overwrite them
+        if 'dustmixer' not in self.steps:
+            # If not manually provided, download it from the repo
+            if not self.polarization:
+                if len(glob('dustkappa*')) == 0 or self.overwrite:
+                    try:
+                        self.generate_input_files(dustkappa=True)
+                    except Exception as e:
+                        utils.print_(
+                            f'Unable to download opacity table. I will call ' +\
+                            'dustmixer, as in synthesizer --opacity using '+\
+                            'default values.', blue=True)
+
+                        self.dust = self.dust_opacity(amin=0.1, amax=self.amax, 
+                            na=100, q=3.5, nang=181, material=self.material)
+            else:
+                utils.print_(
+                    f'Unable to download opacity table. I will call ' +\
+                    'dustmixer, as in synthesizer --opacity using default ' +\
+                    'values.', blue=True)
+
+                self.dust = self.dust_opacity(amin=0.1, amax=self.amax,  
+                    na=100, q=3.5, nang=181, material=self.material)
+                
+
+        # Call RADMC3D and pipe the output also to radmc3d.out
+        try:
+            utils.print_(f'Executing command: radmc3d mctherm {radmc3d_cmds}')
+            self._radmc3d_banner()
+            os.system(
+                f'radmc3d mctherm {radmc3d_cmds} 2>&1 | tee -a radmc3d.out')
+
+        except KeyboardInterrupt:
+            raise Exception('Received SIGKILL. Execution halted by user.')
+
+        self._radmc3d_banner()
+        
+        self._catch_radmc3d_error()
 
         # Register the pipeline step 
         self.steps.append('monte_carlo')
@@ -444,57 +494,6 @@ class Pipeline:
         # Only for the current model. This line should be later removed.
         self.incl = 180 - int(self.incl)
 
-        # Generate a 2D optical depth map
-        if self.tau:
-            utils.print_(
-                f'Generating optical depth map at {self.lam} microns')
-            utils.file_exists('dust_density.inp')
-            rho = np.loadtxt('dust_density.inp', skiprows=3)
-            amr = np.loadtxt('amr_grid.inp', skiprows=6)
-            dl = np.diff(amr)[0]
-            nx = int(np.cbrt(rho.size))
-            rho = rho.reshape((nx, nx, nx))
-            #tau2d = np.sum(rho * self.get_opacity(lam) * dl, axis=0).T
-            tau2d = np.sum(rho * 1 * dl, axis=0).T
-            if show:
-                plt.rcParams['font.family'] = 'Times New Roman'
-                plt.rcParams['xtick.direction'] = 'in'
-                plt.rcParams['ytick.direction'] = 'in'
-                plt.rcParams['xtick.top'] = True
-                plt.rcParams['ytick.right'] = True
-                plt.rcParams['xtick.minor.visible'] = True
-                plt.rcParams['ytick.minor.visible'] = True
-                plt.title(
-                    fr'Optical depth at $\lambda = ${self.lam}$\mu$m')
-                plt.imshow(tau2d, origin='lower')
-                plt.yticks([])
-                plt.xticks([])
-                plt.colorbar()
-                plt.show()
-
-            utils.write_fits('tau.fits', data=tau2d, overwrite=True)
-            
-        # Generate a 3D surface at tau = tau_surf
-        if self.tau_surf is not None:
-            try:
-                utils.print_(
-                    'Generating tau surface at tau = {self.tau_surf}')
-                os.system(f'radmc3d tausurf {self.tau_surf} ' +\
-                f'lambda {self.lam} noscat '
-                f'npix {self.npix} ' if self.npix is not None else ' ' +\
-                f'sizeau {self.sizeau} ' if self.sizeau is not None else ' '+\
-                f'incl {self.incl} ' if self.incl is not None else ' ')
-
-                os.rename('image.out', 'tauimage.out')
-            except Exception as e:
-                utils.print_(f'Unable to generate tau surface.\n{e}\n', red=True)
-
-        # Render the 3D surface in 
-        if show_tau_surf:
-            utils.not_implemented()
-            from mayavi import mlab
-            utils.file_exists('tausurface_3d.out')
-
         # To do: What's the diff. between passing noscat and setting scatmode=0
         if noscat: self.scatmode = 0
 
@@ -525,8 +524,8 @@ class Pipeline:
                             f'Unable to download opacity table. I will call ' +\
                             'dustmixer, as in synthesizer --opacity.', bold=True
                         )
-                        Pipeline.dust_opacity(amin=0.1, amax=10, na=100, q=3.5, 
-                            nang=181, material='s')
+                        Pipeline.dust_opacity(amin=0.1, amax=self.amax, na=100,  
+                            q=3.5, nang=181, material=self.material)
                         
 
         # If align factors were calculated within the pipeline, don't overwrite
@@ -551,7 +550,11 @@ class Pipeline:
         if self.alignment: 
             utils.file_exists('dustkapalignfact*')
             utils.file_exists('grainalign_dir.inp')
- 
+
+        # Generate a 2D optical depth map
+        if self.tau:
+            self._plot_tau(show)
+            
         # Set the RADMC3D command by concatenating options
         cmd = f'radmc3d image '
         cmd += f'lambda {self.lam} '
@@ -561,23 +564,19 @@ class Pipeline:
         cmd += f'stokes ' if self.polarization else ' '
         cmd += f'{" ".join(radmc3d_cmds)} '
         
-        # Call RADMC3D and pipe the output also to radmc3d.out
-        utils.print_(f'Executing command: {cmd}')
-        self.radmc3d_banner()
 
+        # Call RADMC3D and pipe the output also to radmc3d.out
         try:
-            os.system(f'{cmd} 2>&1 | tee radmc3d.out')
+            utils.print_(f'Executing command: {cmd}')
+            self._radmc3d_banner()
+            os.system(f'{cmd} 2>&1 | tee --append radmc3d.out')
+
         except KeyboardInterrupt:
             raise Exception('Received SIGKILL. Execution halted by user.')
 
-        self.radmc3d_banner()
+        self._radmc3d_banner()
         
-        # Read radmc3d.out and stop the pipeline if RADMC3D finished in error
-        with open ('radmc3d.out', 'r') as out:
-            for line in out.readlines():
-                if 'error' in line.lower() or 'stop' in line.lower():
-                    raise Exception(
-                        f'{utils.color.red}[RADMC3D] {line}{utils.color.none}')
+        self._catch_radmc3d_error()
     
         # Generate FITS files from the image.out
         utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
@@ -588,7 +587,92 @@ class Pipeline:
 
         # Plot the new image in Jy/pixel
         if show:
-            utils.print_('Plotting image.out')
+            self.plot_rt()
+
+        # Generate a 3D surface at tau = tau_surf
+        if self.tau_surf is not None:
+            try:
+                utils.print_(
+                    'Generating tau surface at tau = {self.tau_surf}')
+                os.system(f'radmc3d tausurf {self.tau_surf} ' +\
+                f'lambda {self.lam} noscat '
+                f'npix {self.npix} ' if self.npix is not None else ' ' +\
+                f'sizeau {self.sizeau} ' if self.sizeau is not None else ' '+\
+                f'incl {self.incl} ' if self.incl is not None else ' ')
+
+                os.rename('image.out', 'tauimage.out')
+            except Exception as e:
+                utils.print_(f'Unable to generate tau surface.\n{e}\n', red=True)
+
+        # Render the 3D surface in 
+        if show_tau_surf:
+            utils.not_implemented()
+            from mayavi import mlab
+            utils.file_exists('tausurface_3d.out')
+
+        # Register the pipeline step 
+        self.steps.append('raytrace')
+
+    @utils.elapsed_time
+    def synthetic_observation(self, show=False, cleanup=True, 
+            script=None, simobserve=True, clean=True, exportfits=True, 
+            obstime=None, resolution=None, obsmode='int', graphic=True, 
+            telescope=None, verbose=False):
+        """ 
+            Prepare the input for the CASA simulator from the RADMC3D output,
+            and call CASA to run a synthetic observation.
+        """
+
+        print('')
+        utils.print_('Running synthetic observation ...\n', bold=True)
+
+        if script is None:
+            # Create a minimal template CASA script
+            script = synobs.CasaScript(lam=self.lam)
+            script.polarization = self.polarization
+            script.simobserve = simobserve
+            script.clean = clean
+            script.graphic = graphic
+            script.verbose = False
+            script.overwrite = self.overwrite
+            script.resolution = resolution
+            script.obsmode = obsmode
+            script.telescope = telescope
+            if self.npix is not None: script.npix = int(self.npix + 20)
+            if obstime is not None: script.totaltime = f'{obstime}h'
+            script.verbose = verbose
+            script.write('casa_script.py')
+
+        elif 'http' in script: 
+            # Download the script if a URL is provided
+            url = script
+            utils.download_file(url)
+            script = synobs.CasaScript()
+            script.name = script.split('/')[-1]
+            script.read(script.name)
+
+        self.script = script
+
+        # Call CASA
+        script.run()
+
+        # Show the new synthetic image
+        if show:
+            self.plot_synobs()
+
+        # Clean-up and remove unnecessary files created by CASA
+        if cleanup:
+            script.cleanup()
+
+        # Register the pipeline step 
+        self.steps.append('synobs')
+
+
+
+    def plot_rt(self):
+        utils.print_('Plotting image.out')
+
+        try:
             if self.alignment:
                 utils.print_(f'Rotating vectors by 90 deg.')
 
@@ -612,89 +696,128 @@ class Pipeline:
                     bright_temp=False,
                     verbose=False,
                 )
+        except Exception as e:
+            utils.print_(
+                f'Unable to plot radmc3d image.\n{e}', bold=True)
+    
+    def plot_synobs(self):
+        utils.print_(f'Plotting the new synthetic image')
 
-        # Register the pipeline step 
-        self.steps.append('raytrace')
+        try:
+            utils.file_exists(self.script.fitsimage('I'))
+            utils.fix_header_axes(self.script.fitsimage('I'))
+                
+            if self.polarization:
+                utils.file_exists(self.script.fitsimage('Q'))
+                utils.fix_header_axes(self.script.fitsimage('Q'))
+                utils.fix_header_axes(self.script.fitsimage('U'))
 
-    @utils.elapsed_time
-    def synthetic_observation(self, show=False, cleanup=True, 
-            script=None, simobserve=True, clean=True, exportfits=True, 
-            obstime=None, resolution=None, graphic=True, verbose=False):
-        """ 
-            Prepare the input for the CASA simulator from the RADMC3D output,
-            and call CASA to run a synthetic observation.
-        """
+                fig = utils.polarization_map(
+                    source='obs', 
+                    render='I', 
+                    stokes_I=self.script.fitsimage('I'), 
+                    stokes_Q=self.script.fitsimage('I'), 
+                    stokes_U=self.script.fitsimage('I'), 
+                    rotate=0, 
+                    step=15, 
+                    scale=10, 
+                    const_pfrac=True, 
+                    vector_color='white',
+                    vector_width=1, 
+                    verbose=True,
+                )
+            else:
+                fig = utils.plot_map(
+                    filename=self.script.fitsimage('I'),
+                    bright_temp=False,
+                    verbose=False,
+                )
+        except Exception as e:
+            utils.print_(
+                f'Unable to plot {self.script.fitsimage("I")}:\n{e}', bold=True)
 
-        print('')
-        utils.print_('Running synthetic observation ...\n', bold=True)
-
-        if script is None:
-            # Create a minimal template CASA script
-            script = synobs.CasaScript(lam=self.lam)
-            script.polarization = self.polarization
-            script.simobserve = simobserve
-            script.clean = clean
-            script.graphic = graphic
-            script.verbose = verbose
-            script.overwrite = self.overwrite
-            script.resolution = resolution
-            if self.npix is not None: script.npix = int(self.npix + 20)
-            if obstime is not None: script.totaltime = f'{obstime}h'
-            script.verbose = verbose
-            script.write('casa_script.py')
-
-        elif 'http' in script: 
-            # Download the script if a URL is provided
-            url = script
-            utils.download_file(url)
-            script = synobs.CasaScript()
-            script.name = script.split('/')[-1]
-            script.read(script.name)
-
-        # Call CASA
-        script.run()
-
-        # Show the new synthetic image
+    def plot_tau(self, show=False):
+        utils.print_(f'Generating optical depth map at {self.lam} microns')
+        utils.file_exists('dust_density.inp')
+        utils.file_exists('amr_grid.inp')
+        rho = np.loadtxt('dust_density.inp', skiprows=3)
+        amr = np.loadtxt('amr_grid.inp', skiprows=6)
+        dl = np.diff(amr)[0]
+        nx = int(np.cbrt(rho.size))
+        rho = rho.reshape((nx, nx, nx))
+        tau2d = np.sum(rho * self._get_opacity() * dl, axis=0).T
         if show:
-            utils.print_(f'Plotting the new synthetic image')
+            plt.rcParams['font.family'] = 'Times New Roman'
+            plt.rcParams['xtick.direction'] = 'in'
+            plt.rcParams['ytick.direction'] = 'in'
+            plt.rcParams['xtick.top'] = True
+            plt.rcParams['ytick.right'] = True
+            plt.rcParams['xtick.minor.visible'] = True
+            plt.rcParams['ytick.minor.visible'] = True
+            plt.title(fr'Optical depth at $\lambda = ${self.lam}$\mu$m')
+            plt.imshow(tau2d, origin='lower')
+            plt.yticks([])
+            plt.xticks([])
+            plt.colorbar()
+            plt.show()
 
-            try:
-                utils.file_exists(script.fitsimage('I'))
-                utils.fix_header_axes(script.fitsimage('I'))
-                    
-                if self.polarization:
-                    utils.file_exists(script.fitsimage('Q'))
-                    utils.fix_header_axes(script.fitsimage('Q'))
-                    utils.fix_header_axes(script.fitsimage('U'))
+        utils.write_fits('tau.fits', data=tau2d, overwrite=True)
 
-                    fig = utils.polarization_map(
-                        source='obs', 
-                        render='I', 
-                        stokes_I=script.fitsimage('I'), 
-                        stokes_Q=script.fitsimage('I'), 
-                        stokes_U=script.fitsimage('I'), 
-                        rotate=0, 
-                        step=15, 
-                        scale=10, 
-                        const_pfrac=True, 
-                        vector_color='white',
-                        vector_width=1, 
-                        verbose=True,
-                    )
-                else:
-                    fig = utils.plot_map(
-                        filename=script.fitsimage('I'),
-                        bright_temp=False,
-                        verbose=False,
-                    )
-            except Exception as e:
-                utils.print_(
-                    f'Unable to plot {script.fitsimage("I")}:\n{e}', bold=True)
+    def _get_opac_file_name(self):
+        """ Get the name of the currently used opacity file dustk*.inp """
 
-        # Clean-up and remove unnecessary files created by CASA
-        if cleanup:
-            script.cleanup()
+        if self.csubl > 0:
+            ext = f'{self.dcomp[1]}-a{self.amax}um-{int(self.csubl)}org'
+        else:
+            ext = f'{self.material}-a{self.amax}um'
 
-        # Register the pipeline step 
-        self.steps.append('synobs')
+        if self.dgrowth:
+            ext = f'{self.dcomp[0]}-a1000um'
+        else:
+            ext = f'{self.dcomp[0]}-a{self.amax}um'
+
+        self.opacfile = self.opacfile + ext + '.inp'
+        return ext 
+    
+    def _get_opacity(self):
+        """ Read in an opacity file, interpolate and find the opacity at lambda """
+        from scipy.interpolate import interp2d
+
+        # Generate the opacfile string and make sure file exists
+        self._get_opac_file_name()
+
+        if not utils.file_exists(self.opacfile, raise_=False): 
+            utils.print_(
+                f"I couldn't obtain the opacity from {self.opacfile}. " +\
+                "I will calculate tau using k_ext = 1 g/cm3.", bold=True)
+            return 1
+
+        header = np.loadtxt(self.opacfile, max_rows=2)
+        iformat = header[0]
+        nlam = header[1]
+        skip = 3 if 'kapscat' in opacfile else 2
+        d = ascii.read(self.opacfile, data_start=skip, data_end=nlam + skip)
+        l = d['col1']
+        self.k_abs = d['col2']
+        if iformat > 1: 
+            self.k_sca = d['col3']
+            self.k_ext = self.k_abs + self.k_sca
+        else:
+            self.k_ext = self.k_abs
+
+        return interp1d(l, self.k_ext)(self.lam)
+
+    def _radmc3d_banner(self):
+        print(f'{utils.color.blue}{"="*31}  <RADMC3D>  {"="*31}{utils.color.none}')
+
+    def _catch_radmc3d_error(self):
+        """ Raise an exception to halt synthesizer if RADMC3D ended in Error """
+
+        # Read radmc3d.out and stop the pipeline if RADMC3D finished in error
+        utils.file_exists('radmc3d.out')
+        with open ('radmc3d.out', 'r') as out:
+            for line in out.readlines():
+                if 'error' in line.lower() or 'stop' in line.lower():
+                    raise Exception(
+                        f'{utils.color.red}\r[RADMC3D] {line}{utils.color.none}')
 

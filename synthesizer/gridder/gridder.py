@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 
 from .vector_field import VectorField
+import .amr_read 
 from synthesizer import utils
 
 class CartesianGrid():
@@ -28,6 +29,10 @@ class CartesianGrid():
 
         """
 
+        self.cordsystem = 1
+        self.fx = 1
+        self.fy = 1
+        self.fz = 1
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
         self.vector_field = None
@@ -104,7 +109,7 @@ class CartesianGrid():
             raise ValueError(f'Source = {source} is currently not supported')
 
     def read_amr(self, filename, sourle='athena++'):
-        """ Read SPH data """
+        """ Read AMR data """
 
         import h5py
 
@@ -117,6 +122,33 @@ class CartesianGrid():
 
         elif source.lower() == 'zeustw':
             utils.not_implemented()
+
+            # Generate a Data instance
+            data = amr_reader.ZeusTW()
+
+            # Read coordinates: x?a are cell edges and x?b are cell centers
+            data.generate_coords(r="z_x1ap", th="z_x2ap", ph="z_x3ap")
+
+            frame = str(filename).zfill(5)
+            data.rho = data.read(f"o_d__{frame}")
+            data.Br = data.read(f"o_b1_{frame}")
+            data.Bth = data.read(f"o_b2_{frame}")
+            data.Bph = data.read(f"o_b3_{frame}")
+            data.Vr = data.read(f"o_v1_{frame}")
+            data.Vth = data.read(f"o_v2_{frame}")
+            data.Vph = data.read(f"o_v3_{frame}")
+            data.trim_ghost_cells(field_type='coords')
+            data.trim_ghost_cells(field_type='scalar')
+            data.trim_ghost_cells(field_type='vector')
+            data.LH_to_Gaussian()
+            data.generate_temperature()
+            data.generate_cartesian()
+
+            self.xw = data.x
+            self.yw = data.y
+            self.zw = data.z
+            self.dens = data.rho
+            self.temp = data.temp
 
         elif source.lower() == 'flash':
             utils.not_implemented()
@@ -243,8 +275,8 @@ class CartesianGrid():
             f.write('1\n')                     
             # Regular grid
             f.write('0\n')                      
-            # Coordinate system: cartesian
-            f.write('1\n')                     
+            # Coordinate system
+            f.write('{self.cordsystem}\n')                     
             # Gridinfo
             f.write('0\n')                       
             # Number of cells
@@ -256,21 +288,21 @@ class CartesianGrid():
             dx = np.diff(self.xc)[0]
             dy = np.diff(self.yc)[0]
             dz = np.diff(self.zc)[0]
-            xw = self.xc + dx
-            yw = self.yc + dy
-            zw = self.zc + dz
+            self.xw = self.xc + dx
+            self.yw = self.yc + dy
+            self.zw = self.zc + dz
 
             # Add the missing wall at the beginning of each axis
-            xw = np.insert(xw, 0, self.xc[0])
-            yw = np.insert(yw, 0, self.yc[0])
-            zw = np.insert(zw, 0, self.zc[0])
+            self.xw = np.insert(self.xw, 0, self.xc[0])
+            self.yw = np.insert(self.yw, 0, self.yc[0])
+            self.zw = np.insert(self.zw, 0, self.zc[0])
 
             # Write the cell walls
-            for i in xw:
+            for i in self.xw:
                 f.write(f'{i:13.6e}\n')      
-            for j in yw:
+            for j in self.yw:
                 f.write(f'{j:13.6e}\n')      
-            for k in zw:
+            for k in self.zw:
                 f.write(f'{k:13.6e}\n')      
 
 

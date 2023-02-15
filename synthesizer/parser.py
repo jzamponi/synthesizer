@@ -6,7 +6,7 @@
 
     $ synthesizer --sphfile snap_001.dat --ncells 100 --bbox 50
         --show-grid-2d --show-grid-3d --raytrace --lam 3000 --amax 10 
-        --polarization --opacity --material p --amin 0.1 --amax 10 --na 100 
+        --polarization --opacity --material s --amin 0.1 --amax 10 --na 100 
         --show-rt --synobs --show-synobs
 
     For details, run:
@@ -70,8 +70,8 @@ def synthesizer():
         help='Set the gas-to-dust mass ratio.')
 
     parser.add_argument('--vector-field', action='store', type=str, default=None, 
-        choices=['x', 'y', 'z', 't', 'toroidal', 'r', 'radial', 'h', 'hourglass', 
-        'hel', 'helicoidal', 'd', 'dipole', 'q', 'quadrupole'], 
+        choices=['x', 'y', 'z', 'toroidal', 'radial', 'hourglass', 
+        'helicoidal', 'dipole', 'quadrupole'], 
         help='Create a vectory field for alignment of elongated grains.')
 
     parser.add_argument('--temperature', action='store_true', default=False,
@@ -207,6 +207,14 @@ def synthesizer():
     parser.add_argument('--resolution', action='store', type=float, default=None,
         help="Set a desired angular resolution in arcseconds.")
 
+    parser.add_argument('--obsmode', action='store', type=str, default='int',
+        choices=['int', 'sd'], 
+        help="Wheter to observe with an radio interferometer or a single-dish.")
+    
+    parser.add_argument('--telescope', action='store', type=str, default='alma',
+        choices=['alma', 'aca', 'vla'], 
+        help="Radio telescope to use. Default: ALMA")
+
     parser.add_argument('--script', action='store', default=None,
         help='Name, path or url to a CASA script for the synthetic observation.')
 
@@ -262,7 +270,8 @@ def synthesizer():
         pipeline.synthetic_observation(show=cli.show_synobs, script=cli.script, 
             simobserve=not cli.dont_observe, clean=not cli.dont_clean, 
             exportfits=not cli.dont_export, obstime=cli.obs_time,  
-            resolution=cli.resolution, verbose=not cli.quiet)
+            resolution=cli.resolution, obsmode=cli.obsmode, 
+            telescope=cli.telescope, verbose=not cli.quiet)
 
     # If none of the main options is given, do nothing
     if not cli.grid and not cli.opacity and not cli.monte_carlo and \

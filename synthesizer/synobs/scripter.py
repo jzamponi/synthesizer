@@ -46,7 +46,8 @@ class CasaScript():
         self.indirection = 'J2000 16h32m22.63 -24d28m31.8'
         self.hourangle = 'transit'
         self.obsmode = 'int'
-        self.arrayconfig = self.get_antenna_array(obs='ALMA', cycle=4, arr=7)
+        self.telescope = None
+        self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
         self.thermalnoise = 'tsys-manual'
 
         # tclean
@@ -72,22 +73,37 @@ class CasaScript():
         # exportfits
         self.dropstokes = True
 
-    def get_array(self):
+    def _find_telescope(self):
+        """ Find a proper telescope given the observing wavelength (microns) """
+        if self.lam > 400 or self.lam < 4500:
+            self.telescope = 'alma'
+
+        elif self.lam >= 4500 and self.lam < 4e6:
+            self.telescope = 'vla'
+
+        else:
+            utils.not_implemented('Simulations for telescopes operating '+\
+                'outside the sub-/milimeter wavelengths are currently not '+\
+                'implemented. But they will.')
+
+    def _find_array(self):
         """ Get the best antenna array that matches a desired angular resolution
             To be implemented ...
         """
+        utils.not_implemented()
         if self.resolution is not None:
             res = self.resolution
             pass
 
-    def get_antenna_array(self, obs, cycle, arr):
+    def _get_antenna_array(self, cycle, arr):
         """ Set the antennalist string for a given antenna configuration.
             All possible config files are found in CASA_PATH/data/alma/simmos/
         """
-        self.obs = str(obs).lower()
+        if self.telescope is None:
+            self._find_telescope()
         self.cycle = str(cycle).lower()
         self.arr = str(arr).lower()
-        self.arrayfile = f'{self.obs}.cycle{self.cycle}.{self.arr}'
+        self.arrayfile = f'{self.telescope}.cycle{self.cycle}.{self.arr}'
         return self.arrayfile + '.cfg'
 
     def write(self, name=None):
@@ -230,7 +246,7 @@ class CasaScript():
 
         f.close()
 
-    def clean_project(self):
+    def _clean_project(self):
         """ Delete any previous project to avoid the CASA clashing """
 
         if self.overwrite and os.path.exists('synobs_data'):
@@ -240,7 +256,7 @@ class CasaScript():
     def run(self):
         """ Run the ALMA/JVLA simulation script """
 
-        self.clean_project()
+        self._clean_project()
         subprocess.run(f'casa -c {self.name} --nologger'.split())
 
     def cleanup(self):
