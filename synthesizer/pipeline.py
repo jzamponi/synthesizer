@@ -151,6 +151,10 @@ class Pipeline:
             
             # Read the AMR data
             self.grid.read_amr(self.amrfile, source=source)
+        
+        else:
+            raise ValueError(f'{utils.color.red}When --grid is set, either --'+\
+                f'model, --sphfile or --amrfile must be given{utils.color.none}')
 
         # Write the new cartesian grid to radmc3d file format
         self.grid.write_grid_file()
@@ -628,7 +632,7 @@ class Pipeline:
 
         # If the observing wavelength is outside the working range of CASA, 
         # simplify the synthetic obs. to a PSF convolution and thermal noise
-        if self.lam > 400 or self.lam < 4500:
+        if self.lam < 400 or self.lam > 4500:
     
             if resolution is not None:
                 self.resolution = resolution

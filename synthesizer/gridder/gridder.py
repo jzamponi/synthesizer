@@ -61,7 +61,8 @@ class CartesianGrid():
         utils.print_(
             f'Reading data from: {filename} | Format: {source.upper()}')
         if not os.path.exists(filename): 
-            raise FileNotFoundError('Input SPH file does not exist')
+            raise FileNotFoundError(f'{utils.color.red}' +\
+                f'Input SPH file does not exist{utils.color.none}')
 
         if source.lower() == 'sphng':
             self.sph = SPHng(filename, remove_sink=True)
@@ -254,7 +255,7 @@ class CartesianGrid():
             # Regular grid
             f.write('0\n')                      
             # Coordinate system
-            f.write('{self.cordsystem}\n')                     
+            f.write(f'{self.cordsystem}\n')                     
             # Gridinfo
             f.write('0\n')                       
             # Number of cells
@@ -462,7 +463,7 @@ class CartesianGrid():
             from mayavi import mlab
             mlab.contour3d(self.interp_dens, contours=20, opacity=0.2)
             utils.print_('HINT: If you wanna play with the figure, press '+\
-                'the nice icon in the upper left corner.', bold=True)
+                'the nice icon in the upper left corner.', blue=True)
             mlab.show()
 
         except Exception as e:

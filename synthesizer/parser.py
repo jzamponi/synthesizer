@@ -30,7 +30,7 @@ from synthesizer.pipeline import Pipeline
 
 
 def synthesizer():
-
+    
     # Initialize the argument parser
     parser = argparse.ArgumentParser(prog='Synthesizer',
         description="")
@@ -152,9 +152,10 @@ def synthesizer():
     parser.add_argument('--distance', action='store', type=float, default=141,
         help='Physical distance in pc, used to convert fluxes into Jy/pixel.')
 
-    parser.add_argument('--star', action='store', default=None, nargs=6, 
-        metavar=('x', 'y', 'z', 'Rstar', 'Mstar', 'Teff'), 
-        help='6 parameters used to define a radiating star (values should be given in cgs)')
+    parser.add_argument('--star', action='store', default=None, nargs=6,
+        metavar=('x', 'y', 'z', 'Rstar', 'Mstar', 'Teff'), type=float, 
+        help='6 parameters used to define a radiating star ' +\
+            '(values should be given in cgs)')
         
     parser.add_argument('--tau', action='store_true', default=False,  
         help='Generate a 2D optical depth map.')

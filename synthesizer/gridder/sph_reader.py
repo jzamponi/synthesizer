@@ -34,11 +34,17 @@ class SPHng:
             outlier_index = 31330
         """
 
-        # Read file in binary format
-        with open(filename, "rb") as f:
-            names = f.readline()[1:].split()
-            data = np.frombuffer(f.read()).reshape(-1, len(names))
-            data = data.astype("f4")
+        try:
+            # Read file in binary format
+            with open(filename, "rb") as f:
+                names = f.readline()[1:].split()
+                data = np.frombuffer(f.read()).reshape(-1, len(names))
+                data = data.astype("f4")
+        except ValueError as e:
+            utils.print_('Error trying to read SPHng binary file.', red=True)
+            utils.print_(
+                'File is probably from another code. Set --source', bold=True)
+            raise ValueError(e)
 
         # Turn data into CGS 
         if cgs:
@@ -65,6 +71,8 @@ class SPHng:
 class Gizmo:
     """ Handle HDF5 snapshots from the GIZMO code. """
     def __init__(self, filename):
+
+        # Read in particle coordinates and density
         self.data = h5py.File(filename, 'r')['PartType0']
         code_length = u.pc.to(u.cm)
         code_dens = 1.3816326620099363e-23
@@ -88,6 +96,8 @@ class Gadget:
 class Arepo:
     """ Handle snapshots from the AREPO code. """
     def __init__(self, filename):
+
+        # Read in particle coordinates and density
         self.data = h5py.File(filename, 'r')['PartType0']
         coords = np.array(self.data['Coordinates'])
         dens = np.array(self.data['Density'])
@@ -95,10 +105,19 @@ class Arepo:
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
         self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
-        if any(['temp' in k.lower() for k in self.data.keys()]):
+
+        # Read in temperature if available
+        if 'Temperature' in self.data.keys():
             self.temp = self.data['Temperature']
         else:
-            self.temp = np.zeros(self.rho_g.shape)
+            # Compute it from a barotropic equation of state
+            if 'Pressure' in self.data.keys() and \
+                'InternalEnergy' in self.data.keys():
+
+                self.temp = np.array(self.data['InternalEnergy'])
+                self.temp /= np.array(self.data['Pressure'])
+            else:
+                self.temp = np.zeros(self.rho_g.shape)
 
 class Gradsph:
     """ Handle snapshots from the GRADSPH code. """
