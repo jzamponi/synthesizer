@@ -689,7 +689,9 @@ def plot_map(
             print_('Beam or frequency keywords not available. ' +\
             'Impossible to convert into T_b.', verbose, bold=True)
     
-    write_fits(filename, data.squeeze(), hdr, True, verbose)
+    # If data was changed, rewrite file
+    if any([rot90, transpose, flipud, fliplr, rescale, bright_temp]):
+        write_fits(filename, data.squeeze(), hdr, True, verbose)
 
     # Remove non-celestial WCS
     filename_ = filename

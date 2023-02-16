@@ -1,19 +1,24 @@
 The following points are meant to be implemented within the pipeline, 
 dustmixer and utils modules ("-" means to be done, "+" means done):
 
+    - [scripter] When the observing wav. is outside the working range for CASA,
+      limit the synthetic obs. to a PSF convolution and addition of thermal noise.
+
     - [scripter] Receive an angular resolution from the argparser and detect 
       what antenna array best matches this resolution.
 
+    - [amr_reader] Implement interfaces for grid based codes (Athena, ENZO, ...)
+
     - [analytical] Add the option to plot the vector_field midplane with 
       plt.streamplot and in 3D streamlines using Mayavi.
-    
-    - [raytrace] Find a way to let the pipeline know what's the current kappa(lam)
+
+    - [dustmixer] Interpolate and extrapolate the wavelength ranges within the 
+      dustmixer when two materials are mixed or summed. This will also let the
+      user to adjust the resolution of the wavelength grid. 
 
     - [utils.elapsed_time] The hour counter resets after 24hrs, not counting days. 
 
-    - [dustmixer] Interpolate the wavelength ranges within the dustmixer when 
-      two materials are mixed or summed. This will also let the user to adjust
-      the resolution of the wavelength grid. Also extrapolate.
+    + [raytrace] Find a way to let the pipeline know what's the current kappa(lam)
 
     + [synthesizer] conver the whole program into a python package.
 

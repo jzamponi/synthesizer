@@ -201,8 +201,8 @@ def synthesizer():
     parser.add_argument('--dont-export', action='store_true', default=False,
         help="Don't export tclean's output as a fits image.")
 
-    parser.add_argument('--obs-time', action='store', type=float, default=None,
-        help="Set the observing time in hours.")
+    parser.add_argument('--obs-time', action='store', type=float, default=1,
+        help="Set the observing time in hours. Default is 1h.")
 
     parser.add_argument('--resolution', action='store', type=float, default=None,
         help="Set a desired angular resolution in arcseconds.")

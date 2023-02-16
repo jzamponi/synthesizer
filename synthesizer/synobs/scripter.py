@@ -13,7 +13,7 @@ import numpy as np
 import astropy.units as u
 import astropy.constants as c
 
-from .. import utils
+from synthesizer import utils
 
 class CasaScript():
     
@@ -31,8 +31,8 @@ class CasaScript():
 
         # simobserve
         self.project = 'synobs_data'
-        self.skymodel = lambda q: f'radmc3d_{q}.fits'
-        self.fitsimage = lambda q: f'synobs_{q}.fits'
+        self.skymodel = lambda st: f'radmc3d_{st}.fits'
+        self.fitsimage = lambda st: f'synobs_{st}.fits'
         self.inbright = ''
         self.incell = ''
         self.mapsize = ''
@@ -42,7 +42,7 @@ class CasaScript():
         self.inwidth = '2GHz'
         self.setpointings = True
         self.integration = '2s'
-        self.totaltime = '2h'
+        self.totaltime = '1h'
         self.indirection = 'J2000 16h32m22.63 -24d28m31.8'
         self.hourangle = 'transit'
         self.obsmode = 'int'
@@ -173,6 +173,7 @@ class CasaScript():
                     f.write(f'    imagename = "{self.imagename(q)}.image", \n')
                     f.write(f'    fitsimage = "{self.fitsimage(q)}", \n')
                     f.write(f'    dropstokes = {self.dropstokes}, \n')
+                    f.write(f'    dropdeg = {self.dropstokes}, \n')
                     f.write(f'    overwrite = True, \n')
                     f.write(f') \n\n')
                 
@@ -249,7 +250,8 @@ class CasaScript():
     def _clean_project(self):
         """ Delete any previous project to avoid the CASA clashing """
 
-        if self.overwrite and os.path.exists('synobs_data'):
+        if (self.overwrite and os.path.exists('synobs_data')) or \
+            (not self.simobserve or not self.clean or not self.exportfits): 
             utils.print_(f'Deleting previous observing project: {self.project}')
             subprocess.run('rm -r synobs_data', shell=True)
 

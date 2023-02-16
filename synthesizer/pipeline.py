@@ -616,7 +616,7 @@ class Pipeline:
     @utils.elapsed_time
     def synthetic_observation(self, show=False, cleanup=True, 
             script=None, simobserve=True, clean=True, exportfits=True, 
-            obstime=None, resolution=None, obsmode='int', graphic=True, 
+            obstime=1, resolution=None, obsmode='int', graphic=True, 
             telescope=None, verbose=False):
         """ 
             Prepare the input for the CASA simulator from the RADMC3D output,
@@ -626,43 +626,69 @@ class Pipeline:
         print('')
         utils.print_('Running synthetic observation ...\n', bold=True)
 
-        if script is None:
-            # Create a minimal template CASA script
-            script = synobs.CasaScript(lam=self.lam)
-            script.polarization = self.polarization
-            script.simobserve = simobserve
-            script.clean = clean
-            script.graphic = graphic
-            script.verbose = False
-            script.overwrite = self.overwrite
-            script.resolution = resolution
-            script.obsmode = obsmode
-            script.telescope = telescope
-            if self.npix is not None: script.npix = int(self.npix + 20)
-            if obstime is not None: script.totaltime = f'{obstime}h'
-            script.verbose = verbose
-            script.write('casa_script.py')
+        # If the observing wavelength is outside the working range of CASA, 
+        # simplify the synthetic obs. to a PSF convolution and thermal noise
+        if self.lam > 400 or self.lam < 4500:
+    
+            if resolution is not None:
+                self.resolution = resolution
+            else:
+                utils.print_(
+                    '--resolution has not been set. I will use 0.1"', blue=True)
+                self.resolution = 0.1
 
-        elif 'http' in script: 
-            # Download the script if a URL is provided
-            url = script
-            utils.download_file(url)
-            script = synobs.CasaScript()
-            script.name = script.split('/')[-1]
-            script.read(script.name)
+            img = synobs.SynImage('radmc3d_I.fits')
+            img.convolve(self.resolution)
+            img.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+            img.write_fits('synobs_I.fits')
 
-        self.script = script
+            if self.polarization:
+                img_q = synobs.SynImage('radmc3d_Q.fits')
+                img_u = synobs.SynImage('radmc3d_U.fits')
+                img_q.convolve(self.resolution)
+                img_u.convolve(self.resolution)
+                img_q.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+                img_u.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+                img_q.write_fits('synobs_Q.fits')
+                img_u.write_fits('synobs_U.fits')
 
-        # Call CASA
-        script.run()
+        else:
+            if script is None:
+                # Create a minimal template CASA script
+                script = synobs.CasaScript(lam=self.lam)
+                script.polarization = self.polarization
+                script.simobserve = simobserve
+                script.clean = clean
+                script.graphic = graphic
+                script.overwrite = self.overwrite
+                script.resolution = resolution
+                script.obsmode = obsmode
+                script.telescope = telescope
+                if self.npix is not None: script.npix = int(self.npix + 20)
+                script.totaltime = f'{obstime}h'
+                script.verbose = False
+                script.write('casa_script.py')
+
+            elif 'http' in script: 
+                # Download the script if a URL is provided
+                url = script
+                utils.download_file(url)
+                script = synobs.CasaScript()
+                script.name = script.split('/')[-1]
+                script.read(script.name)
+
+            self.script = script
+
+            # Call CASA
+            script.run()
+
+            # Clean-up and remove unnecessary files created by CASA 
+            if not simobserve or not tclean or not exportfits:
+                script.cleanup()
 
         # Show the new synthetic image
         if show:
             self.plot_synobs()
-
-        # Clean-up and remove unnecessary files created by CASA
-        if cleanup:
-            script.cleanup()
 
         # Register the pipeline step 
         self.steps.append('synobs')
@@ -704,20 +730,21 @@ class Pipeline:
         utils.print_(f'Plotting the new synthetic image')
 
         try:
-            utils.file_exists(self.script.fitsimage('I'))
-            utils.fix_header_axes(self.script.fitsimage('I'))
+            utils.file_exists('synobs_I.fits')
+            utils.fix_header_axes('synobs_I.fits')
                 
             if self.polarization:
-                utils.file_exists(self.script.fitsimage('Q'))
-                utils.fix_header_axes(self.script.fitsimage('Q'))
-                utils.fix_header_axes(self.script.fitsimage('U'))
+                utils.file_exists('synobs_Q.fits')
+                utils.file_exists('synobs_U.fits')
+                utils.fix_header_axes('synobs_Q.fits')
+                utils.fix_header_axes('synobs_U.fits')
 
                 fig = utils.polarization_map(
                     source='obs', 
                     render='I', 
-                    stokes_I=self.script.fitsimage('I'), 
-                    stokes_Q=self.script.fitsimage('I'), 
-                    stokes_U=self.script.fitsimage('I'), 
+                    stokes_I='synobs_I.fits', 
+                    stokes_Q='synobs_Q.fits', 
+                    stokes_U='synobs_U.fits', 
                     rotate=0, 
                     step=15, 
                     scale=10, 
@@ -728,13 +755,13 @@ class Pipeline:
                 )
             else:
                 fig = utils.plot_map(
-                    filename=self.script.fitsimage('I'),
+                    filename='synobs_I.fits',
                     bright_temp=False,
                     verbose=False,
                 )
         except Exception as e:
             utils.print_(
-                f'Unable to plot {self.script.fitsimage("I")}:\n{e}', bold=True)
+                f'Unable to plot synobs_I.fits:\n{e}', bold=True)
 
     def plot_tau(self, show=False):
         utils.print_(f'Generating optical depth map at {self.lam} microns')

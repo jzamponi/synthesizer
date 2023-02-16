@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 
 from .vector_field import VectorField
-import .amr_read 
+from .amr_reader  import ZeusTW
 from synthesizer import utils
 
 class CartesianGrid():
@@ -124,7 +124,7 @@ class CartesianGrid():
             utils.not_implemented()
 
             # Generate a Data instance
-            data = amr_reader.ZeusTW()
+            data = ZeusTW()
 
             # Read coordinates: x?a are cell edges and x?b are cell centers
             data.generate_coords(r="z_x1ap", th="z_x2ap", ph="z_x3ap")
