@@ -84,6 +84,10 @@ class VectorField():
             self.vy = (-3*y*(x**2 + y**2 - 4*z**2)) / r7
             self.vz = (3*z*(-3*x**2 - 3*y**2 + 2*z**2)) / r7
 
+        elif self.morphology == 'custom':
+            # Let vx, vy, vz be plain zeros with x, y, z shapes
+            normalize = False
+
         # Normalize the field
         if normalize:
             self.r = np.sqrt(self.vx**2 + self.vy**2 + self.vz**2)

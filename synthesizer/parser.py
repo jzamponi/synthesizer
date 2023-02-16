@@ -42,7 +42,7 @@ def synthesizer():
     exc_grid = parser.add_mutually_exclusive_group() 
     exc_grid.add_argument('--model', action='store', default=None, 
         choices=['constant', 'plaw', 'ppdisk', 'pcore', 'gidisk', 'spiral-disk',
-            'filament'], 
+            'filament', 'user'], 
         help='Keyword for a predefined density model.')
 
     exc_grid.add_argument('--sphfile', action='store', default=None, 
@@ -51,8 +51,8 @@ def synthesizer():
     exc_grid.add_argument('--amrfile', action='store', default=None, 
         help='Name of the input AMR grid file (snapshot from a grid-based code)')
 
-    parser.add_argument('--source', action='store', default='sphng-bin', 
-        choices=['sphng-bin', 'gizmo', 'gadget', 'arepo', 'gandalf', 'gradsph',
+    parser.add_argument('--source', action='store', default='sphng', 
+        choices=['sphng', 'gizmo', 'gadget', 'arepo', 'gandalf', 'gradsph',
             'athena', 'zeustw', 'flash', 'enzo', 'ramses'], 
         help='Name of the code used to generate the inputfile.')
 

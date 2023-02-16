@@ -3,7 +3,8 @@ import astropy.units as u
 import astropy.constants as const
 import matplotlib.pyplot as plt
 
-from .vector_field import VectorField
+from synthesizer.gridder.vector_field import VectorField
+from synthesizer.gridder.custom_model import CustomModel
 from synthesizer import utils 
 
 class AnalyticalModel():
@@ -35,6 +36,7 @@ class AnalyticalModel():
                 'pcore': 0.1 * u.pc.to(u.cm), 
                 'ppdisk': 300 * u.au.to(u.cm),
                 'filament': 1 * u.pc.to(u.cm), 
+                'user': 100 * u.au.to(u.cm), 
             }.get(model)
         else:
             self.bbox = bbox * u.au.to(u.cm)
@@ -59,8 +61,19 @@ class AnalyticalModel():
         self.plotmin = None
         self.plotmax = None
 
+        # Custom user-defined model
+        if self.model == 'user':
+            if self.bbox == 100*u.au.to(u.cm):
+                utils.print_('Using a default half-box size of 100 au. '+\
+                    f'You can change it with --bbox')
+
+            model = CustomModel(x, y, z)
+            self.dens = model.dens
+            self.temp = model.temp
+            self.vfield = model.vfield                
+
         # Constant density  
-        if self.model == 'constant':          
+        elif self.model == 'constant':          
             self.dens = 1e-12 * np.ones(self.dens.shape)
             if self.add_temp:
                 self.temp = 15 * np.ones(self.temp.shape)
@@ -71,7 +84,7 @@ class AnalyticalModel():
             rho_c = 9e-18 / self.g2d
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * (r / r_c)**(-slope)
-            self.plotmin = 1e-19
+            self.plotmin = 1e-20
             if self.add_temp:
                 self.temp = 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / r)
 
@@ -145,9 +158,12 @@ class AnalyticalModel():
             if self.add_temp:
                 self.temp = T_r
 
-        # Viscous gravitationally unstable accretion disk (Rafikov et al. 2015)
+        # Viscous gravitationally unstable accretion disk
         elif self.model == 'gidisk':
             utils.not_implemented(f'Model: {self.model}')
+            # E. Vorobyov's suggesiton: 
+            # For the surface density, take a look at Galactic Dynamics (Biney...)
+            # For the scale height, Vorobyov & Basu 2008 or Rafikov 2009, 2015
 
         # PP Disk with logarithmic spiral arms (Huang et al. 2018b,c)
         elif self.model == 'spiral-disk':
@@ -246,7 +262,8 @@ class AnalyticalModel():
  
         utils.print_('Writing grain alignment direction file')
  
-        self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
+        if self.model != 'user':
+            self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
  
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
@@ -278,11 +295,11 @@ class AnalyticalModel():
                 bbox = self.bbox * u.cm.to(u.au)
                 extent = [-bbox, bbox] * 2
         
-            midplane = self.ncells//2 - 1
+            plane = self.ncells//2 - 1
             if self.model == 'ppdisk':
-                slice_ = self.dens[:, midplane, :].T
+                slice_ = self.dens[:, plane, :].T
             else:
-                slice_ = self.dens[..., midplane].T
+                slice_ = self.dens[..., plane].T
 
             if slice_.min() > 0:
                 vmin = slice_.min() if self.plotmin is None else self.plotmin 
@@ -293,6 +310,9 @@ class AnalyticalModel():
                 vmax = slice_.max() if self.plotmax is None else self.plotmax 
             else:
                 vmax = None
+
+            if np.all(slice_ == np.zeros(slice_.shape)): 
+                raise ValueError('Model density is exactly 0.')
 
             plt.title(r'Dust Density Midplane (g cm$^-3$)')
             plt.imshow(
@@ -307,11 +327,11 @@ class AnalyticalModel():
 
             if self.vfield is not None:
                 if self.model == 'ppdisk':
-                    v1 = self.vfield.vx[:, midplane, :].T, 
-                    v2 = self.vfield.vz[:, midplane, :].T,
+                    v1 = self.vfield.vx[:, plane, :].T, 
+                    v2 = self.vfield.vz[:, plane, :].T,
                 else:
-                    v1 = self.vfield.vx[..., midplane].T, 
-                    v2 = self.vfield.vz[..., midplane].T,
+                    v1 = self.vfield.vx[..., plane].T, 
+                    v2 = self.vfield.vy[..., plane].T,
 
                 try:
                     plt.streamplot(
@@ -353,11 +373,11 @@ class AnalyticalModel():
                 bbox = self.bbox * u.cm.to(u.au)
                 extent = [-bbox, bbox] * 2
 
-            midplane = self.ncells//2 - 1
+            plane = self.ncells//2 - 1
             if self.model == 'ppdisk':
-                slice_ = self.temp[:, midplane, :].T
+                slice_ = self.temp[:, plane, :].T
             else:
-                slice_ = self.temp[..., midplane].T
+                slice_ = self.temp[..., plane].T
 
             if np.all(slice_ == np.zeros(slice_.shape)): 
                 raise ValueError('Model temperature is exactly 0.')

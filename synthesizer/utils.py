@@ -326,59 +326,6 @@ def set_hdr_to_iras16293B(
     return hdr
 
 
-def read_sph(snapshot="snap_541.dat", write_hdf5=False, remove_sink=True, cgs=True, verbose=False):
-    """
-    Notes:
-
-    Assumes your binary file is formatted with a header stating the quantities,
-    assumed to be f4 floats. May not be widely applicable.
-
-    For these snapshots, the header is of the form...
-
-    # id t x y z vx vy vz mass hsml rho T u
-
-    where:
-
-    id = particle ID number
-    t = simulation time [years]
-    x, y, z = cartesian particle position [au]
-    vx,vy,vz = cartesian particle velocity [need to check units]
-    mass = particle mass [ignore]
-    hmsl = particle smoothing length [ignore]
-    rho = particle density [g/cm3]
-    T = particle temperature [K]
-    u = particle internal energy [ignore]
-    
-    outlier_index = 31330
-    """
-    import h5py
-
-    # Read file in binary format
-    with open(snapshot, "rb") as f:
-        print_(f'Reading file: {snapshot}', verbose)
-        names = f.readline()[1:].split()
-        data = np.frombuffer(f.read()).reshape(-1, len(names))
-        data = data.astype("f4")
-
-    # Turn data into CGS 
-    if cgs:
-        data[:, 2:5] *= u.au.to(u.cm)
-        data[:, 8] *= u.M_sun.to(u.g)
-
-    # Remove the cell data of the outlier, likely associated to a sink particle
-    if remove_sink:
-        sink_id = 31330
-        data[sink_id, 5] = 0
-        data[sink_id, 6] = 0
-        data[sink_id, 7] = 0
-        data[sink_id, 8] = data[:,8].min()
-        data[sink_id, 9] = data[:,9].min()
-        data[sink_id, 10] = 3e-11 
-        data[sink_id, 11] = 900
-    
-    return data
-
-
 def convert_opacity_file(
     infile='dust_mixture_001.dat', 
     outfile='dustkappa_polaris.inp', 

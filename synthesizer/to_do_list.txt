@@ -1,8 +1,8 @@
 The following points are meant to be implemented within the pipeline, 
 dustmixer and utils modules ("-" means to be done, "+" means done):
 
-    - [scripter] When the observing wav. is outside the working range for CASA,
-      limit the synthetic obs. to a PSF convolution and addition of thermal noise.
+    - [gridder] Find a way to also interpolate SPH vector fields, to be able to use
+      the input B or V fields for polarization by dust alignment.
 
     - [scripter] Receive an angular resolution from the argparser and detect 
       what antenna array best matches this resolution.
@@ -17,6 +17,9 @@ dustmixer and utils modules ("-" means to be done, "+" means done):
       user to adjust the resolution of the wavelength grid. 
 
     - [utils.elapsed_time] The hour counter resets after 24hrs, not counting days. 
+
+    + [scripter] When the observing wav. is outside the working range for CASA,
+      limit the synthetic obs. to a PSF convolution and addition of thermal noise.
 
     + [raytrace] Find a way to let the pipeline know what's the current kappa(lam)
 

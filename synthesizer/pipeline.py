@@ -78,7 +78,7 @@ class Pipeline:
 
     @utils.elapsed_time
     def create_grid(self, model=None, sphfile=None, amrfile=None, 
-            source='sphng-bin', bbox=None, rout=None, ncells=None, 
+            source='sphng', bbox=None, rout=None, ncells=None, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=True):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """

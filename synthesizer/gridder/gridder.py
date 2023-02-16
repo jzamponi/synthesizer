@@ -5,8 +5,9 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 
-from .vector_field import VectorField
-from .amr_reader  import ZeusTW
+from synthesizer.gridder.vector_field import VectorField
+from synthesizer.gridder.sph_reader  import *
+from synthesizer.gridder.amr_reader  import *
 from synthesizer import utils
 
 class CartesianGrid():
@@ -35,7 +36,7 @@ class CartesianGrid():
         self.fz = 1
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
-        self.vector_field = None
+        self.vfield = None
         self.add_temp = temp
         self.ncells = ncells
         self.bbox = bbox
@@ -47,7 +48,7 @@ class CartesianGrid():
         self.carbon = 0.375
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
 
-    def read_sph(self, filename, source='sphng-bin'):
+    def read_sph(self, filename, source='sphng'):
         """ Read SPH data. 
             Below are defined small interfaces to read in data from SPH codes.
 
@@ -57,56 +58,44 @@ class CartesianGrid():
 
         import h5py
 
-        utils.print_(f'Reading data from: {filename} | Format: {source}')
+        utils.print_(
+            f'Reading data from: {filename} | Format: {source.upper()}')
         if not os.path.exists(filename): 
             raise FileNotFoundError('Input SPH file does not exist')
 
-        if source.lower() == 'sphng-bin':
-            self.sph = utils.read_sph(filename, remove_sink=True, cgs=True)
-            self.x = self.sph[:, 2]
-            self.y = self.sph[:, 3]
-            self.z = self.sph[:, 4]
-            self.dens = self.sph[:, 10] / self.g2d
-            self.npoints = len(self.dens)
-            if self.add_temp:
-                self.temp = self.sph[:, 11]
-            else:
-                self.temp = np.zeros(self.dens.shape)
+        if source.lower() == 'sphng':
+            self.sph = SPHng(filename, remove_sink=True)
 
         elif source.lower() == 'gizmo':
-            self.sph = h5py.File(filename, 'r')['PartType0']
-            code_length = u.pc.to(u.cm)
-            code_dens = 1.3816326620099363e-23
-            coords = np.array(self.sph['Coordinates'])
-            self.x = coords[:, 0] * code_length
-            self.y = coords[:, 1] * code_length
-            self.z = coords[:, 2] * code_length
-            self.dens = np.array(self.sph['Density']) * code_dens / self.g2d
-            self.npoints = len(self.dens)
-            if self.add_temp: 
-                self.temp = np.array(self.sph['KromeTemperature'])
-            else:
-                self.temp = np.zeros(self.dens.shape)
-
-            # Recenter the particles based on the center of mass
-            self.x -= np.average(self.x, weights=self.dens)
-            self.y -= np.average(self.y, weights=self.dens)
-            self.z -= np.average(self.z, weights=self.dens)
+            self.sph = Gizmo(filename)
 
         elif source.lower() == 'gadget':
             utils.not_implemented()
+            self.sph = Gadget(filename)
 
         elif source.lower() == 'arepo':
-            utils.not_implemented()
+            self.sph = Arepo(filename)
 
         elif source.lower() == 'gradsph':
             utils.not_implemented()
+            self.sph = Gradsph(filename)
             
         elif source.lower() == 'gandalf':
             utils.not_implemented()
-            
+            self.sph = Gandalf(filename)
+
         else:
             raise ValueError(f'Source = {source} is currently not supported')
+            
+        self.x = self.sph.x
+        self.y = self.sph.y
+        self.z = self.sph.z
+        self.dens = self.sph.rho_g / self.g2d
+        self.npoints = len(self.dens)
+        if self.add_temp:
+            self.temp = self.sph.temp
+        else:
+            self.temp = np.zeros(self.dens.shape)
 
     def read_amr(self, filename, sourle='athena++'):
         """ Read AMR data """
@@ -174,31 +163,20 @@ class CartesianGrid():
 
             self.bbox = bbox
 
-            # Create a matrix of vertices if bbox is provided as a single number
-            if np.isscalar(bbox):
-                bbox = [[-bbox, bbox]] * 3
-            
-            # Store the vertices
-            x1 = bbox[0][0]
-            x2 = bbox[0][1]
-            y1 = bbox[1][0]
-            y2 = bbox[1][1]
-            z1 = bbox[2][0]
-            z2 = bbox[2][1]
             utils.print_(f'Deleting particles outside a box ' +
                 f'half-length of {self.bbox * u.cm.to(u.au)} au')
 
             # Iterate over particles and delete upon reject
             for i in range(self.x.size):
-                if self.x[i] < x1 or self.x[i] > x2:
+                if self.x[i] < -self.bbox or self.x[i] > self.bbox :
                     to_remove.append(i)
 
             for j in range(self.y.size):
-                if self.y[j] < y1 or self.y[j] > y2:
+                if self.y[j] < -self.bbox or self.y[j] > self.bbox:
                     to_remove.append(j)
 
             for k in range(self.z.size):
-                if self.z[k] < z1 or self.z[k] > z2:
+                if self.z[k] < -self.bbox or self.z[k] > self.bbox:
                     to_remove.append(k)
 
         if rout is not None and bbox is None:
@@ -220,8 +198,8 @@ class CartesianGrid():
         self.z = np.delete(self.z, to_remove)
         self.dens = np.delete(self.dens, to_remove)
         self.temp = np.delete(self.temp, to_remove)
-        utils.print_(f'{self.npoints - self.x.size} ' +
-            'particles were not included in the grid')
+        utils.print_(f'Particles included: {self.x.size} | ' +
+            f'Particles excluded: {self.npoints - self.x.size} ')
 
     def interpolate_points(self, field, method='linear', fill='min'):
         """
@@ -359,7 +337,8 @@ class CartesianGrid():
  
         utils.print_('Writing grain alignment direction file')
  
-        self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
+        if self.vfield is None:
+            self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
  
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
@@ -383,6 +362,7 @@ class CartesianGrid():
             plt.rcParams['ytick.right'] = True
             plt.rcParams['xtick.minor.visible'] = True
             plt.rcParams['ytick.minor.visible'] = True
+            plt.close('all')
 
             if self.bbox is None:
                 extent = self.bbox
@@ -391,30 +371,38 @@ class CartesianGrid():
                 extent = [-bbox, bbox] * 2
         
             plane = self.ncells//2 - 1
-            slice_ = self.dens[:, plane, :].T
+            slice_ = self.interp_dens[..., plane].T
 
             vmin = slice_.min() if slice_.min() > 0 else None
             vmax = slice_.max() if slice_.max() < np.inf else None
 
+            if np.all(slice_ == np.zeros(slice_.shape)): 
+                raise ValueError('Density midplane is exactly 0.')
+
             plt.title(r'Dust Density Midplane at $z=0$ (g cm$^{-3}$)')
             plt.imshow(slice_, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
-                cmap='CMRmap',
+                cmap='BuPu',
                 extent=extent,
             )
             plt.colorbar()
             plt.xlabel('AU')
             plt.ylabel('AU')
 
-            if self.vfield is not None:
-                plt.streamplot(
-                    np.linspace(-bbox, bbox, self.ncells), 
-                    np.linspace(-bbox, bbox, self.ncells), 
-                    self.vfield.vx[:, plane, :], 
-                    self.vfield.vz[:, plane, :],
-                    color='k', 
-                    density=0.7, 
-                )
+            try:
+                if self.vfield is not None:
+                    plt.streamplot(
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        self.vfield.vx[..., plane], 
+                        self.vfield.vz[..., plane],
+                        linewidth=0.5,
+                        color='k', 
+                        density=0.7, 
+                    )
+            except Exception as e:
+                utils.print_('Unable to add vector stream lines',  red=True)
+                utils.print_(e, bold=True)
             plt.show()
 
         except Exception as e:
@@ -433,6 +421,7 @@ class CartesianGrid():
             plt.rcParams['ytick.right'] = True
             plt.rcParams['xtick.minor.visible'] = True
             plt.rcParams['ytick.minor.visible'] = True
+            plt.close('all')
 
             if self.bbox is None:
                 extent = self.bbox
@@ -440,7 +429,17 @@ class CartesianGrid():
                 extent = [-self.bbox*u.cm.to(u.au), 
                         self.bbox*u.cm.to(u.au)] * 2
 
-            plt.imshow(self.interp_temp[:,:,self.ncells//2-1].T, 
+            plane = self.ncells//2 - 1
+            slice_ = self.interp_temp[..., plane].T
+
+            vmin = slice_.min() if slice_.min() > 0 else None
+            vmax = slice_.max() if slice_.max() < np.inf else None
+
+            if np.all(slice_ == np.zeros(slice_.shape)): 
+                raise ValueError('Density midplane is exactly 0.')
+
+            plt.imshow(
+                slice_,
                 norm=LogNorm(vmin=None, vmax=None),
                 cmap='inferno',
                 extent=extent,
