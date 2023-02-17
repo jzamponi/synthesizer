@@ -52,7 +52,7 @@ def synthesizer():
         help='Name of the input AMR grid file (snapshot from a grid-based code)')
 
     parser.add_argument('--source', action='store', default='sphng', 
-        choices=['sphng', 'gizmo', 'gadget', 'arepo', 'gandalf', 'gradsph',
+        choices=['sphng', 'gizmo', 'gadget', 'arepo', 'phantom', 
             'athena', 'zeustw', 'flash', 'enzo', 'ramses'], 
         help='Name of the code used to generate the inputfile.')
 
@@ -146,7 +146,7 @@ def synthesizer():
     parser.add_argument('--incl', action='store', type=float, default=0,
         help='Inclination angle of the grid in degrees')
 
-    parser.add_argument('--sizeau', action='store', type=int, default=100,
+    parser.add_argument('--sizeau', action='store', type=int, default=None,
         help='Physical size of the image in AU')
 
     parser.add_argument('--distance', action='store', type=float, default=141,

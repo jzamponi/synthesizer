@@ -59,7 +59,7 @@ class CartesianGrid():
         import h5py
 
         utils.print_(
-            f'Reading data from: {filename} | Format: {source.upper()}')
+            f'Reading data from: {filename} | Format: {source.upper()}', end='')
         if not os.path.exists(filename): 
             raise FileNotFoundError(f'{utils.color.red}' +\
                 f'Input SPH file does not exist{utils.color.none}')
@@ -71,19 +71,14 @@ class CartesianGrid():
             self.sph = Gizmo(filename)
 
         elif source.lower() == 'gadget':
-            utils.not_implemented()
             self.sph = Gadget(filename)
 
         elif source.lower() == 'arepo':
             self.sph = Arepo(filename)
 
-        elif source.lower() == 'gradsph':
+        elif source.lower() == 'phantom':
             utils.not_implemented()
-            self.sph = Gradsph(filename)
-            
-        elif source.lower() == 'gandalf':
-            utils.not_implemented()
-            self.sph = Gandalf(filename)
+            self.sph = Phantom(filename)
 
         else:
             raise ValueError(f'Source = {source} is currently not supported')
@@ -93,6 +88,8 @@ class CartesianGrid():
         self.z = self.sph.z
         self.dens = self.sph.rho_g / self.g2d
         self.npoints = len(self.dens)
+        print(f' | Particles: {self.npoints}')
+
         if self.add_temp:
             self.temp = self.sph.temp
         else:
@@ -152,7 +149,7 @@ class CartesianGrid():
         else:
             raise ValueError(f'Source = {source} is currently not supported')
 
-    def trim_box(self, bbox=None, rout=None):
+    def trim_box(self):
         """ 
         Trim the original grid to a given size, can be rectangular or spherical. 
         """
@@ -160,9 +157,7 @@ class CartesianGrid():
         # Emtpy dynamic array to store the indices of the particles to remove
         to_remove = []
 
-        if bbox is not None:
-
-            self.bbox = bbox
+        if self.bbox is not None:
 
             utils.print_(f'Deleting particles outside a box ' +
                 f'half-length of {self.bbox * u.cm.to(u.au)} au')
@@ -180,9 +175,8 @@ class CartesianGrid():
                 if self.z[k] < -self.bbox or self.z[k] > self.bbox:
                     to_remove.append(k)
 
-        if rout is not None and bbox is None:
+        elif self.rout is not None:
             # Override any previous value of rout
-            self.rout = rout
             utils.print_('Deleting particles outside a radius of ' +
                 f'{self.rout * u.cm.to(u.au)} au ...')
 
@@ -209,15 +203,15 @@ class CartesianGrid():
         """
 
         # Construct the rectangular grid
-        utils.print_('Creating a box of ' +
-            f'{self.ncells} x {self.ncells} x {self.ncells} cells')
-
         rmin = np.min([self.x.min(), self.y.min(), self.z.min()])
         rmax = np.max([self.x.max(), self.y.max(), self.z.max()])
         self.xc = np.linspace(rmin, rmax, self.ncells)
         self.yc = np.linspace(rmin, rmax, self.ncells)
         self.zc = np.linspace(rmin, rmax, self.ncells)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
+
+        utils.print_(f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +\
+            f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells per side.')
 
         # Determine which quantity is to be interpolated
         if field == 'dens':
@@ -230,14 +224,12 @@ class CartesianGrid():
             raise ValueError('field must be "dens" or "temp".')
 
         # Interpolate the point values at the grid points
-        fill = np.min(values) if fill == 'min' else fill
-        xyz = np.vstack([self.x, self.y, self.z]).T
         interp = griddata(
-            points=xyz, 
+            points=np.vstack([self.x, self.y, self.z]).T, 
             values=values, 
             xi=(self.X, self.Y, self.Z), 
             method=method, 
-            fill_value=fill
+            fill_value=np.min(values) if fill == 'min' else fill,
         )
  
         # Store the interpolated field
@@ -427,8 +419,8 @@ class CartesianGrid():
             if self.bbox is None:
                 extent = self.bbox
             else:
-                extent = [-self.bbox*u.cm.to(u.au), 
-                        self.bbox*u.cm.to(u.au)] * 2
+                extent = [-self.bbox * u.cm.to(u.au), 
+                        self.bbox * u.cm.to(u.au)] * 2
 
             plane = self.ncells//2 - 1
             slice_ = self.interp_temp[..., plane].T
@@ -461,9 +453,18 @@ class CartesianGrid():
         try:
             utils.print_('Visualizing the interpolated field ...')
             from mayavi import mlab
+
+            mlab.figure(
+                size=(1000, 900),  bgcolor=(1, 1, 1),  fgcolor=(0.5, 0.5, 0.5))
             mlab.contour3d(self.interp_dens, contours=20, opacity=0.2)
+
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
+            utils.print_(
+                "Try, IsoSurface -> Actor -> Representation = Wireframe. " +\
+                "If you don't see much, it's probably a matter of adjusting "+\
+                "the contours. ", blue=True)
+
             mlab.show()
 
         except Exception as e:

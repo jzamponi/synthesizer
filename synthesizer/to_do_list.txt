@@ -18,6 +18,10 @@ dustmixer and utils modules ("-" means to be done, "+" means done):
 
     - [utils.elapsed_time] The hour counter resets after 24hrs, not counting days. 
 
+    + [pipeline] Find a way to check for internet connection before downloading 
+      optical constants and opacity files. Otherwise, it will throw big errors  when
+      attempting to request.
+
     + [scripter] When the observing wav. is outside the working range for CASA,
       limit the synthetic obs. to a PSF convolution and addition of thermal noise.
 

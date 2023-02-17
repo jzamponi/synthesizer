@@ -73,58 +73,91 @@ class Gizmo:
     def __init__(self, filename):
 
         # Read in particle coordinates and density
-        self.data = h5py.File(filename, 'r')['PartType0']
-        code_length = u.pc.to(u.cm)
-        code_dens = 1.3816326620099363e-23
-        coords = np.array(self.data['Coordinates'])
-        self.x = coords[:, 0] * code_length
-        self.y = coords[:, 1] * code_length
-        self.z = coords[:, 2] * code_length
-        self.rho_g = np.array(self.data['Density']) * code_dens
-        self.temp = np.array(self.data['KromeTemperature'])
+        data = h5py.File(filename, 'r')['PartType0']
+        coords = np.array(data['Coordinates'])
+        self.x = coords[:, 0] * u.pc.to(u.cm)
+        self.y = coords[:, 1] * u.pc.to(u.cm)
+        self.z = coords[:, 2] * u.pc.to(u.cm)
+        self.rho_g = np.array(data['Density']) * 1.3816327e-23
+
+        # Read in temperature if available
+        if 'Temperature' in data:
+            self.temp = np.array(data['Temperature'])
+        # Or maybe the krome temperature, when coupled with KROME
+        elif 'KromeTemperature' in data:
+            self.temp = np.array(data['KromeTemperature'])
+        
+        # Or derive from a barotropic equation of state
+        elif 'InternalEnergy' in data.keys() and 'Pressure' in data.keys():
+            self.temp = data['InternalEnergy'] / np.array(data['Pressure'])
+
+        else:
+            self.temp = np.zeros(self.rho_g.shape)
 
         # Recenter the particles based on the center of mass
-        self.x -= np.average(self.x, weights=self.dens)
-        self.y -= np.average(self.y, weights=self.dens)
-        self.z -= np.average(self.z, weights=self.dens)
+        self.x -= np.average(self.x, weights=self.rho_g)
+        self.y -= np.average(self.y, weights=self.rho_g)
+        self.z -= np.average(self.z, weights=self.rho_g)
 
 class Gadget:
     """ Handle snapshots from the Gadget code. """
     def __init__(self, filename):
-        pass
-
-class Arepo:
-    """ Handle snapshots from the AREPO code. """
-    def __init__(self, filename):
-
         # Read in particle coordinates and density
-        self.data = h5py.File(filename, 'r')['PartType0']
-        coords = np.array(self.data['Coordinates'])
-        dens = np.array(self.data['Density'])
+        data = h5py.File(filename, 'r')['PartType0']
+        coords = np.array(data['Coordinates'])
+        dens = np.array(data['Density'])
         self.x = coords[:, 0] * u.au.to(u.cm)
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
         self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
 
         # Read in temperature if available
-        if 'Temperature' in self.data.keys():
-            self.temp = self.data['Temperature']
+        if 'Temperature' in data.keys():
+            self.temp = data['Temperature']
+
+        # Or derive from a barotropic equation of state
+        elif 'InternalEnergy' in data.keys() and 'Pressure' in data.keys():
+            self.temp = data['InternalEnergy'] / np.array(data['Pressure'])
+
         else:
-            # Compute it from a barotropic equation of state
-            if 'Pressure' in self.data.keys() and \
-                'InternalEnergy' in self.data.keys():
+            self.temp = np.zeros(self.rho_g.shape)
 
-                self.temp = np.array(self.data['InternalEnergy'])
-                self.temp /= np.array(self.data['Pressure'])
-            else:
-                self.temp = np.zeros(self.rho_g.shape)
-
-class Gradsph:
-    """ Handle snapshots from the GRADSPH code. """
+class Arepo:
+    """ Handle snapshots from the AREPO code. """
     def __init__(self, filename):
-        pass
 
-class Gandalf:
-    """ Handle snapshots from the GANDALF code. """
+        # Read in particle coordinates and density
+        data = h5py.File(filename, 'r')['PartType0']
+        coords = np.array(data['Coordinates'])
+        dens = np.array(data['Density'])
+        self.x = coords[:, 0] * u.au.to(u.cm)
+        self.y = coords[:, 1] * u.au.to(u.cm)
+        self.z = coords[:, 2] * u.au.to(u.cm)
+        self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
+
+        # Read in temperature if available
+        if 'Temperature' in data.keys():
+            self.temp = data['Temperature']
+
+        # Or derive from a barotropic equation of state
+        elif 'InternalEnergy' in data.keys() and 'Pressure' in data.keys():
+            self.temp = data['InternalEnergy'] / np.array(data['Pressure'])
+
+        else:
+            self.temp = np.zeros(self.rho_g.shape)
+
+class Phantom:
+    """ Handle snapshots from the PHANTOM code. """
     def __init__(self, filename):
-        pass
+        
+        # Read in particle coordinates and density
+        data = h5py.File(filename, 'r')['particles']
+        coords = data['xyz'].value
+        # Derive density from the particle mass / h**3
+        # src: https://github.com/dmentipl/plonk/blob/main/src/plonk/snap/readers/phantom.py
+    
+        dens = np.array(data['Density'])
+        self.x = coords[:, 0] * u.au.to(u.cm)
+        self.y = coords[:, 1] * u.au.to(u.cm)
+        self.z = coords[:, 2] * u.au.to(u.cm)
+        self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)

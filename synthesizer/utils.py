@@ -151,14 +151,19 @@ def download_file(url, msg=None, verbose=True, *args, **kwargs):
     # Strip the filename from the base url
     filename = url.split('/')[-1]
 
-    # Perform an HTTP GET request
-    req = requests.get(url)
+    try:
+        # Perform an HTTP GET request
+        req = requests.get(url)
 
-    # Raise the HTTP Error if existent
-    req.raise_for_status()
+        # Raise the HTTP Error if existent
+        req.raise_for_status()
 
-    # Download the file
-    download = Path(filename).write_bytes(req.content)
+        # Download the file
+        download = Path(filename).write_bytes(req.content)
+
+    except requests.ConnectionError:
+        print_(f'No internet connection. Unable to download file.', red=True)
+        return False
 
 
 def ring(soundfile=None):

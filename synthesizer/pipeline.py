@@ -87,14 +87,15 @@ class Pipeline:
         self.sphfile = sphfile
         self.amrfile = amrfile
         self.ncells = ncells
-        self.bbox = bbox
-        self.rout = rout
+        self.bbox = bbox * u.au.to(u.cm) if bbox is not None else bbox
+        self.rout = rout * u.au.to(u.cm) if rout is not None else rout
         self.g2d = g2d
 
         # Create a grid instance
         print('')
         utils.print_('Creating model grid ...\n', bold=True)
     
+        # Create a grid using an analytical model
         if model is not None:
             self.grid = gridder.AnalyticalModel(
                 model=self.model,
@@ -108,6 +109,7 @@ class Pipeline:
             # Create a model density grid 
             self.grid.create_model()
 
+        # Create a grid from SPH particles
         elif sphfile is not None:
             self.grid = gridder.CartesianGrid(
                 ncells=self.ncells, 
@@ -123,13 +125,9 @@ class Pipeline:
             # Read the SPH data
             self.grid.read_sph(self.sphfile, source=source)
 
-            # Set a bounding box to trim the new grid
-            if self.bbox is not None:
-                self.grid.trim_box(bbox=self.bbox * u.au.to(u.cm))
-
-            # Set a radius at which to trim the new grid
-            if self.rout is not None:
-                self.grid.trim_box(rout=self.rout * u.au.to(u.cm))
+            # Set a bounding box or radius to trim particles outside of it
+            if self.bbox is not None or self.rout is not None:
+                self.grid.trim_box()
     
             # Interpolate the SPH points onto a regular cartesian grid
             self.grid.interpolate_points('dens', 'linear', fill='min')
@@ -137,6 +135,7 @@ class Pipeline:
             if temperature:
                 self.grid.interpolate_points('temp', 'linear', fill='min')
 
+        # Create a grid from an AMR grid
         elif amrfile is not None:
             self.grid = gridder.CartesianGrid(
                 ncells=self.ncells, 
@@ -163,7 +162,6 @@ class Pipeline:
         self.grid.write_density_file()
         
         if temperature:
-            # Write the dust temperature distribution to radmc3d file format
             self.grid.write_temperature_file()
 
         if vector_field is not None:
@@ -187,7 +185,8 @@ class Pipeline:
         
         # Call RADMC3D to read the grid file and generate a VTK representation
         if vtk:
-            self.grid.create_vtk(dust_density=False, dust_temperature=True, rename=True)
+            self.grid.create_vtk(
+                dust_density=False, dust_temperature=True, rename=True)
         
         # Visualize the VTK grid file using ParaView
         if render:
@@ -224,30 +223,33 @@ class Pipeline:
 
         repo = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
                 f'opacity_tables/'
+
+        is_local = lambda f: utils.file_exists(f, raise_=False)
         
         if self.material == 's':
+            if is_local('astrosil-Draine2003.lnk'): repo = ''
             mix = dustmixer.Dust(name='Silicate')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
+            mix.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'g':
             mix = dustmixer.Dust(name='Graphite')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
+            mix.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
         elif self.material == 'p':
             mix = dustmixer.Dust(name='Pyroxene')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk(f'{repo}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
+            mix.set_nk(f'{repo}pyr-mg70-Dorschner1995.lnk', get_dens=False)
             mix.set_density(3.01, cgs=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
             mix = dustmixer.Dust(name='Organics')
             mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-            mix.set_nk(f'{repo}/organics-Pollack1995.nk', meters=True, skip=1, 
+            mix.set_nk(f'{repo}organics-Pollack1995.nk', meters=True, skip=1, 
                 get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
@@ -256,8 +258,8 @@ class Pipeline:
             gra = dustmixer.Dust(name='Graphite')
             sil.set_lgrid(self.lmin, self.lmax, self.nlam)
             gra.set_lgrid(self.lmin, self.lmax, self.nlam)
-            sil.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
-            gra.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
+            sil.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
+            gra.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
@@ -357,14 +359,14 @@ class Pipeline:
                 f.write('---------\n')
                 f.write(f'{self.inputstyle}\n')
                 f.write('0\n')
-                f.write(f'{self._get_opac_file_name()}\n')
+                f.write(f'{self._get_opac_file_name(self.nspec, self.dgrowth)}\n')
 
                 if self.nspec > 1:
                     # Define a second species 
                     f.write('---------\n')
                     f.write(f'{self.inputstyle}\n')
                     f.write('0\n')
-                    f.write(f'{self._get_opac_file_name()}\n')
+                    f.write(f'{self._get_opac_file_name(self.nspec, self.dgrowth)}\n')
                 f.write('---------\n')
 
         if dustkappa:
@@ -440,16 +442,17 @@ class Pipeline:
                             'dustmixer, as in synthesizer --opacity using '+\
                             'default values.', blue=True)
 
-                        self.dust = self.dust_opacity(amin=0.1, amax=self.amax, 
+                        self.dust = self.dust_opacity(amin=0.1, amax=10, 
                             na=100, q=3.5, nang=181, material=self.material)
             else:
-                utils.print_(
-                    f'Unable to download opacity table. I will call ' +\
-                    'dustmixer, as in synthesizer --opacity using default ' +\
-                    'values.', blue=True)
+                if len(glob('dustkaps*')) == 0 or self.overwrite:
+                    utils.print_(
+                        f'Unable to download opacity table. I will call ' +\
+                        'dustmixer, as synthesizer --opacity using default '+\
+                        ' values.', blue=True)
 
-                self.dust = self.dust_opacity(amin=0.1, amax=self.amax,  
-                    na=100, q=3.5, nang=181, material=self.material)
+                    self.dust = self.dust_opacity(amin=0.1, amax=10,  
+                        na=100, q=3.5, nang=181, material=self.material)
                 
 
         # Call RADMC3D and pipe the output also to radmc3d.out
@@ -528,8 +531,16 @@ class Pipeline:
                             f'Unable to download opacity table. I will call ' +\
                             'dustmixer, as in synthesizer --opacity.', bold=True
                         )
-                        Pipeline.dust_opacity(amin=0.1, amax=self.amax, na=100,  
+                        self.dust_opacity(amin=0.1, amax=self.amax, na=100,  
                             q=3.5, nang=181, material=self.material)
+            else:
+                if len(glob('dustkappa*')) == 0 or self.overwrite:
+                    utils.print_(
+                        f'Unable to download opacity table. I will call ' +\
+                        'dustmixer, as in synthesizer --opacity.', bold=True
+                    )
+                    self.dust_opacity(amin=0.1, amax=self.amax, na=100,  
+                        q=3.5, nang=181, material=self.material)
                         
 
         # If align factors were calculated within the pipeline, don't overwrite
@@ -557,7 +568,7 @@ class Pipeline:
 
         # Generate a 2D optical depth map
         if self.tau:
-            self._plot_tau(show)
+            self.plot_tau(show)
             
         # Set the RADMC3D command by concatenating options
         cmd = f'radmc3d image '
@@ -776,7 +787,8 @@ class Pipeline:
         dl = np.diff(amr)[0]
         nx = int(np.cbrt(rho.size))
         rho = rho.reshape((nx, nx, nx))
-        tau2d = np.sum(rho * self._get_opacity() * dl, axis=0).T
+        #tau2d = np.sum(rho * self._get_opacity() * dl, axis=0).T
+        tau2d = np.sum(rho * 1 * dl, axis=0).T
         if show:
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
@@ -794,15 +806,15 @@ class Pipeline:
 
         utils.write_fits('tau.fits', data=tau2d, overwrite=True)
 
-    def _get_opac_file_name(self):
+    def _get_opac_file_name(self, csubl=0, dgrowth=False):
         """ Get the name of the currently used opacity file dustk*.inp """
 
-        if self.csubl > 0:
+        if csubl > 0:
             ext = f'{self.dcomp[1]}-a{self.amax}um-{int(self.csubl)}org'
         else:
             ext = f'{self.material}-a{self.amax}um'
 
-        if self.dgrowth:
+        if dgrowth:
             ext = f'{self.dcomp[0]}-a1000um'
         else:
             ext = f'{self.dcomp[0]}-a{self.amax}um'
@@ -826,7 +838,7 @@ class Pipeline:
         header = np.loadtxt(self.opacfile, max_rows=2)
         iformat = header[0]
         nlam = header[1]
-        skip = 3 if 'kapscat' in opacfile else 2
+        skip = 3 if 'kapscat' in self.opacfile else 2
         d = ascii.read(self.opacfile, data_start=skip, data_end=nlam + skip)
         l = d['col1']
         self.k_abs = d['col2']

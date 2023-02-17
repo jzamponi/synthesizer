@@ -605,13 +605,11 @@ class Dust():
             int_Z11_dmu = -np.trapz(self.z11[i, :], mu)
             int_Z11_mu_dmu = -np.trapz(self.z11[i, :] * mu, mu)
 
-            if self.nang < 5:
-                self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
-                self.gsca[i] = \
-                    np.trapz(Csca * self.gsca_a[i] * phi) / self.ksca[i]
-            else:
-                self.ksca[i] = 2 * np.pi * int_Z11_dmu
-                self.gsca[i] = 2 * np.pi * int_Z11_mu_dmu / self.ksca[i]
+            #self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
+            #self.gsca[i] = \
+            #    np.trapz(Csca * self.gsca_a[i] * phi) / self.ksca[i]
+            self.ksca[i] = 2 * np.pi * int_Z11_dmu
+            self.gsca[i] = 2 * np.pi * int_Z11_mu_dmu / self.ksca[i]
 
             self.kext[i] = np.trapz(Cext * phi, self.a) / mass_norm
             self.kabs[i] = np.trapz(Cabs * phi, self.a) / mass_norm

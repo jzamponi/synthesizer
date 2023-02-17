@@ -53,7 +53,7 @@ class CasaScript():
         # tclean
         self.vis = f'{self.project}/{self.project}.{self.arrayfile}.noisy.ms'
         self.imagename = lambda q: f'{self.project}/clean_{q}'
-        self.imsize = 300
+        self.imsize = 100
         if self.resolution is None:
             self.cell = '0.008arcsec'
         else:
