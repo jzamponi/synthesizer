@@ -80,6 +80,11 @@ class Gizmo:
         self.z = coords[:, 2] * u.pc.to(u.cm)
         self.rho_g = np.array(data['Density']) * 1.3816327e-23
 
+        # Recenter the particles based on the center of mass
+        self.x -= np.average(self.x, weights=self.rho_g)
+        self.y -= np.average(self.y, weights=self.rho_g)
+        self.z -= np.average(self.z, weights=self.rho_g)
+
         # Read in temperature if available
         if 'Temperature' in data:
             self.temp = np.array(data['Temperature'])
@@ -94,11 +99,6 @@ class Gizmo:
         else:
             self.temp = np.zeros(self.rho_g.shape)
 
-        # Recenter the particles based on the center of mass
-        self.x -= np.average(self.x, weights=self.rho_g)
-        self.y -= np.average(self.y, weights=self.rho_g)
-        self.z -= np.average(self.z, weights=self.rho_g)
-
 class Gadget:
     """ Handle snapshots from the Gadget code. """
     def __init__(self, filename):
@@ -110,6 +110,11 @@ class Gadget:
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
         self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
+
+        # Recenter the particles based on the center of mass
+        self.x -= np.average(self.x, weights=self.rho_g)
+        self.y -= np.average(self.y, weights=self.rho_g)
+        self.z -= np.average(self.z, weights=self.rho_g)
 
         # Read in temperature if available
         if 'Temperature' in data.keys():

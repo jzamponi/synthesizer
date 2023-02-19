@@ -192,7 +192,7 @@ class AnalyticalModel():
             # Regular grid
             f.write('0\n')
             # Coordinate system: cartesian
-            f.write('0\n')
+            f.write('1\n')
             # Gridinfo
             f.write('0\n')
             # Number of cells

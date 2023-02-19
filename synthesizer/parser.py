@@ -122,7 +122,7 @@ def synthesizer():
     parser.add_argument('--nphot', action='store', type=float, default=1e5,
         help='Set the number of photons for scattering and thermal Monte Carlo')
 
-    parser.add_argument('--nthreads', action='store', default=1, 
+    parser.add_argument('--nthreads', action='store', default=4, 
         help='Number of threads used for the Monte-Carlo runs')
 
     parser.add_argument('-rt', '--raytrace', action='store_true', default=False,

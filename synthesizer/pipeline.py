@@ -23,7 +23,8 @@ class Pipeline:
     
     def __init__(self, lam=1300, amax=10, nphot=1e5, nthreads=1, sootline=300,
             lmin=0.1, lmax=1e5, nlam=200, star=None, dgrowth=False, csubl=0, 
-            material='sg', polarization=False, alignment=False, overwrite=False, verbose=True):
+            material='sg', polarization=False, alignment=False, overwrite=False,
+            verbose=True):
         self.steps = []
         self.lam = int(lam)
         self.lmin = lmin
@@ -219,7 +220,8 @@ class Pipeline:
             self.nang = nang
 
         # Use 1 until the parallelization of polarization is properly implemented
-        nth = self.nthreads if not self.polarization else 1
+        nth = self.nthreads
+        nth = 1
 
         repo = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
                 f'opacity_tables/'
@@ -328,6 +330,7 @@ class Pipeline:
                 f.write(f'nphot = {int(self.nphot)}\n')
                 f.write(f'nphot_scat = {int(self.nphot)}\n')
                 f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
+                f.write(f'countwrite = {int(self.nphot / 10)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
                 if self.alignment and not mc: 
                     f.write(f'alignment_mode = 1\n')
@@ -415,8 +418,7 @@ class Pipeline:
         self.nphot = nphot
 
         # Generate only the input files that are not available in the directory
-        if not os.path.exists('radmc3d.inp') or self.overwrite:
-            self.generate_input_files(inpfile=True, mc=True)
+        self.generate_input_files(inpfile=True, mc=True)
 
         if not os.path.exists('wavelength_micron.inp') or self.overwrite:
             self.generate_input_files(wavelength=True)
@@ -475,7 +477,7 @@ class Pipeline:
     @utils.elapsed_time
     def raytrace(self, lam=None, incl=None, npix=None, sizeau=None, show=True, 
             distance=141, tau=False, tau_surf=None, show_tau_surf=False, 
-            noscat=True, fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
+            noscat=False, fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
@@ -492,10 +494,12 @@ class Pipeline:
             self.lam = lam
         if npix is not None:
             self.npix = npix
-        if sizeau is not None:
-            self.sizeau = sizeau
         if incl is not None:
             self.incl = incl
+        if sizeau is not None:
+            self.sizeau = sizeau 
+        else:
+            self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au))
 
         # Explicitly the model rotate by 180.
         # Only for the current model. This line should be later removed.
@@ -505,8 +509,7 @@ class Pipeline:
         if noscat: self.scatmode = 0
 
         # Generate only the input files that are not available in the directory
-        if not os.path.exists('radmc3d.inp') or self.overwrite:
-            self.generate_input_files(inpfile=True)
+        self.generate_input_files(inpfile=True)
 
         if not os.path.exists('wavelength_micron.inp') or self.overwrite:
             self.generate_input_files(wavelength=True)
@@ -573,10 +576,11 @@ class Pipeline:
         # Set the RADMC3D command by concatenating options
         cmd = f'radmc3d image '
         cmd += f'lambda {self.lam} '
+        cmd += f'sizeau {self.sizeau} '
+        cmd += f'noscat ' if noscat else ' '
+        cmd += f'stokes ' if self.polarization else ' '
         cmd += f'incl {self.incl} ' if self.incl is not None else ' '
         cmd += f'npix {self.npix} ' if self.npix is not None else ' '
-        cmd += f'sizeau {self.sizeau} ' if self.sizeau is not None else ' '
-        cmd += f'stokes ' if self.polarization else ' '
         cmd += f'{" ".join(radmc3d_cmds)} '
         
 
@@ -737,6 +741,8 @@ class Pipeline:
                     bright_temp=False,
                     verbose=False,
                 )
+            fig.axis_labels.hide()
+            fig.tick_labels.hide()
         except Exception as e:
             utils.print_(
                 f'Unable to plot radmc3d image.\n{e}', bold=True)
@@ -864,3 +870,13 @@ class Pipeline:
                     raise Exception(
                         f'{utils.color.red}\r[RADMC3D] {line}{utils.color.none}')
 
+    def _get_bbox(self):
+        """ Return the current value for bbox if existent, i.e., if --grid was 
+            given. Otherwise read from the grid file.
+        """
+
+        try:
+            return self.bbox
+        except AttributeError:
+            g = np.loadtxt('amr_grid.inp', skiprows=6)
+            return (g[-1] - g[0]) / 2
