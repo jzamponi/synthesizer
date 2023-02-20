@@ -121,8 +121,10 @@ class Gadget:
             self.temp = data['Temperature']
 
         # Or derive from a barotropic equation of state
-        elif 'InternalEnergy' in data.keys() and 'Pressure' in data.keys():
-            self.temp = data['InternalEnergy'] / np.array(data['Pressure'])
+        elif 'Pressure' in data.keys():
+            kB = c.k_B.cgs.value
+            mu = 2.3 * (c.m_e + c.m_p).cgs.value
+            self.temp = (mu / kB) * np.array(data['Pressure']) / self.rho_g
 
         else:
             self.temp = np.zeros(self.rho_g.shape)
@@ -133,20 +135,33 @@ class Arepo:
 
         # Read in particle coordinates and density
         data = h5py.File(filename, 'r')['PartType0']
-        coords = np.array(data['Coordinates'])
-        dens = np.array(data['Density'])
+        coords = np.array(data.get('Coordinates'))
+        dens = np.array(data.get('Density'))
+        mass = np.array(data.get('Masses'))
+        press = np.array(data.get('Pressure'))
+        energy = np.array(data.get('InternalEnergy'))
         self.x = coords[:, 0] * u.au.to(u.cm)
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
-        self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
+        self.rho_g = dens * 1e-10 * (u.Msun/u.au**3).to(u.g/u.cm**3)
+        self.mass = mass * 1e-10 * u.Msun.to(u.g) 
+        self.press = press * 1e-10 * (u.Msun/u.au/u.s**2).to(u.g/u.cm/u.s**2) 
+        self.u = energy * 1e-10 * (u.au**2*u.Msun/u.s**2).to(u.cm**2*u.g/u.s**2)
+
+        # Recenter the particles based on the center of mass
+        self.x -= np.average(self.x, weights=self.mass)
+        self.y -= np.average(self.y, weights=self.mass)
+        self.z -= np.average(self.z, weights=self.mass)
 
         # Read in temperature if available
         if 'Temperature' in data.keys():
-            self.temp = data['Temperature']
+            self.temp = data.get('Temperature')
 
         # Or derive from a barotropic equation of state
-        elif 'InternalEnergy' in data.keys() and 'Pressure' in data.keys():
-            self.temp = data['InternalEnergy'] / np.array(data['Pressure'])
+        elif 'Pressure' in data.keys():
+            kB = c.k_B.cgs.value
+            mu = 2.3 * (c.m_e + c.m_p).cgs.value
+            self.temp = (mu / kB) * self.press / self.rho_g
 
         else:
             self.temp = np.zeros(self.rho_g.shape)

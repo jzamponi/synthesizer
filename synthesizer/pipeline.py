@@ -258,9 +258,10 @@ class Pipeline:
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif 'sg' in self.material:
-            mix.name = 'Sil-Gra' 
             sil = mix
             gra = mix
+            sil.name = 'Silicate'
+            gra.name = 'Graphite'
             sil.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
             gra.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
@@ -327,6 +328,7 @@ class Pipeline:
         # Register the pipeline step 
         self.steps.append('dustmixer')
     
+
     def generate_input_files(self, mc=False, inpfile=False, wavelength=False, 
             stars=False, dustopac=False, dustkappa=False, dustkapalignfact=False,
             grainalign=False):
@@ -511,7 +513,7 @@ class Pipeline:
         if sizeau is not None:
             self.sizeau = sizeau 
         else:
-            self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au))
+            self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au)) + 1
 
         # Explicitly the model rotate by 180.
         # Only for the current model. This line should be later removed.

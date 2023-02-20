@@ -209,7 +209,7 @@ class CartesianGrid():
         self.yc = np.linspace(rmin, rmax, self.ncells)
         self.zc = np.linspace(rmin, rmax, self.ncells)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
-        self.bbox = rmax - rmin
+        self.bbox = (rmax - rmin) / 2
 
         utils.print_(f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +\
             f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells per side.')
@@ -344,7 +344,7 @@ class CartesianGrid():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
-    def plot_dens_midplane(self):
+    def plot_dens_midplane(self, axis='xz'):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
@@ -364,8 +364,16 @@ class CartesianGrid():
                 bbox = self.bbox * u.cm.to(u.au)
                 extent = [-bbox, bbox] * 2
         
+            # Extract the middle plane 
             plane = self.ncells//2 - 1
-            slice_ = self.interp_dens[..., plane].T
+    
+            # Select the axis to plot
+            if axis == 'xy' or axis == 0:
+                slice_ = self.interp_dens[..., plane].T
+            elif axis == 'xz' or axis == 1:
+                slice_ = self.interp_dens[:, plane, :].T
+            elif axis == 'yz' or axis == 2:
+                slice_ = self.interp_dens[plane, ...].T
 
             vmin = slice_.min() if slice_.min() > 0 else None
             vmax = slice_.max() if slice_.max() < np.inf else None
@@ -403,7 +411,7 @@ class CartesianGrid():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-    def plot_temp_midplane(self):
+    def plot_temp_midplane(self, axis='xz'):
         """ Plot the temperature midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
@@ -423,8 +431,16 @@ class CartesianGrid():
                 extent = [-self.bbox * u.cm.to(u.au), 
                         self.bbox * u.cm.to(u.au)] * 2
 
+            # Extract the middle plane
             plane = self.ncells//2 - 1
-            slice_ = self.interp_temp[..., plane].T
+
+            # Select the axis to plot
+            if axis == 'xy' or axis == 0:
+                slice_ = self.interp_dens[..., plane].T
+            elif axis == 'xz' or axis == 1:
+                slice_ = self.interp_dens[:, plane, :].T
+            elif axis == 'yz' or axis == 2:
+                slice_ = self.interp_dens[plane, ...].T
 
             vmin = slice_.min() if slice_.min() > 0 else None
             vmax = slice_.max() if slice_.max() < np.inf else None
@@ -452,12 +468,34 @@ class CartesianGrid():
     def plot_dens_3d(self): 
         """ Render the interpolated 3D field using Mayavi """
         try:
-            utils.print_('Visualizing the interpolated field ...')
             from mayavi import mlab
+            from mayavi.modules.grid_plane import GridPlane
+            from mayavi.modules.text3d import Text3D
+
+            utils.print_('Visualizing the interpolated density field ...')
 
             mlab.figure(
                 size=(1000, 900),  bgcolor=(1, 1, 1),  fgcolor=(0.5, 0.5, 0.5))
-            mlab.contour3d(self.interp_dens, contours=20, opacity=0.2)
+            mlab.outline()
+            mlab.colorbar()
+            pdens = mlab.contour3d(
+                self.interp_dens, contours=20, opacity=0.2, colormap='CMRMap')
+            cdens = mlab.colorbar(pdens, 
+                orientation='vertical', title=r'Dust Density (g cm$^{-3}$)')
+
+            obs_plane = GridPlane()
+            obs_plane.grid_plane.axis = 'z'
+            obs_plane.actor.property.representation = 'surface'
+            obs_plane.actor.property.opacity = 0.2
+            obs_plane.actor.property.color = (0.76, 0.72, 0.87)
+            
+            obs_label = Text3D()
+            text3d.text = 'Observer Plane'
+            text3d.actor.property.color = (0.76, 0.72, 0.87)
+            text3d.position = np.array([30, 15, 0])
+            text3d.scale = np.array([15, 15, 15])
+            text3d.orientation = np.array([0, 0, 90])
+            text3d.orient_to_camera = False
 
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
@@ -476,9 +514,35 @@ class CartesianGrid():
     def plot_temp_3d(self): 
         """ Render the interpolated 3D field using Mayavi """
         try:
-            utils.print_('Visualizing the interpolated field ...')
             from mayavi import mlab
-            mlab.contour3d(self.interp_temp, contours=20, opacity=0.2)
+            from mayavi.modules.grid_plane import GridPlane
+            from mayavi.modules.text3d import Text3D
+
+            utils.print_('Visualizing the interpolated field ...')
+
+            mlab.figure(
+                size=(1000, 900),  bgcolor=(1, 1, 1),  fgcolor=(0.5, 0.5, 0.5))
+            mlab.outline()
+            mlab.colorbar()
+            pdens = mlab.contour3d(
+                self.interp_temp, contours=20, opacity=0.2, colormap='inferno')
+            cdens = mlab.colorbar(pdens, 
+                orientation='vertical', title=r'Gas Temperature (K)')
+
+            obs_plane = GridPlane()
+            obs_plane.grid_plane.axis = 'z'
+            obs_plane.actor.property.representation = 'surface'
+            obs_plane.actor.property.opacity = 0.2
+            obs_plane.actor.property.color = (0.76, 0.72, 0.87)
+            
+            obs_label = Text3D()
+            text3d.text = 'Observer Plane'
+            text3d.actor.property.color = (0.76, 0.72, 0.87)
+            text3d.position = np.array([30, 15, 0])
+            text3d.scale = np.array([15, 15, 15])
+            text3d.orientation = np.array([0, 0, 90])
+            text3d.orient_to_camera = False
+
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', bold=True)
             mlab.show()
