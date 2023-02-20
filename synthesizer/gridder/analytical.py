@@ -53,7 +53,7 @@ class AnalyticalModel():
         xc = 0.5 * (self.xw[0: self.ncells] + self.xw[1: self.ncells + 1])
         yc = 0.5 * (self.yw[0: self.ncells] + self.yw[1: self.ncells + 1])
         zc = 0.5 * (self.zw[0: self.ncells] + self.zw[1: self.ncells + 1])
-        x, y, z = np.meshgrid(xc, yc, zc, indexing='xy')
+        x, y, z = np.meshgrid(xc, yc, zc, indexing='ij')
         self.X = x
         self.Y = y
         self.Z = z

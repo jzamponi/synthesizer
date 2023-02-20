@@ -74,19 +74,19 @@ def synthesizer():
         'helicoidal', 'dipole', 'quadrupole'], 
         help='Create a vectory field for alignment of elongated grains.')
 
-    parser.add_argument('--temperature', action='store_true', default=False,
+    parser.add_argument('--temperature', action='store_true', default=False, 
         help='Write the dust temperature from the model.')
 
-    parser.add_argument('--show-grid-2d', action='store_true', default=False,
+    parser.add_argument('--show-grid-2d', action='store_true', default=False,  
         help='Plot the midplane of the newly created grid')
 
-    parser.add_argument('--show-grid-3d', action='store_true', default=False,
+    parser.add_argument('--show-grid-3d', action='store_true', default=False, 
         help='Render the new cartesian grid in 3D')
 
-    parser.add_argument('--vtk', action='store_true', default=False,
+    parser.add_argument('--vtk', action='store_true', default=False, 
         help='Call RADCM3D to create a VTK file of the newly created grid')
 
-    parser.add_argument('--render', action='store_true', default=False,
+    parser.add_argument('--render', action='store_true', default=False, 
         help='Visualize the VTK file using ParaView')
 
     parser.add_argument('-op', '--opacity', action='store_true', default=False,
@@ -107,16 +107,19 @@ def synthesizer():
     parser.add_argument('--q', action='store', type=float, default=-3.5,
         help='Slope of the grain size distribution in logspace')
 
-    parser.add_argument('--nang', action='store', type=int, default=3,
+    parser.add_argument('--nang', action='store', type=int, default=181,
         help='Number of scattering angles used to sample the dust efficiencies')
 
-    parser.add_argument('--show-opacity', action='store_true', default=False,
+    parser.add_argument('--show-opacity', action='store_true', default=False, 
         help='Plot the resulting dust opacities.')
 
-    parser.add_argument('--show-nk', action='store_true', default=False,
+    parser.add_argument('--show-nk', action='store_true', default=False, 
         help='Plot the input dust optical constants.')
 
-    parser.add_argument('-mc', '--monte-carlo', action='store_true', default=False,
+    parser.add_argument('--nopb', action='store_true', default=False, 
+        help='Disable printing of an opacity progressbar. Useful when logging to file. ')
+
+    parser.add_argument('-mc', '--monte-carlo', action='store_true', default=False, 
         help='Call RADMC3D to raytrace the new grid and plot an image')
 
     parser.add_argument('--nphot', action='store', type=float, default=1e5,
@@ -253,7 +256,7 @@ def synthesizer():
     # Generate the dust opacity tables
     if cli.opacity:
         pipeline.dust_opacity(cli.amin, cli.amax, cli.na, cli.q, cli.nang,
-            show_nk=cli.show_nk, show_opac=cli.show_opacity)
+            show_nk=cli.show_nk, show_opac=cli.show_opacity, pb=cli.nopb)
 
     # Run a thermal Monte-Carlo
     if cli.monte_carlo:

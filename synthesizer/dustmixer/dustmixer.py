@@ -58,6 +58,7 @@ class Dust():
         self.kabs = None
         self.nlam = None
         self.l = np.logspace(-1, 5, 200) * u.micron.to(u.cm)
+        self.pb = True
 
     def __str__(self):
         print(f'{self.name}')
@@ -173,20 +174,39 @@ class Dust():
         self.l = np.logspace(np.log10(lmin), np.log10(lmax), nlam)
         self.l = self.l * u.micron.to(u.cm)
 
-    def interpolate(self, l_in, q):
+    def interpolate(self, l_in, q, at):
         """ Linearly interpolate a quantity within the wavelength grid. """
 
-        return interp1d(l_in, q)(self.l)
+        return interp1d(l_in, q)(at)
 
-    def extrapolate(self, lim, q, boundary):
+    def extrapolate(self, q, boundary):
         """ Extrapolate a quantity within the wavelength grid. """
+    
+        utils.print_('Extrapolating optical constants')
         if boundary == 'lower':
-           utils.not_implemented() 
+            # Extrapolate as a constant, i.e., prepend a copy of the first value
+            return np.insert(q, 0, q[0])
 
         elif boundary == 'upper':
-           utils.not_implemented() 
+            # Extrapolate in log-log
+            l = self.l_nk
+            if l[0] < l[1]:
+                new_q = q[-1] * np.exp(
+                    (np.log(l.max())-np.log(l[-1])) * 
+                    (np.log(q[-1]) - np.log(q[-2])) / 
+                    (np.log(l[-1]) - np.log(l[-2]))
+                )
+            else:
+                new_q = q[0] * np.exp(
+                    (np.log(l.max())-np.log(l[0])) * 
+                    (np.log(q[0]) - np.log(q[1])) / 
+                    (np.log(l[0]) - np.log(l[1]))
+                )
 
-    def set_nk(self, path, skip=0, meters=False, cm=False, get_dens=False):
+            return np.insert(q, -1, new_q)
+
+    def set_nk(self, path, skip=0, microns=True, meters=False, cm=False, 
+            get_dens=False):
         """ Set n and k values by reading them from file. 
             Assumes wavelength is provided in microns unless specified otherwise
             Also, can optionally read the density from the file, assuming it is
@@ -209,31 +229,34 @@ class Dust():
             self.set_density(dens)
                 
         # Override the default column names used by astropy.io.ascii.read
-        column_name = {'l': 'col1', 'n': 'col2', 'k': 'col3'}
-        self.n = self.datafile[column_name['n']]
-        self.k = self.datafile[column_name['k']]
+        self.l_nk = np.array(self.datafile['col1'])
+        self.n = np.array(self.datafile['col2'])
+        self.k = np.array(self.datafile['col3'])
         
         # Parse the wavelength units to ensure they are in cm
         if meters:
-            self.l_nk = self.datafile[column_name['l']] * u.m.to(u.cm)
-        elif cm:
-            self.l_nk = self.datafile[column_name['l']]
-        else:
-            self.l_nk = self.datafile[column_name['l']] * u.micron.to(u.cm)
+            self.l_nk = self.l_nk * u.m.to(u.cm)
+        elif microns:
+            self.l_nk = self.l_nk * u.micron.to(u.cm)
 
-        # Extrapolate lower and upper boundaries
+        # Extrapolate n and k lower and upper boundaries
         if self.l.min() < self.l_nk.min(): 
-            self.n = self.extrapolate(self.l.min(), self.n, boundary='lower')
-            self.k = self.extrapolate(self.l.min(), self.k, boundary='lower')
-
+            self.l_nk = np.insert(self.l_nk, 0, self.l.min())
+            self.n = self.extrapolate(self.n, boundary='lower')
+            self.k = self.extrapolate(self.k, boundary='lower')
         
         if self.l.max() > self.l_nk.max():
-            self.n = self.extrapolate(self.l.max(), self.n, boundary='upper')
-            self.k = self.extrapolate(self.l.max(), self.k, boundary='upper')
+            self.l_nk = np.insert(self.l_nk, -1, self.l.max())
+            self.n = self.extrapolate(self.n, boundary='upper')
+            self.k = self.extrapolate(self.k, boundary='upper')
 
-        # Interpolate optical constants within the wavelenght grid
-        self.n = self.interpolate(self.l_nk, self.n).clip(min=1e-10)
-        self.k = self.interpolate(self.l_nk, self.k).clip(min=1e-10)
+        # Interpolate optical constants within the new wavelenght grid
+        self.n = self.interpolate(self.l_nk, self.n, at=self.l)
+        self.k = self.interpolate(self.l_nk, self.k, at=self.l)
+
+        # Clip n and k to avoid zeros or infinites
+        self.n = self.n.clip(min=1e-10, max=None)
+        self.k = self.n.clip(min=1e-10, max=None)
 
     def mix(self, other):
         """
@@ -318,9 +341,10 @@ class Dust():
         self.Z34 = np.zeros((self.l.size, nang))
         self.Z44 = np.zeros((self.l.size, nang))
         self.current_a = a
+        a_micron = a * u.cm.to(u.micron)
 
         utils.print_(f'Calulating {self.name} efficiencies Q for a grain size'+\
-            f' of {np.round(a*u.cm.to(u.micron), 1)} microns', verbose=verbose)
+            f' of {np.round(a_micron, 1)} microns', verbose=verbose)
 
         # Calculate dust efficiencies for a bare grain
         if algorithm.lower() == 'bhmie':
@@ -333,10 +357,10 @@ class Dust():
                 # Define the complex refractive index (m)
                 self.m = complex(self.n[i], self.k[i])
                 
-                # Call BHMie (Bohren & Huffman 1986)
+                # Compute dust efficiencies using BHMIE (Bohren & Huffman 1986)
                 bhmie_ = bhmie.bhmie(self.x, self.m, self.angles)
                 
-                # Store the Mueller matrix elements and dust efficiencies
+                # Store the results
                 s1 = bhmie_[0]
                 s2 = bhmie_[1]
                 self.Qext[i] = bhmie_[2]
@@ -345,17 +369,14 @@ class Dust():
                 self.Qbac[i] = bhmie_[5]
                 self.Gsca[i] = bhmie_[6]
 
-                # Compute the muller matrix elements per angle if necessary
-                # Source: Radiative Transfer Lecture Notes (P. 98) K. Dullemond 
-                # and the radmc3d Manual and the radmc3d script makedustopac.py
                 if nang >= 5:
-                    # Equations 6.33-36 from Lecture Notes and 4.77 from BH86
+                    # Compute the Scattering Matrix Elements
                     self.s11 = 0.5 * (np.abs(s2)**2 + np.abs(s1)**2)
                     self.s12 = 0.5 * (np.abs(s2)**2 - np.abs(s1)**2)
                     self.s33 = 0.5 * np.real(s1 * np.conj(s2) + s2 * np.conj(s1))
                     self.s34 = 0.5 * np.imag(s1 * np.conj(s2) - s2 * np.conj(s1))
                     
-                    # "Polarized scattering off dust particles" from the manual
+                    # Normlize the Scattering Matrix 
                     k = 2 * np.pi / l_
                     factor = 1 / (k**2 * self.mass)
                     self.Z11[i, :] = self.s11 / (k**2 * self.mass)
@@ -368,8 +389,7 @@ class Dust():
         # Calculate dust efficiencies for a coated grain
         elif algorithm.lower() == 'bhcoat':
 
-            utils.print_('The implementation for coated grains is currently '+\
-                'incomplete.', red=True)
+            utils.not_implemented('Opacities for coated grains.')
 
             if coat is None:
                 raise ValueError(f'In order to use bhcoat you must provide '+\
@@ -421,7 +441,7 @@ class Dust():
             endl = '\r' if i != self.a.size-1 else '\n'
             bar = (' ' * 20).replace(" ", "⣿⣿", int(counter / 100 * 20))
             sys.stdout.write(f'[get_efficiencies] Using {self.nproc} processes'+\
-                f' | Progress: {counter} % |{bar}| {endl}')
+                f' | Progress: {counter} % |{bar:>30}| {endl}')
             sys.stdout.flush()
 
         return self.Qext, self.Qsca, self.Qabs, self.Gsca, \
@@ -605,11 +625,13 @@ class Dust():
             int_Z11_dmu = -np.trapz(self.z11[i, :], mu)
             int_Z11_mu_dmu = -np.trapz(self.z11[i, :] * mu, mu)
 
-            #self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
-            #self.gsca[i] = \
-            #    np.trapz(Csca * self.gsca_a[i] * phi) / self.ksca[i]
-            self.ksca[i] = 2 * np.pi * int_Z11_dmu
-            self.gsca[i] = 2 * np.pi * int_Z11_mu_dmu / self.ksca[i]
+            if self.nang < 5:
+                self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
+                self.gsca[i] = \
+                    np.trapz(Csca * self.gsca_a[i] * phi) / self.ksca[i]
+            else:
+                self.ksca[i] = 2 * np.pi * int_Z11_dmu
+                self.gsca[i] = 2 * np.pi * int_Z11_mu_dmu / self.ksca[i]
 
             self.kext[i] = np.trapz(Cext * phi, self.a) / mass_norm
             self.kabs[i] = np.trapz(Cabs * phi, self.a) / mass_norm
@@ -807,6 +829,11 @@ class Dust():
         plt.tight_layout()
 
         return utils.plot_checkout(fig, show, savefig)
+
+    def _get_kappa_at_lam(self, lam):
+        """ Return the extinction dust opacity at a given wavelength """
+
+        return self.interpolate(self.l, self.kext, at=lam*u.micron.to(u.cm))
 
 
 

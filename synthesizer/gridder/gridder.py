@@ -209,6 +209,7 @@ class CartesianGrid():
         self.yc = np.linspace(rmin, rmax, self.ncells)
         self.zc = np.linspace(rmin, rmax, self.ncells)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
+        self.bbox = rmax - rmin
 
         utils.print_(f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +\
             f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells per side.')

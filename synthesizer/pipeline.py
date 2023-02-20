@@ -156,6 +156,8 @@ class Pipeline:
             raise ValueError(f'{utils.color.red}When --grid is set, either --'+\
                 f'model, --sphfile or --amrfile must be given{utils.color.none}')
 
+        self.bbox = self.grid.bbox
+
         # Write the new cartesian grid to radmc3d file format
         self.grid.write_grid_file()
 
@@ -199,7 +201,7 @@ class Pipeline:
 
     @utils.elapsed_time
     def dust_opacity(self, amin, amax, na, q=-3.5, nang=3, material=None, 
-            show_nk=False, show_opac=False, savefig=None):
+            show_nk=False, pb=True, show_opac=False, savefig=None):
         """
             Call dustmixer to generate dust opacity tables. 
             New dust materials can be manually defined here if desired.
@@ -227,39 +229,38 @@ class Pipeline:
                 f'opacity_tables/'
 
         is_local = lambda f: utils.file_exists(f, raise_=False)
+
+        mix = dustmixer.Dust()
+        mix.pb = pb
+        mix.set_lgrid(self.lmin, self.lmax, self.nlam)
         
         if self.material == 's':
             if is_local('astrosil-Draine2003.lnk'): repo = ''
-            mix = dustmixer.Dust(name='Silicate')
-            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+            mix.name = 'Silicate'
             mix.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'g':
-            mix = dustmixer.Dust(name='Graphite')
-            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+            mix.name = 'Graphite'
             mix.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
         elif self.material == 'p':
-            mix = dustmixer.Dust(name='Pyroxene')
-            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+            mix.name = 'Pyroxene-Mg70'
             mix.set_nk(f'{repo}pyr-mg70-Dorschner1995.lnk', get_dens=False)
             mix.set_density(3.01, cgs=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
-            mix = dustmixer.Dust(name='Organics')
-            mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+            mix.name = 'Organics'
             mix.set_nk(f'{repo}organics-Pollack1995.nk', meters=True, skip=1, 
                 get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
-        elif self.material == 'sg':
-            sil = dustmixer.Dust(name='Silicate')
-            gra = dustmixer.Dust(name='Graphite')
-            sil.set_lgrid(self.lmin, self.lmax, self.nlam)
-            gra.set_lgrid(self.lmin, self.lmax, self.nlam)
+        elif 'sg' in self.material:
+            mix.name = 'Sil-Gra' 
+            sil = mix
+            gra = mix
             sil.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
             gra.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
@@ -268,28 +269,36 @@ class Pipeline:
             # Sum the opacities weighted by their mass fractions
             mix = sil * 0.625 + gra * 0.375
 
-        elif self.material == 'sgo':
-            sil = dustmixer.Dust(name='Silicate')
-            gra = dustmixer.Dust(name='Graphite')
-            org = dustmixer.Dust(name='Organics')
-            sil.set_lgrid(self.lmin, self.lmax, self.nlam)
-            gra.set_lgrid(self.lmin, self.lmax, self.nlam)
-            org.set_lgrid(self.lmin, self.lmax, self.nlam)
+        elif 'sgo' in self.material:
+            mix.name = 'Sil-Gra-Org'
+            sil = mix
+            gra = mix
+            org = mix
             sil.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
             gra.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
-            gra.set_nk(f'{repo}/organics-Pollack1995.lnk', meters=True, skip=1,
+            org.set_nk(
+                f'{repo}/organics-Pollack1995.lnk', meters=True, skip=1,
                  get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
+            self.mf_sil = 0.625
+            self.mf_gra = 0.375
+            if self.csubl > 0:
+                # Carbon sublimation: 
+                # Replace a percentage of graphite "csubl" by refractory organics
+                self.mf_org = (self.csubl / 100) * mf_gra
+                self.mf_gra = self.mf_gra - self.mf_org
+            else:
+                self.mf_org = 0
+
             # Sum the opacities weighted by their mass fractions
-            mix = sil * 0.625 + gra * 0.375
+            mix = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
 
         else:
             try:
-                mix = dustmixer.Dust(self.material.split('/')[-1].split('.')[0])
-                mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+                mix.name = self.material.split('/')[-1].split('.')[0]
                 mix.set_nk(path=self.material, skip=1, get_dens=True)
                 mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
                 self.material = mix.name
@@ -311,6 +320,9 @@ class Pipeline:
         # Write the alignment efficiencies
         if self.alignment:
             mix.write_align_factor(f'{self.material}-a{int(self.amax)}um')
+
+        # Store the current dust opacity
+        self.k_ext = mix._get_kappa_at_lam(self.lam) 
 
         # Register the pipeline step 
         self.steps.append('dustmixer')
@@ -534,7 +546,7 @@ class Pipeline:
                             f'Unable to download opacity table. I will call ' +\
                             'dustmixer, as in synthesizer --opacity.', bold=True
                         )
-                        self.dust_opacity(amin=0.1, amax=self.amax, na=100,  
+                        self.dust_opacity(amin=0.1, amax=10, na=100,  
                             q=3.5, nang=181, material=self.material)
             else:
                 if len(glob('dustkappa*')) == 0 or self.overwrite:
@@ -542,7 +554,7 @@ class Pipeline:
                         f'Unable to download opacity table. I will call ' +\
                         'dustmixer, as in synthesizer --opacity.', bold=True
                     )
-                    self.dust_opacity(amin=0.1, amax=self.amax, na=100,  
+                    self.dust_opacity(amin=0.1, amax=10, na=100,  
                         q=3.5, nang=181, material=self.material)
                         
 
@@ -719,7 +731,7 @@ class Pipeline:
 
         try:
             if self.alignment:
-                utils.print_(f'Rotating vectors by 90 deg.')
+                utils.print_(f'Rotating vectors by 90 deg.', blue=True)
 
             if self.polarization:
                 fig = utils.polarization_map(
@@ -832,6 +844,10 @@ class Pipeline:
         """ Read in an opacity file, interpolate and find the opacity at lambda """
         from scipy.interpolate import interp2d
 
+        # Check if it was created by dustmixer
+        if self.k_ext is not None:
+           return self.k_ext 
+
         # Generate the opacfile string and make sure file exists
         self._get_opac_file_name()
 
@@ -841,6 +857,7 @@ class Pipeline:
                 "I will calculate tau using k_ext = 1 g/cm3.", bold=True)
             return 1
 
+        # Read in opacity file (dustkap*.inp) and interpolate to find k_ext
         header = np.loadtxt(self.opacfile, max_rows=2)
         iformat = header[0]
         nlam = header[1]
@@ -876,7 +893,11 @@ class Pipeline:
         """
 
         try:
-            return self.bbox
+            if self.bbox is not None:
+                return self.bbox
+            else:
+                g = np.loadtxt('amr_grid.inp', skiprows=6)
+                return (g[-1] - g[0]) / 2
         except AttributeError:
             g = np.loadtxt('amr_grid.inp', skiprows=6)
             return (g[-1] - g[0]) / 2
