@@ -19,6 +19,7 @@
 
 import os
 import sys
+import copy
 import errno
 import itertools
 import progressbar
@@ -74,8 +75,7 @@ class Dust():
         if self.kext is None:
             raise ValueError('Dust opacities kext, ksca and kabs are not set')
 
-        dust = Dust(self)
-
+        dust = copy.deepcopy(self)
         dust.kext = self.kext + other.kext
         dust.ksca = self.ksca + other.ksca
         dust.kabs = self.kabs + other.kabs
@@ -85,15 +85,8 @@ class Dust():
         dust.z33 = self.z33 + other.z33
         dust.z34 = self.z34 + other.z34
         dust.z44 = self.z44 + other.z44
-        dust.gsca = self.gsca + other.gsca
-        dust.amin = self.amin
-        dust.amax = self.amax
-        dust.q = self.q
-        dust.na = self.na
-        dust.nang = self.nang
-        dust.angles = self.angles
-        dust.mf_all = self.mf_all
-        dust.dens = self.dens
+        dust.gsca = (self.gsca * self.ksca + other.gsca * other.ksca) / (
+                    self.ksca + other.ksca)
         dust.name = ' + '.join([self.name, other.name])
 
         return dust
@@ -104,7 +97,26 @@ class Dust():
             dust = dust1 * 0.67
             The order is important. The number must be on the right side. 
         """
-        return self.set_mass_fraction(mass_fraction) 
+        if self.kext is None:
+            raise ValueError('Dust opacities kext, ksca and kabs are not set')
+    
+        if isinstance(mass_fraction, Dust): 
+            raise ValueError('Dust can only multiplied by scalars.')
+        
+        dust = copy.deepcopy(self)
+        dust.kext = self.kext * mass_fraction
+        dust.ksca = self.ksca * mass_fraction
+        dust.kabs = self.kabs * mass_fraction
+        dust.z11 = self.z11 * mass_fraction
+        dust.z12 = self.z12 * mass_fraction
+        dust.z22 = self.z22 * mass_fraction
+        dust.z33 = self.z33 * mass_fraction
+        dust.z34 = self.z34 * mass_fraction
+        dust.z44 = self.z44 * mass_fraction
+        dust.mf = mass_fraction
+        dust.mf_all.append(mass_fraction)
+
+        return dust
 
     def __rmul__(self, other):
         """ Rightsided multiplication of Dust objects """
@@ -117,40 +129,6 @@ class Dust():
     def __truediv__(self, other):
         """ Division of Dust objects by scalars """
         return self * (1 / other)
-
-    def set_mass_fraction(self, mass_fraction):
-        """ Set the mass fraction of the dust component. """
-
-        if self.kext is None:
-            raise ValueError('Dust opacities kext, ksca and kabs are not set')
-    
-        if isinstance(mass_fraction, Dust): 
-            raise ValueError('Dust can only multiplied by scalars.')
-        
-        dust = Dust(self)
-        dust.name = self.name
-        dust.l = self.l
-        dust.kext = self.kext * mass_fraction
-        dust.ksca = self.ksca * mass_fraction
-        dust.kabs = self.kabs * mass_fraction
-        dust.gsca = self.gsca * mass_fraction
-        dust.z11 = self.z11 * mass_fraction
-        dust.z12 = self.z12 * mass_fraction
-        dust.z22 = self.z22 * mass_fraction
-        dust.z33 = self.z33 * mass_fraction
-        dust.z34 = self.z34 * mass_fraction
-        dust.z44 = self.z44 * mass_fraction
-        dust.nang = self.nang
-        dust.amin = self.amin
-        dust.amax = self.amax
-        dust.q = self.q
-        dust.na = self.na
-        dust.angles = self.angles
-        dust.mf = mass_fraction
-        dust.mf_all.append(mass_fraction)
-        dust.dens = self.dens
-
-        return dust
 
     def check_mass_fractions(self):
         if np.sum(self.mf_all) != 1:
@@ -217,11 +195,11 @@ class Dust():
         if "http" in path:
             utils.download_file(path)
 
-        # Strip the filename for the full given path
-        path = path.split('/')[-1]
+        # Strip the filename from the full given path
+        filename = path.split('/')[-1]
 
         # Read the table
-        utils.print_(f'Reading optical constants from: {path}', end='')
+        utils.print_(f'Reading optical constants from: {filename}', end='')
         self.datafile = ascii.read(path, data_start=skip)
 
         # Optionally read the density as the second number from the file header
@@ -579,8 +557,9 @@ class Dust():
         self.z34_a = np.swapaxes(self.z34_a, 0, 1)
         self.z44_a = np.swapaxes(self.z44_a, 0, 1)
         
-        utils.print_(f'Integrating opacities and scattering matrix using '+\
-            f'a power-law slope of {q = }')
+        utils.print_(f'Integrating opacities ', end='')
+        print(f'and scattering matrix ' if self.scatmatrix else '', end='')
+        print(f'a power-law slope of {q = }')
 
         # Mass integral: int (a^q * a^3) da = [amax^(q+4) - amin^(q-4)]/(q-4)
         q4 = self.q + 4
@@ -812,11 +791,11 @@ class Dust():
         utils.print_(f'Plotting scattering parameter gsca')
 
         p.semilogx(self.l*u.cm.to(u.micron), self.gsca, ls='-', c='black')
-        p.text(0.05, 0.95, r'$g=\int_{-1}^1 p(\mu)\mu d\mu,\,\,\mu=\cos \theta$',
-            fontsize=13, transform=p.transAxes)
+        p.text(0.55, 0.90, r'$g=\int_{-1}^1 p(\mu)\mu d\mu,\,\,\mu=\cos \theta$',
+            fontsize=18, transform=p.transAxes)
         p.set_xlabel('Wavelength (microns)')
         p.set_ylabel(r'$g_{\rm sca}$')
-        #p.set_ylim(-1, 1)
+        p.set_ylim(-1, 1)
         p.set_xlim(1e-1, 3e4)
         plt.tight_layout()
         return utils.plot_checkout(fig, show, savefig)
@@ -848,7 +827,8 @@ class Dust():
     def _get_kappa_at_lam(self, lam):
         """ Return the extinction dust opacity at a given wavelength """
 
-        return self.interpolate(self.l, self.kext, at=lam*u.micron.to(u.cm))
+        return np.float(self.interpolate(
+            self.l, self.kext, at=lam*u.micron.to(u.cm)))
 
 
 

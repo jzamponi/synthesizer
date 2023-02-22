@@ -81,6 +81,7 @@ class CartesianGrid():
             self.sph = Phantom(filename)
 
         else:
+            print('')
             raise ValueError(f'Source = {source} is currently not supported')
             
         self.x = self.sph.x
@@ -118,12 +119,6 @@ class CartesianGrid():
 
             frame = str(filename).zfill(5)
             data.rho = data.read(f"o_d__{frame}")
-            data.Br = data.read(f"o_b1_{frame}")
-            data.Bth = data.read(f"o_b2_{frame}")
-            data.Bph = data.read(f"o_b3_{frame}")
-            data.Vr = data.read(f"o_v1_{frame}")
-            data.Vth = data.read(f"o_v2_{frame}")
-            data.Vph = data.read(f"o_v3_{frame}")
             data.trim_ghost_cells(field_type='coords')
             data.trim_ghost_cells(field_type='scalar')
             data.trim_ghost_cells(field_type='vector')
@@ -348,7 +343,7 @@ class CartesianGrid():
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the density grid midplane at z = 0')
+            utils.print_(f'Plotting the density grid midplane')
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
@@ -381,7 +376,7 @@ class CartesianGrid():
             if np.all(slice_ == np.zeros(slice_.shape)): 
                 raise ValueError('Density midplane is exactly 0.')
 
-            plt.title(r'Dust Density Midplane at $z=0$ (g cm$^{-3}$)')
+            plt.title(r'Dust Density Midplane (g cm$^{-3}$)')
             plt.imshow(slice_, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
                 cmap='BuPu',
@@ -415,7 +410,7 @@ class CartesianGrid():
         """ Plot the temperature midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the temperature grid midplane at z = 0')
+            utils.print_(f'Plotting the temperature grid midplane')
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
@@ -436,66 +431,106 @@ class CartesianGrid():
 
             # Select the axis to plot
             if axis == 'xy' or axis == 0:
-                slice_ = self.interp_dens[..., plane].T
+                slice_ = self.interp_temp[..., plane].T
             elif axis == 'xz' or axis == 1:
-                slice_ = self.interp_dens[:, plane, :].T
+                slice_ = self.interp_temp[:, plane, :].T
             elif axis == 'yz' or axis == 2:
-                slice_ = self.interp_dens[plane, ...].T
+                slice_ = self.interp_temp[plane, ...].T
 
             vmin = slice_.min() if slice_.min() > 0 else None
             vmax = slice_.max() if slice_.max() < np.inf else None
 
             if np.all(slice_ == np.zeros(slice_.shape)): 
-                raise ValueError('Density midplane is exactly 0.')
+                raise ValueError('Temperature midplane is exactly 0.')
 
             plt.imshow(
                 slice_,
-                norm=LogNorm(vmin=None, vmax=None),
+                norm=LogNorm(vmin=vmin, vmax=vmax),
                 cmap='inferno',
                 extent=extent,
             )
             plt.colorbar()
             plt.xlabel('AU')
             plt.ylabel('AU')
-            plt.title(r'Temperature Midplane at $z=0$ (K)')
+            plt.title(r'Temperature Midplane (K)')
             plt.show()
 
         except Exception as e:
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-
-    def plot_dens_3d(self): 
+    def plot_3d(self, density=False, temperature=False): 
         """ Render the interpolated 3D field using Mayavi """
         try:
             from mayavi import mlab
-            from mayavi.modules.grid_plane import GridPlane
+            from mayavi.api import Engine
             from mayavi.modules.text3d import Text3D
+            from mayavi.modules.grid_plane import GridPlane
 
-            utils.print_('Visualizing the interpolated density field ...')
+            utils.print_('Visualizing the interpolated field ...')
 
-            mlab.figure(
-                size=(1000, 900),  bgcolor=(1, 1, 1),  fgcolor=(0.5, 0.5, 0.5))
-            mlab.outline()
-            mlab.colorbar()
-            pdens = mlab.contour3d(
-                self.interp_dens, contours=20, opacity=0.2, colormap='CMRMap')
-            cdens = mlab.colorbar(pdens, 
-                orientation='vertical', title=r'Dust Density (g cm$^{-3}$)')
+            if density:
+                data = self.interp_dens
+                title = r'Dust Density (g cm$^{-3}$)'
 
+            elif temperature:
+                data = self.interp_temp
+                title = r'Gas Temperature (g cm$^{-3}$)'
+            
+            else:
+                return False
+
+            # Initialize the figure and scene
+            engine = Engine()
+            engine.start()
+            fig = mlab.figure(
+                size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2))
+
+            # Render data
+            plot = mlab.contour3d(
+                data, contours=20, opacity=0.2, colormap='inferno')
+
+            # Add a colorbar
+            cbar = mlab.colorbar(plot, orientation='vertical', title=title)
+
+            # Add a bounding box frame             
+            bbox = int(np.round(self.bbox * u.cm.to(u.au), 1))
+            mlab.outline(
+                figure=fig, 
+                extent=[0, 2*bbox-1] * 3, 
+            )
+            mlab.axes(
+                ranges=[-bbox, bbox] * 3,
+                xlabel='AU', ylabel='AU', zlabel='AU', nb_labels=3
+            )
+        
+            # Handle figure items
+            manager = engine.scenes[0].children[0].children[0]
+
+            # Customize the colobar
+            lut = manager.scalar_lut_manager
+            lut.title_text_property.italic = False
+            lut.title_text_property.font_family = 'times'
+            lut.title_text_property.font_size = 23
+
+            # Paint one face of the box to represent the observing plane
             obs_plane = GridPlane()
+            engine.add_filter(obs_plane, manager)
             obs_plane.grid_plane.axis = 'z'
+            obs_plane.grid_plane.position = 0
             obs_plane.actor.property.representation = 'surface'
             obs_plane.actor.property.opacity = 0.2
             obs_plane.actor.property.color = (0.76, 0.72, 0.87)
             
+            # Label the plane in 3D
             obs_label = Text3D()
-            text3d.text = 'Observer Plane'
-            text3d.actor.property.color = (0.76, 0.72, 0.87)
-            text3d.position = np.array([30, 15, 0])
-            text3d.scale = np.array([15, 15, 15])
-            text3d.orientation = np.array([0, 0, 90])
-            text3d.orient_to_camera = False
+            engine.add_filter(obs_label, manager)
+            obs_label.text = 'Observer Plane'
+            obs_label.actor.property.color = (0.76, 0.72, 0.87)
+            obs_label.position = np.array([30, 15, 0])
+            obs_label.scale = np.array([6, 6, 6])
+            obs_label.orientation = np.array([0, 0, 90])
+            obs_label.orient_to_camera = False
 
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
@@ -504,47 +539,6 @@ class CartesianGrid():
                 "If you don't see much, it's probably a matter of adjusting "+\
                 "the contours. ", blue=True)
 
-            mlab.show()
-
-        except Exception as e:
-            utils.print_('Unable to show the 3D grid.',  red=True)
-            utils.print_(e, bold=True)
-
-
-    def plot_temp_3d(self): 
-        """ Render the interpolated 3D field using Mayavi """
-        try:
-            from mayavi import mlab
-            from mayavi.modules.grid_plane import GridPlane
-            from mayavi.modules.text3d import Text3D
-
-            utils.print_('Visualizing the interpolated field ...')
-
-            mlab.figure(
-                size=(1000, 900),  bgcolor=(1, 1, 1),  fgcolor=(0.5, 0.5, 0.5))
-            mlab.outline()
-            mlab.colorbar()
-            pdens = mlab.contour3d(
-                self.interp_temp, contours=20, opacity=0.2, colormap='inferno')
-            cdens = mlab.colorbar(pdens, 
-                orientation='vertical', title=r'Gas Temperature (K)')
-
-            obs_plane = GridPlane()
-            obs_plane.grid_plane.axis = 'z'
-            obs_plane.actor.property.representation = 'surface'
-            obs_plane.actor.property.opacity = 0.2
-            obs_plane.actor.property.color = (0.76, 0.72, 0.87)
-            
-            obs_label = Text3D()
-            text3d.text = 'Observer Plane'
-            text3d.actor.property.color = (0.76, 0.72, 0.87)
-            text3d.position = np.array([30, 15, 0])
-            text3d.scale = np.array([15, 15, 15])
-            text3d.orientation = np.array([0, 0, 90])
-            text3d.orient_to_camera = False
-
-            utils.print_('HINT: If you wanna play with the figure, press '+\
-                'the nice icon in the upper left corner.', bold=True)
             mlab.show()
 
         except Exception as e:

@@ -181,11 +181,11 @@ class Pipeline:
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
-            self.grid.plot_dens_3d()
+            self.grid.plot_3d(density=True)
 
         # Render the temperature volume in 3D using Mayavi
         if show_3d and temperature:
-            self.grid.plot_temp_3d()
+            self.grid.plot_3d(temperature=True)
         
         # Call RADMC3D to read the grid file and generate a VTK representation
         if vtk:
@@ -229,7 +229,7 @@ class Pipeline:
         mix = dustmixer.Dust()
         mix.pb = pb
         mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-        mix.scatmat = self.polarization
+        mix.scatmatrix = self.polarization
 
         source_path = Path(__file__).resolve()
         source_dir = source_path.parent
@@ -257,53 +257,7 @@ class Pipeline:
             mix.set_density(3.01, cgs=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
 
-        elif 'sgo-old' in self.material:
-            mix.name = 'Sil-Gra-Org'
-
-            sil = copy.deepcopy(mix)
-            sil.name = 'Silicate'
-            sil.set_nk(f'silicate.nk', skip=2, meters=True, get_dens=False)
-            sil.set_density(3.5, cgs=True)
-            sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            if show_nk: sil.plot_nk(show=show_nk, savefig=savefig)
-
-            gra_per = copy.deepcopy(mix)
-            gra_per.name = 'Graphite'
-            gra_per.set_nk(f'graphite_perpend.nk', skip=2, meters=True)
-            gra_per.set_density(2.25, cgs=True)
-            gra_per.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            if show_nk: gra_per.plot_nk(show=show_nk, savefig=savefig)
-
-            gra_par = copy.deepcopy(mix)
-            gra_par.name = ' '
-            gra_par.set_nk(f'graphite_parallel.nk', skip=2, meters=True)
-            gra_par.set_density(2.25, cgs=True)
-            gra_par.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            if show_nk: gra_par.plot_nk(show=show_nk, savefig=savefig)
-
-            org = copy.deepcopy(mix)
-            org.name = 'Organics'
-            org.set_nk(f'{pathnk}/c-org-Henning1996.lnk', microns=True, skip=1,
-                 get_dens=True)
-            org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            if show_nk: org.plot_nk(show=show_nk, savefig=savefig)
-            show_nk = False
-
-            mf_sil = 0.625
-            mf_gra = 0.375
-            if self.csubl > 0:
-                # Carbon sublimation: 
-                # Replace a percentage of graphite "csubl" by refractory organics
-                mf_org = (self.csubl / 100) * mf_gra
-                mf_gra = mf_gra - mf_org
-            else:
-                mf_org = 0
-
-            # Sum the opacities weighted by their mass fractions
-            gra = (2/3)  * gra_per + (1/3) * gra_par
-            mix = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
-        
-        elif 'sg' in self.material:
+        elif self.material == 'sg':
             sil = copy.deepcopy(mix)
             sil.name = 'Silicate'
             sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
@@ -320,7 +274,7 @@ class Pipeline:
             # Sum the opacities weighted by their mass fractions
             mix = sil * 0.625 + gra * 0.375
 
-        elif 'sgo' in self.material:
+        elif self.material == 'sgo':
             mix.name = 'Sil-Gra-Org'
             sil = copy.deepcopy(mix)
             sil.name = 'Silicate'
@@ -516,7 +470,7 @@ class Pipeline:
                         self.dust = self.dust_opacity(amin=0.1, amax=10, 
                             na=100, q=3.5, nang=181, material=self.material)
             else:
-                if len(glob('dustkaps*')) == 0 or self.overwrite:
+                if len(glob('dustkapscat*')) == 0 or self.overwrite:
                     utils.print_(
                         f'Unable to download opacity table. I will call ' +\
                         'dustmixer, as synthesizer --opacity using default '+\
@@ -568,7 +522,7 @@ class Pipeline:
         if sizeau is not None:
             self.sizeau = sizeau 
         else:
-            self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au)) + 1
+            self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au))
 
         # Explicitly the model rotate by 180.
         # Only for the current model. This line should be later removed.
@@ -606,7 +560,7 @@ class Pipeline:
                         self.dust_opacity(amin=0.1, amax=10, na=100,  
                             q=3.5, nang=181, material=self.material)
             else:
-                if len(glob('dustkappa*')) == 0 or self.overwrite:
+                if len(glob('dustkapscat*')) == 0 or self.overwrite:
                     utils.print_(
                         f'Unable to download opacity table. I will call ' +\
                         'dustmixer, as in synthesizer --opacity.', bold=True
@@ -669,12 +623,12 @@ class Pipeline:
         utils.print_(
             f'Dust opacity used: kappa({self.lam}um) = ' +\
             f'{self._get_opacity():.2} cm2/g', blue=True)
-    
+
         # Generate FITS files from the image.out
         utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
 
         # Write pipeline's info to the FITS headers
-        utils.edit_header(fitsfile, 'INCLINATION', self.incl)
+        utils.edit_header(fitsfile, 'INCL', self.incl)
         utils.edit_header(fitsfile, 'SCATMODE', self.scatmode)
         utils.edit_header(fitsfile, 'NPHOT', self.nphot)
         utils.edit_header(fitsfile, 'OPACITY', self.kappa)
@@ -684,9 +638,9 @@ class Pipeline:
 
         if self.polarization:
             for st in ['Q', 'U']:
-                stfile = fitsfits.replace('I', st)
+                stfile = fitsfile.replace('I', st)
                 utils.radmc3d_casafits(stfile, stokes=st, dpc=distance)
-                utils.edit_header(stfile, 'INCLINATION', self.incl)
+                utils.edit_header(stfile, 'INCL', self.incl)
                 utils.edit_header(stfile, 'NPHOT', self.nphot)
                 utils.edit_header(stfile, 'OPACITY', self.kappa)
                 utils.edit_header(stfile, 'MATERIAL', self.material)
@@ -919,7 +873,7 @@ class Pipeline:
     
     def _get_opacity(self):
         """ Read in an opacity file, interpolate and find the opacity at lambda """
-        from scipy.interpolate import interp2d
+        from scipy.interpolate import interp1d
 
         # Check if it was created by dustmixer
         if self.kappa is not None:
@@ -928,28 +882,33 @@ class Pipeline:
         # Generate the opacfile string and make sure file exists
         self._get_opac_file_name()
 
-        if not utils.file_exists(self.opacfile, raise_=False): 
+        try:
+            # Read in opacity file (dustkap*.inp) and interpolate to find k_ext
+            utils.file_exists(self.opacfile) 
+            header = np.loadtxt(self.opacfile, max_rows=2)
+            iformat = int(header[0])
+            nlam = int(header[1])
+            skip = 3 if 'kapscat' in self.opacfile else 2
+            d = ascii.read(self.opacfile, data_start=skip, data_end=nlam + skip)
+            l = d['col1']
+            self.k_abs = d['col2']
+            self.k_sca = d['col3'] if iformat > 1 else np.zeros(l.shape)
+            self.k_ext = self.k_abs + self.k_sca
+            self.kappa = np.float(interp1d(l, self.k_ext)(self.lam))
+
+            return self.kappa
+
+        except Exception as e:
             utils.print_(
+                f'{e}\n' +\
                 f"I couldn't obtain the opacity from {self.opacfile}. " +\
-                "I will calculate tau using k_ext = 1 g/cm3.", bold=True)
-            return 1
+                "I will assume k_ext = 1 g/cm3.", bold=True)
 
-        # Read in opacity file (dustkap*.inp) and interpolate to find k_ext
-        header = np.loadtxt(self.opacfile, max_rows=2)
-        iformat = int(header[0])
-        nlam = int(header[1])
-        skip = 3 if 'kapscat' in self.opacfile else 2
-        d = ascii.read(self.opacfile, data_start=skip, data_end=nlam + skip)
-        l = d['col1']
-        self.k_abs = d['col2']
-        self.k_sca = d['col3'] if iformat > 1 else np.zeros(l.shape)
-        self.k_ext = self.k_abs + self.k_sca
-        self.kappa = self.k_ext
-
-        return interp1d(l, self.k_ext)(self.lam)
+            return 1.0
 
     def _radmc3d_banner(self):
-        print(f'{utils.color.blue}{"="*31}  <RADMC3D>  {"="*31}{utils.color.none}')
+        print(
+            f'{utils.color.blue}{"="*31}  RADMC3D  {"="*31}{utils.color.none}')
 
     def _catch_radmc3d_error(self):
         """ Raise an exception to halt synthesizer if RADMC3D ended in Error """
@@ -958,13 +917,21 @@ class Pipeline:
         utils.file_exists('radmc3d.out')
         with open ('radmc3d.out', 'r') as out:
             for line in out.readlines():
-                if 'error' in line.lower() or 'stop' in line.lower():
-                    raise Exception(
-                        f'{utils.color.red}\r[RADMC3D] {line}{utils.color.none}')
+                line = line.lower()
+                if 'error' in line or 'stop' in line:
+
+                    msg = lambda m: f'{utils.color.red}\r{m}{utils.color.none}'
+                    errmsg = msg(f'[RADMC3D] {line}...')
+
+                    if 'g=<cos(theta)>' in line or 'kappa_s' in line:
+                        errmsg += f' Try increasing --na or --nang '
+                        errmsg += f'(currently, na: {self.na} nang {self.nang})'
+
+                    raise Exception(errmsg)
 
     def _get_bbox(self):
-        """ Return the current value for bbox if existent, i.e., if --grid was 
-            given. Otherwise read from the grid file.
+        """ Return the current value for bbox if existent, namely, 
+            if --grid was given. Otherwise read from the grid file.
         """
 
         try:
