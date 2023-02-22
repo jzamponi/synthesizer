@@ -2,6 +2,7 @@
 
 import os
 import sys
+import copy
 import random
 import requests
 import subprocess
@@ -55,7 +56,7 @@ class Pipeline:
         self.sootline = sootline
         self.dgrowth = dgrowth
         self.opacfile = 'dustkapscatmat_' if self.polarization else 'dustkappa_' 
-        self.k_ext = None
+        self.kappa = None
         if star is None:
             self.xstar = 0
             self.ystar = 0
@@ -225,74 +226,131 @@ class Pipeline:
         nth = self.nthreads
         nth = 1
 
-        repo = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
-                f'opacity_tables/'
-
-        is_local = lambda f: utils.file_exists(f, raise_=False)
-
         mix = dustmixer.Dust()
         mix.pb = pb
         mix.set_lgrid(self.lmin, self.lmax, self.nlam)
+        mix.scatmat = self.polarization
+
+        source_path = Path(__file__).resolve()
+        source_dir = source_path.parent
+        pathnk = Path(source_dir/'dustmixer/nk')
         
         if self.material == 's':
-            if is_local('astrosil-Draine2003.lnk'): repo = ''
             mix.name = 'Silicate'
-            mix.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
+            mix.set_nk(f'{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'g':
             mix.name = 'Graphite'
-            mix.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
-            mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-
-        elif self.material == 'p':
-            mix.name = 'Pyroxene-Mg70'
-            mix.set_nk(f'{repo}pyr-mg70-Dorschner1995.lnk', get_dens=False)
-            mix.set_density(3.01, cgs=True)
+            mix.set_nk('{pathnk}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
             mix.name = 'Organics'
-            mix.set_nk(f'{repo}organics-Pollack1995.nk', meters=True, skip=1, 
+            mix.set_nk(f'{pathnk}/c-org-Henning1996.lnk', microns=True, skip=1, 
                 get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+
+        elif self.material == 'p':
+            mix.name = 'Pyroxene-Mg70'
+            mix.set_nk(f'{pathnk}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
+            mix.set_density(3.01, cgs=True)
+            mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+
+        elif 'sgo-old' in self.material:
+            mix.name = 'Sil-Gra-Org'
+
+            sil = copy.deepcopy(mix)
+            sil.name = 'Silicate'
+            sil.set_nk(f'silicate.nk', skip=2, meters=True, get_dens=False)
+            sil.set_density(3.5, cgs=True)
+            sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: sil.plot_nk(show=show_nk, savefig=savefig)
+
+            gra_per = copy.deepcopy(mix)
+            gra_per.name = 'Graphite'
+            gra_per.set_nk(f'graphite_perpend.nk', skip=2, meters=True)
+            gra_per.set_density(2.25, cgs=True)
+            gra_per.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: gra_per.plot_nk(show=show_nk, savefig=savefig)
+
+            gra_par = copy.deepcopy(mix)
+            gra_par.name = ' '
+            gra_par.set_nk(f'graphite_parallel.nk', skip=2, meters=True)
+            gra_par.set_density(2.25, cgs=True)
+            gra_par.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: gra_par.plot_nk(show=show_nk, savefig=savefig)
+
+            org = copy.deepcopy(mix)
+            org.name = 'Organics'
+            org.set_nk(f'{pathnk}/c-org-Henning1996.lnk', microns=True, skip=1,
+                 get_dens=True)
+            org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: org.plot_nk(show=show_nk, savefig=savefig)
+            show_nk = False
+
+            mf_sil = 0.625
+            mf_gra = 0.375
+            if self.csubl > 0:
+                # Carbon sublimation: 
+                # Replace a percentage of graphite "csubl" by refractory organics
+                mf_org = (self.csubl / 100) * mf_gra
+                mf_gra = mf_gra - mf_org
+            else:
+                mf_org = 0
+
+            # Sum the opacities weighted by their mass fractions
+            gra = (2/3)  * gra_per + (1/3) * gra_par
+            mix = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
         
         elif 'sg' in self.material:
-            sil = mix
-            gra = mix
+            sil = copy.deepcopy(mix)
             sil.name = 'Silicate'
-            gra.name = 'Graphite'
-            sil.set_nk(f'{repo}astrosil-Draine2003.lnk', skip=1, get_dens=True)
-            gra.set_nk(f'{repo}c-gra-Draine2003.lnk', skip=1, get_dens=True)
+            sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: sil.plot_nk(show=show_nk, savefig=savefig)
+
+            gra = copy.deepcopy(mix)
+            gra.name = 'Graphite'
+            gra.set_nk(f'{pathnk}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
             gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: gra.plot_nk(show=show_nk, savefig=savefig)
+            show_nk = False
 
             # Sum the opacities weighted by their mass fractions
             mix = sil * 0.625 + gra * 0.375
 
         elif 'sgo' in self.material:
             mix.name = 'Sil-Gra-Org'
-            sil = mix
-            gra = mix
-            org = mix
-            sil.set_nk(f'{repo}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
-            gra.set_nk(f'{repo}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
-            org.set_nk(
-                f'{repo}/organics-Pollack1995.lnk', meters=True, skip=1,
-                 get_dens=True)
+            sil = copy.deepcopy(mix)
+            sil.name = 'Silicate'
+            sil.set_nk('{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: sil.plot_nk(show=show_nk, savefig=savefig)
 
-            self.mf_sil = 0.625
-            self.mf_gra = 0.375
+            gra = copy.deepcopy(mix)
+            gra.name = 'Graphite'
+            gra.set_nk(f'{pathnk}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
+            gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: gra.plot_nk(show=show_nk, savefig=savefig)
+
+            org = copy.deepcopy(mix)
+            org.name = 'Organics'
+            org.set_nk(f'{pathnk}/c-org-Henning1996.lnk', microns=True, skip=1,
+                 get_dens=True)
+            org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            if show_nk: org.plot_nk(show=show_nk, savefig=savefig)
+            show_nk = False
+
+            mf_sil = 0.625
+            mf_gra = 0.375
             if self.csubl > 0:
                 # Carbon sublimation: 
                 # Replace a percentage of graphite "csubl" by refractory organics
-                self.mf_org = (self.csubl / 100) * mf_gra
-                self.mf_gra = self.mf_gra - self.mf_org
+                mf_org = (self.csubl / 100) * mf_gra
+                mf_gra = mf_gra - mf_org
             else:
-                self.mf_org = 0
+                mf_org = 0
 
             # Sum the opacities weighted by their mass fractions
             mix = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
@@ -301,12 +359,11 @@ class Pipeline:
             try:
                 mix.name = self.material.split('/')[-1].split('.')[0]
                 mix.set_nk(path=self.material, skip=1, get_dens=True)
-                mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
                 self.material = mix.name
 
             except Exception as e:
                 utils.print_(e, red=True)
-                raise ValueError(f'Material = {material} not found.')
+                raise ValueError(f'Material = {self.material} not found.')
 
         if show_nk or savefig is not None:
             mix.plot_nk(show=show_nk, savefig=savefig)
@@ -314,16 +371,13 @@ class Pipeline:
         if show_opac or savefig is not None:
             mix.plot_opacities(show=show_opac, savefig=savefig)
 
-        # Write the opacity table
-        mix.write_opacity_file(scatmat=self.polarization, 
-            name=f'{self.material}-a{int(self.amax)}um')
+        mix.write_opacity_file(name=f'{self.material}-a{int(self.amax)}um')
 
-        # Write the alignment efficiencies
         if self.alignment:
             mix.write_align_factor(f'{self.material}-a{int(self.amax)}um')
 
-        # Store the current dust opacity
-        self.k_ext = mix._get_kappa_at_lam(self.lam) 
+        # Store the current dust opacity in the pipeline instance
+        self.kappa = mix._get_kappa_at_lam(self.lam) 
 
         # Register the pipeline step 
         self.steps.append('dustmixer')
@@ -344,7 +398,8 @@ class Pipeline:
                 f.write(f'nphot = {int(self.nphot)}\n')
                 f.write(f'nphot_scat = {int(self.nphot)}\n')
                 f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
-                f.write(f'countwrite = {int(self.nphot / 10)}\n')
+                f.write(f'countwrite = {int(self.nphot / 100)}\n')
+                f.write(f'mc_scat_maxtauabs = {int(5)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
                 if self.alignment and not mc: 
                     f.write(f'alignment_mode = 1\n')
@@ -610,13 +665,33 @@ class Pipeline:
         self._radmc3d_banner()
         
         self._catch_radmc3d_error()
+
+        utils.print_(
+            f'Dust opacity used: kappa({self.lam}um) = ' +\
+            f'{self._get_opacity():.2} cm2/g', blue=True)
     
         # Generate FITS files from the image.out
         utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
 
+        # Write pipeline's info to the FITS headers
+        utils.edit_header(fitsfile, 'INCLINATION', self.incl)
+        utils.edit_header(fitsfile, 'SCATMODE', self.scatmode)
+        utils.edit_header(fitsfile, 'NPHOT', self.nphot)
+        utils.edit_header(fitsfile, 'OPACITY', self.kappa)
+        utils.edit_header(fitsfile, 'MATERIAL', self.material)
+        utils.edit_header(fitsfile, 'CSUBL', self.csubl)
+        utils.edit_header(fitsfile, 'NSPEC', self.nspec)
+
         if self.polarization:
-            utils.radmc3d_casafits('radmc3d_Q.fits', stokes='Q', dpc=distance)
-            utils.radmc3d_casafits('radmc3d_U.fits', stokes='U', dpc=distance)
+            for st in ['Q', 'U']:
+                stfile = fitsfits.replace('I', st)
+                utils.radmc3d_casafits(stfile, stokes=st, dpc=distance)
+                utils.edit_header(stfile, 'INCLINATION', self.incl)
+                utils.edit_header(stfile, 'NPHOT', self.nphot)
+                utils.edit_header(stfile, 'OPACITY', self.kappa)
+                utils.edit_header(stfile, 'MATERIAL', self.material)
+                utils.edit_header(stfile, 'CSUBL', self.csubl)
+                utils.edit_header(stfile, 'NSPEC', self.nspec)
 
         # Plot the new image in Jy/pixel
         if show:
@@ -807,8 +882,8 @@ class Pipeline:
         dl = np.diff(amr)[0]
         nx = int(np.cbrt(rho.size))
         rho = rho.reshape((nx, nx, nx))
-        #tau2d = np.sum(rho * self._get_opacity() * dl, axis=0).T
-        tau2d = np.sum(rho * 1 * dl, axis=0).T
+        tau2d = np.sum(rho * self._get_opacity() * dl, axis=0).T
+
         if show:
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
@@ -847,8 +922,8 @@ class Pipeline:
         from scipy.interpolate import interp2d
 
         # Check if it was created by dustmixer
-        if self.k_ext is not None:
-           return self.k_ext 
+        if self.kappa is not None:
+           return self.kappa 
 
         # Generate the opacfile string and make sure file exists
         self._get_opac_file_name()
@@ -861,17 +936,15 @@ class Pipeline:
 
         # Read in opacity file (dustkap*.inp) and interpolate to find k_ext
         header = np.loadtxt(self.opacfile, max_rows=2)
-        iformat = header[0]
-        nlam = header[1]
+        iformat = int(header[0])
+        nlam = int(header[1])
         skip = 3 if 'kapscat' in self.opacfile else 2
         d = ascii.read(self.opacfile, data_start=skip, data_end=nlam + skip)
         l = d['col1']
         self.k_abs = d['col2']
-        if iformat > 1: 
-            self.k_sca = d['col3']
-            self.k_ext = self.k_abs + self.k_sca
-        else:
-            self.k_ext = self.k_abs
+        self.k_sca = d['col3'] if iformat > 1 else np.zeros(l.shape)
+        self.k_ext = self.k_abs + self.k_sca
+        self.kappa = self.k_ext
 
         return interp1d(l, self.k_ext)(self.lam)
 

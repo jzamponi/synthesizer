@@ -157,12 +157,21 @@ class Arepo:
         if 'Temperature' in data.keys():
             self.temp = data.get('Temperature')
 
-        # Or derive from a barotropic equation of state
+        # Derive from a barotropic equation of state (Wurster et al. 2018, Eq.5)
         elif 'Pressure' in data.keys():
-            kB = c.k_B.cgs.value
-            mu = 2.3 * (c.m_e + c.m_p).cgs.value
-            self.temp = (mu / kB) * self.press / self.rho_g
+            k_B = c.k_B.cgs.value
+            m_H = (c.m_e + c.m_p).cgs.value
+            rho_c = 1e-14
+            rho_d = 1e-10
+            T_iso = 15
+            cs_iso2 = k_B * T_iso / 2.33 / m_H
+            self.temp = T_iso * np.ones(self.rho_g.shape)
 
+            self.temp[rho_c <= self.rho_g < rho_c] = \
+                        T_iso * (self.rho_g/rho_c)**(7/5)
+
+            self.temp[self.rho_g >= rho_d] = \
+                T_iso * (self.rho_g/rho_c)**(7/5) * (self.rho_g/rho_d)**(11/10)
         else:
             self.temp = np.zeros(self.rho_g.shape)
 

@@ -117,9 +117,11 @@ def synthesizer():
         help='Plot the input dust optical constants.')
 
     parser.add_argument('--nopb', action='store_true', default=False, 
-        help='Disable printing of an opacity progressbar. Useful when logging to file. ')
+        help='Disable printing of an opacity progressbar. ' +\
+            'Useful when logging to file. ')
 
-    parser.add_argument('-mc', '--monte-carlo', action='store_true', default=False, 
+    parser.add_argument('-mc', '--monte-carlo', 
+        action='store_true', default=False, 
         help='Call RADMC3D to raytrace the new grid and plot an image')
 
     parser.add_argument('--nphot', action='store', type=float, default=1e5,
@@ -256,7 +258,7 @@ def synthesizer():
     # Generate the dust opacity tables
     if cli.opacity:
         pipeline.dust_opacity(cli.amin, cli.amax, cli.na, cli.q, cli.nang,
-            show_nk=cli.show_nk, show_opac=cli.show_opacity, pb=cli.nopb)
+            show_nk=cli.show_nk, show_opac=cli.show_opacity, pb=not cli.nopb)
 
     # Run a thermal Monte-Carlo
     if cli.monte_carlo:

@@ -40,7 +40,7 @@ class Dust():
     """ Dust object. Defines the properties of a dust component. """
     verbose = False
 
-    def __init__(self, name=''):
+    def __init__(self, name='', scatmatrix=False):
         self.name = name
         self.l = []
         self.n = []
@@ -57,6 +57,7 @@ class Dust():
         self.ksca = None
         self.kabs = None
         self.nlam = None
+        self.scatmatrix = scatmatrix
         self.l = np.logspace(-1, 5, 200) * u.micron.to(u.cm)
         self.pb = True
 
@@ -182,7 +183,6 @@ class Dust():
     def extrapolate(self, q, boundary):
         """ Extrapolate a quantity within the wavelength grid. """
     
-        utils.print_('Extrapolating optical constants')
         if boundary == 'lower':
             # Extrapolate as a constant, i.e., prepend a copy of the first value
             return np.insert(q, 0, q[0])
@@ -216,17 +216,20 @@ class Dust():
         # Download the optical constants from the internet if path is a url
         if "http" in path:
             utils.download_file(path)
-            path = path.split('/')[-1]
+
+        # Strip the filename for the full given path
+        path = path.split('/')[-1]
 
         # Read the table
-        utils.print_(f'Reading optical constants from: {path}')
+        utils.print_(f'Reading optical constants from: {path}', end='')
         self.datafile = ascii.read(path, data_start=skip)
 
         # Optionally read the density as the second number from the file header
         if get_dens:
             dens = float(ascii.read(path, data_end=1)['col2'])
-            utils.print_(f'Reading in density from file: {dens} g/cm3')
             self.set_density(dens)
+
+        print(f' | Density: {dens} g/cm3' if get_dens else '')
                 
         # Override the default column names used by astropy.io.ascii.read
         self.l_nk = np.array(self.datafile['col1'])
@@ -241,11 +244,17 @@ class Dust():
 
         # Extrapolate n and k lower and upper boundaries
         if self.l.min() < self.l_nk.min(): 
+            utils.print_(
+                f'Extrapolating lower {self.name} constants to ' +\
+                f'{self.l.min()*u.cm.to(u.micron):.1e} microns')
             self.l_nk = np.insert(self.l_nk, 0, self.l.min())
             self.n = self.extrapolate(self.n, boundary='lower')
             self.k = self.extrapolate(self.k, boundary='lower')
         
         if self.l.max() > self.l_nk.max():
+            utils.print_(
+                f'Extrapolating upper {self.name} constants to ' +\
+                f'{self.l.max()*u.cm.to(u.micron):.1e} microns')
             self.l_nk = np.insert(self.l_nk, -1, self.l.max())
             self.n = self.extrapolate(self.n, boundary='upper')
             self.k = self.extrapolate(self.k, boundary='upper')
@@ -254,16 +263,14 @@ class Dust():
         self.n = self.interpolate(self.l_nk, self.n, at=self.l)
         self.k = self.interpolate(self.l_nk, self.k, at=self.l)
 
-        # Clip n and k to avoid zeros or infinites
-        self.n = self.n.clip(min=1e-10, max=None)
-        self.k = self.n.clip(min=1e-10, max=None)
-
     def mix(self, other):
         """
             Mix two dust components using the bruggeman rule. 
 
             *** This feature is currently incomplete. ***
         """
+    
+        utils.not_implemented('Bruggeman Mixing')
 
         # Creates a new Dust instance to contain the mixed optical constants
         mixture = Dust(self)
@@ -277,8 +284,8 @@ class Dust():
         return mixture
 
     def bruggeman_mixing(self, vf):
-        """ This function explicity mixes the n & k indices.
-            Based on section 2 from Birnstiel et al. (2018).
+        """ This function explicity mixes the n & k indices using the 
+            Bruggeman mixing rule. 
             Receives: list of volume fractions
             Returns: (n,k)
         """
@@ -369,7 +376,7 @@ class Dust():
                 self.Qbac[i] = bhmie_[5]
                 self.Gsca[i] = bhmie_[6]
 
-                if nang >= 5:
+                if self.scatmatrix:
                     # Compute the Scattering Matrix Elements
                     self.s11 = 0.5 * (np.abs(s2)**2 + np.abs(s1)**2)
                     self.s12 = 0.5 * (np.abs(s2)**2 - np.abs(s1)**2)
@@ -395,20 +402,6 @@ class Dust():
                 raise ValueError(f'In order to use bhcoat you must provide '+\
                     'a Dust object to use as a coat')
 
-            # Set a common wavelength grid
-            l_min = np.max([self.l.min(),coat.l.min()])
-            l_max = np.min([self.l.max(),coat.l.max()])
-            self.l = np.logspace(np.log10(l_min), np.log10(l_max), 
-                self.l.size)
-            
-            # Interpolate core and mantle indices
-            self.n_interp = splev(self.l, splrep(self.l, self.n)).clip(min=0)
-            self.k_interp = splev(self.l, splrep(self.l, self.k)).clip(min=0)
-            coat.n_interp = splev(self.l, splrep(coat.l, coat.n)).clip(min=0)
-            coat.k_interp = splev(self.l, splrep(coat.l, coat.k)).clip(min=0)
-            self.n = self.n_interp
-            self.k = self.k_interp
-            
             # Set the grain sizes for the coat
             a_coat = a * coat.vf
 
@@ -435,13 +428,13 @@ class Dust():
             raise ValueError(f'Invalid value for algorithm = {algorithm}.')
 
         # Print a simpler progress meter if using multiprocessing
-        if self.nproc > 1:
+        if self.nproc > 1 and self.pb:
             i = parallel_counter
             counter = i * 100 / self.a.size
             endl = '\r' if i != self.a.size-1 else '\n'
             bar = (' ' * 20).replace(" ", "⣿⣿", int(counter / 100 * 20))
             sys.stdout.write(f'[get_efficiencies] Using {self.nproc} processes'+\
-                f' | Progress: {counter} % |{bar:>30}| {endl}')
+                f' | Progress: {counter} % |{bar:>20}| {endl}')
             sys.stdout.flush()
 
         return self.Qext, self.Qsca, self.Qabs, self.Gsca, \
@@ -525,8 +518,9 @@ class Dust():
             widgets = [f'[get_opacities] ', progressbar.Timer(), ' ', 
                 progressbar.GranularBar(' ⡀⡄⡆⡇⣇⣧⣷⣿')]
 
-            pb = progressbar.ProgressBar(maxval=self.a.size, widgets=widgets)
-            pb.start()
+            if self.pb:
+                pb = progressbar.ProgressBar(maxval=self.a.size, widgets=widgets)
+                pb.start()
 
             # Calculate the efficiencies for the range of grain sizes
             for j, a_ in enumerate(self.a):
@@ -542,8 +536,8 @@ class Dust():
                 self.z33_a.append(z33) 
                 self.z34_a.append(z34) 
                 self.z44_a.append(z44) 
-                pb.update(j)
-            pb.finish()
+                if self.pb: pb.update(j)
+            if self.pb: pb.finish()
 
         # Multiprocessing (Parallelized)
         else:
@@ -625,22 +619,21 @@ class Dust():
             int_Z11_dmu = -np.trapz(self.z11[i, :], mu)
             int_Z11_mu_dmu = -np.trapz(self.z11[i, :] * mu, mu)
 
-            if self.nang < 5:
-                self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
-                self.gsca[i] = \
-                    np.trapz(Csca * self.gsca_a[i] * phi) / self.ksca[i]
-            else:
+            if self.scatmatrix:
                 self.ksca[i] = 2 * np.pi * int_Z11_dmu
                 self.gsca[i] = 2 * np.pi * int_Z11_mu_dmu / self.ksca[i]
+            else:
+                self.ksca[i] = np.trapz(Csca * phi, self.a) / mass_norm
+                self.gsca[i] = np.sum(self.gsca_a[i] * mfrac)
 
             self.kext[i] = np.trapz(Cext * phi, self.a) / mass_norm
             self.kabs[i] = np.trapz(Cabs * phi, self.a) / mass_norm
 
             # Calculate the relative error between kscat and int Z11 dmu
-            if self.nang >= 5:
+            if self.scatmatrix:
                 self.compare_ksca_vs_z11(i)
 
-        if self.nang >= 5:
+        if self.scatmatrix:
             self.check_ksca_z11_error(tolerance=0.1, show=False)
 
         return self.kext, self.ksca, self.kabs, self.gsca, \
@@ -678,13 +671,13 @@ class Dust():
                     xy = (0.1, 0.9), xycoords='axes fraction', size=20)
                 plt.show()
 
-    def write_opacity_file(self, name=None, scatmat=False):
+    def write_opacity_file(self, name=None):
         """ Write the dust opacities into a file ready for radmc3d """ 
 
         # Parse the table filename 
         name = self.name if name is None else name
         outfile = f'dustkappa_{name}.inp'
-        if scatmat: 
+        if self.scatmatrix: 
             outfile = outfile.replace('kappa', 'kapscatmat') 
 
         utils.print_(f'Writing out radmc3d opacity file: {outfile}')
@@ -700,9 +693,9 @@ class Dust():
             f.write(f'# Number of scattering angles: {self.nang}\n')
 
             # Write file header
-            f.write('1\n' if scatmat else '3\n')
+            f.write('1\n' if self.scatmatrix else '3\n')
             f.write(f'{self.l.size}\n')
-            if scatmat:
+            if self.scatmatrix:
                 f.write(f'{self.nang}\n')
             
             # Write the opacities and g parameter per wavelenght
@@ -710,7 +703,7 @@ class Dust():
                 f.write(f'{l*u.cm.to(u.micron):.6e}\t{self.kabs[i]:13.6e}\t')
                 f.write(f'{self.ksca[i]:13.6e}\t{self.gsca[i]:13.6e}\n')
 
-            if scatmat:
+            if self.scatmatrix:
                 for j, ang in enumerate(self.angles):
                     # Write scattering angle sampling points in degrees
                     f.write(f'{ang}\n')
@@ -757,14 +750,15 @@ class Dust():
 
     def plot_nk(self, show=True, savefig=None):
         """ Plot the interpolated values of the refractive index (n & k). """
-        import matplotlib.pyplot as plt
         
         if len(self.n) == 0 or len(self.k) == 0: 
-            raise AttributeError('Optical constants n and k have not been set.')
+            utils.print_('Optical constants n and k have not been set.')
+            return
 
         plt.close()
         fig, p = plt.subplots(nrows=1, ncols=1, figsize=(8,6))
         twin_p = p.twinx()
+        utils.print_(f'Plotting optical constants n & k from {self.name}')
 
         l = self.l * u.cm.to(u.micron)
         n = p.semilogx(l, self.n, ls='-', color='black')
@@ -783,10 +777,10 @@ class Dust():
 
     def plot_efficiencies(self, show=True, savefig=None):
         """ Plot the extinction, scattering & absorption eficiencies.  """
-        import matplotlib.pyplot as plt
 
         if self.Qext is None or self.Qsca is None: 
-            raise AttributeError('Dust efficiencies have not been calculated.')
+            utils.print_('Dust efficiencies have not been calculated.')
+            return
 
         plt.close()
         fig, p = plt.subplots(nrows=1, ncols=1, figsize=(8,6))
@@ -806,12 +800,33 @@ class Dust():
 
         return utils.plot_checkout(fig, show, savefig)
 
+    def plot_gsca(self, show=True, savefig=None):
+        """ Plot the g scattering parameter (Henyey & Greenstein).  """
+
+        if self.gsca is None: 
+            utils.print_('Scattering parameter gsca has not been calculated.')
+            return
+
+        plt.close()
+        fig, p = plt.subplots(nrows=1, ncols=1, figsize=(8,6))
+        utils.print_(f'Plotting scattering parameter gsca')
+
+        p.semilogx(self.l*u.cm.to(u.micron), self.gsca, ls='-', c='black')
+        p.text(0.05, 0.95, r'$g=\int_{-1}^1 p(\mu)\mu d\mu,\,\,\mu=\cos \theta$',
+            fontsize=13, transform=p.transAxes)
+        p.set_xlabel('Wavelength (microns)')
+        p.set_ylabel(r'$g_{\rm sca}$')
+        #p.set_ylim(-1, 1)
+        p.set_xlim(1e-1, 3e4)
+        plt.tight_layout()
+        return utils.plot_checkout(fig, show, savefig)
+
     def plot_opacities(self, show=True, savefig=None):
         """ Plot the extinction, scattering & absorption eficiencies.  """
-        import matplotlib.pyplot as plt
 
         if self.kext is None or self.ksca is None: 
-            raise AttributeError('Dust opacities have not been calculated.')
+            utils.print_('Dust opacities have not been calculated.')
+            return
 
         plt.close()
         fig, p = plt.subplots(nrows=1, ncols=1, figsize=(8,6))
@@ -839,36 +854,34 @@ class Dust():
 
 if __name__ == "__main__":
     """
-        Below is just an example implementation of the dustmixer.
+        Below you find a simple implementation of the dustmixer.
     """
 
     # Create Dust materials
-    silicate = Dust(name='Silicate')
-    grap_per = Dust(name='Graphite Perpendicular')
-    grap_par = Dust(name='Graphite Parallel')
+    sil = Dust(name='Silicate', scatmatrix=True)
+    gra = Dust(name='Graphite', scatmatrix=True)
 
     # Load refractive indices n and k from files
-    silicate.set_nk(path=f'silicate.nk', meters=True, skip=2)
-    grap_per.set_nk(path=f'graphite_perpend.nk', meters=True, skip=2)
-    grap_par.set_nk(path=f'graphite_parallel.nk', meters=True, skip=2)
-
-    # Set the mass fraction and bulk density of each component
-    silicate.set_density(3.50, cgs=True)
-    grap_per.set_density(2.25, cgs=True)
-    grap_par.set_density(2.25, cgs=True)
+    sil.set_nk('nk/astrosil-Draine2003.lnk', microns=True, skip=2, get_dens=True)
+    gra.set_nk('nk/c-gra-Draine2003.lnk', microns=True, skip=2, get_dens=True)
 
     # Convert the refractive indices into dust opacities
-    silicate.get_opacities(a=np.logspace(-1, 1, 100), nang=5)
-    grap_per.get_opacities(a=np.logspace(-1, 1, 100), nang=5)
-    grap_par.get_opacities(a=np.logspace(-1, 1, 100), nang=5)
+    sil.get_opacities(a=np.logspace(-1, 1, 20), nang=181)
+    gra.get_opacities(a=np.logspace(-1, 1, 20), nang=181)
 
-    #mixture = (silicate * 0.625) + (grap_per * 0.250) + (grap_par * 0.125)
-    mixture = (0.625 * silicate) + (0.250 * grap_per) + (grap_par * 0.125)
+    # Mix silicate and graphite opacities weighted by a mass fracion
+    mixture = (0.625 * sil) + (0.375 * gra)
+    
+    # Diagnostic plots
+    sil.plot_nk(show=False)
+    gra.plot_nk(show=False)
+    sil.plot_gsca(show=True)
+    gra.plot_gsca(show=True)
+    mixture.plot_gsca(show=True)
 
-    silicate.plot_opacities(show=False, savefig='silicate_opacity.png')
-    grap_per.plot_opacities(show=False, savefig='grap_per_opacity.png')
-    grap_par.plot_opacities(show=False, savefig='grap_par_opacity.png')
-    mixture.plot_opacities(show=False, savefig='mixture_opacity.png')
+    sil.plot_opacities(show=True)
+    gra.plot_opacities(show=True)
+    mixture.plot_opacities(show=True)
 
     # Write the opacity table of the mixed material including scattering matrix
-    mixture.write_opacity_file(scatmat=True, name='sg-a10um')
+    mixture.write_opacity_file(name='sg-a10um')

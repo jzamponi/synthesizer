@@ -197,180 +197,6 @@ def plot_checkout(fig, show, savefig, path="", block=True):
     return fig
 
 
-def parse(s, delimiter="%", d=None):
-    """
-    Parse a string containing a given delimiter and return a dictionary
-    containing the key:value pairs.
-    """
-    # Set the delimiter character
-    delimiter = d if isinstance(d, (str,PosixPath)) else delimiter
-
-    # Store all existing global and local variables
-    g = globals()
-    l = locals()
-
-    string = s.replace(d, "{")
-    string = s.replace("{_", "}_")
-
-    # TO DO: This function is incomplete.
-    return string
-
-
-def set_hdr_to_iras16293B(
-    hdr, 
-    wcs="deg", 
-    keep_wcs=False,
-    spec_axis=False, 
-    stokes_axis=False, 
-    for_casa=False, 
-    verbose=False, 
-):
-    """
-    Adapt the header to match that of the ALMA observation of IRAS16293-2422B.
-    Data from Maureira et al. (2020).
-    """
-
-    # Set the sky WCS to be in deg by default
-    # and delete the extra WCSs
-    if all([spec_axis, stokes_axis]):
-        hdr["NAXIS"] = 4
-    elif any([spec_axis, stokes_axis]):
-        hdr["NAXIS"] = 3
-    else:
-        hdr["NAXIS"] = 3 if for_casa else 2
-
-    keys = ["NAXIS", "CDELT", "CUNIT", "CRPIX", "CRVAL", "CTYPE"]
-
-    WCS = {"deg": "A", "AU": "B", "pc": "C"}
-
-    # TO DO: tell it to copy cdelt1A to cdelt1 only if more than one wcs exists.
-    # Because, if no cdelt1A then it will set cdelt1 = None
-
-    for n in [1, 2]:
-        for k in keys[1:]:
-            hdr[f"{k}{n}"] = hdr.get(f"{k}{n}{WCS[wcs]}", hdr.get(f"{k}{n}"))
-            for a in WCS.values():
-                hdr.remove(f"{k}{n}{a}", ignore_missing=True)
-
-    for n in [3, 4]:
-        for key in keys:
-            hdr.remove(f"{key}{n}", ignore_missing=True)
-
-    # Remove extra keywords PC3_* & PC*_3 added by CASA tasks and associated to a 3rd dim.
-    if not any([spec_axis, stokes_axis, for_casa]):
-        for k in ["PC1_3", "PC2_3", "PC3_3", "PC3_1", \
-                    "PC3_2", "PC4_2", "PC4_3", "PC2_4", \
-                    "PC3_4", "PC4_4", "PC4_1", "PC1_4"]:
-            hdr.remove(k, True) 
-            hdr.remove(k.replace('PC', 'PC0').replace('_', '_0'), True) 
-
-    # Adjust the header to match obs. from IRAS16293-2422B
-    if not keep_wcs:
-        hdr["CUNIT1"] = "deg"
-        hdr["CTYPE1"] = "RA---SIN"
-        hdr["CRPIX1"] = 1 + hdr.get("NAXIS1") / 2
-        hdr["CDELT1"] = hdr.get("CDELT1")
-        hdr["CRVAL1"] = np.float64(248.0942916667)
-        hdr["CUNIT2"] = "deg"
-        hdr["CTYPE2"] = "DEC--SIN"
-        hdr["CRPIX2"] = 1 + hdr.get("NAXIS2") / 2
-        hdr["CDELT2"] = hdr.get("CDELT2")
-        hdr["CRVAL2"] = np.float64(-24.47550000000)
-
-    # Add spectral axis if required
-    if spec_axis:
-        # Convert the observing wavelength from the header into frequency
-        wls = {
-            "0.0013": {
-                "freq": np.float64(230609583076.92307),
-                "freq_res": np.float64(3.515082631882e10),
-            },
-            "0.003": {
-                "freq": np.float64(99988140037.24495),
-                "freq_res": np.float64(2.000144770049e09),
-            },
-            "0.007": {
-                "freq": np.float64(42827493999.99999),
-                "freq_res": np.float64(3.515082631882e10),
-            },
-            "0.0086": {
-                "freq": np.float64(35e9),
-                "freq_res": np.float64(1.0),
-            },
-            "0.0092": {
-                "freq": np.float64(32.58614e9),
-                "freq_res": np.float64(1.0),
-            },
-        }
-
-        wl_from_hdr = str(hdr.get("HIERARCH WAVELENGTH1"))
-        hdr["NAXIS3"] = 1
-        hdr["CTYPE3"] = "FREQ"
-        hdr["CRVAL3"] = wls[wl_from_hdr]["freq"]
-        hdr["CRPIX3"] = np.float64(0.0)
-        hdr["CDELT3"] = wls[wl_from_hdr]["freq_res"]
-        hdr["CUNIT3"] = "Hz"
-        hdr["RESTFRQ"] = hdr.get("CRVAL3")
-        hdr["SPECSYS"] = "LSRK"
-
-    # Add stokes axis if required
-    if stokes_axis:
-        hdr["NAXIS4"] = 1
-        hdr["CTYPE4"] = "STOKES"
-        hdr["CRVAL4"] = np.float32(1)
-        hdr["CRPIX4"] = np.float32(0)
-        hdr["CDELT4"] = np.float32(1)
-        hdr["CUNIT4"] = ""
-
-    # Add missing keywords (src: http://www.alma.inaf.it/images/ArchiveKeyworkds.pdf)
-    hdr["BTYPE"] = "Intensity"
-    hdr["BUNIT"] = "Jy/beam"
-    hdr["BZERO"] = 0.0
-    hdr["RADESYS"] = "ICRS"
-
-    return hdr
-
-
-def convert_opacity_file(
-    infile='dust_mixture_001.dat', 
-    outfile='dustkappa_polaris.inp', 
-    verbose=True,
-    show=True, 
-):
-    """
-    Convert dust opacity files from POLARIS to RADMC3D format.
-    """
-
-    # Read polaris file with dust info
-    print_(f'Reading in polaris dust file: {infile} in SI units', verbose)
-    d = ascii.read(infile, data_start=10)
-    
-    # Store the wavelenght, absorption and scattering opacities and assymetry g
-    lam = d['col1'] * u.m.to(u.micron)
-    kabs = d['col18'] * (u.m**2/u.kg).to(u.cm**2/u.g)
-    ksca = d['col20'] * (u.m**2/u.kg).to(u.cm**2/u.g)
-    g_HG = d['col9']
-
-    print_(f'Writing out radmc3d opacity file: {outfile} in CGS', verbose)
-    with open(outfile, 'w+') as f:
-        f.write('3\n')
-        f.write(f'{len(lam)}\n')
-        for i,l in enumerate(lam):
-            f.write(f'{l:.6e}\t{kabs[i]:.6e}\t{ksca[i]:.6e}\t{g_HG[i]:.6e}\n')
-    
-    if show:
-        print_(f'Plotting opacities ...', verbose)
-        plt.loglog(lam, kabs, '--', c='black', label=r'$\kappa_{\rm abs}$')
-        plt.loglog(lam, ksca, ':', c='black', label=r'$\kappa_{\rm sca}$')
-        plt.loglog(lam, kabs+ksca, '-', c='black', label=r'$\kappa_{\rm ext}$')
-        plt.legend()
-        plt.xlabel('Wavelength (microns)')
-        plt.ylabel(r'Dust opacity $\kappa$ (cm$^2$ g$^{-1}$)')
-        plt.xlim(1e-1, 1e5)
-        plt.ylim(1e-2, 1e4)
-        plt.tight_layout()
-
-
 def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
         stokes='I', dpc=141, verbose=False):
     """ Read in an image.out file created by RADMC3D and generate a
@@ -469,24 +295,6 @@ def stats(data, verbose=False, slice=None):
     return stat
 
 
-def get_beam(filename, verbose=True):
-    """ Print or return the info from the header associated to the beam """
-    
-    data, hdr = fits.getdata(filename, header=True)
-
-    beam = {
-        'bmaj': hdr.get('BMAJ', default=0) * u.deg.to(u.arcsec), 
-        'bmin': hdr.get('BMIN', default=0) * u.deg.to(u.arcsec), 
-        'bpa': hdr.get('BPA', default=0), 
-    }
-    
-    print_(f"Bmaj: {beam['bmaj']:.2f} arcsec", verbose=verbose)
-    print_(f"Bmin: {beam['bmin']:.2f} arcsec", verbose=verbose)
-    print_(f"Bpa: {beam['bpa']:.2f} deg", verbose=verbose)
-
-    return beam
-        
-
 def maxpos(data, axis=None):
     """
     Return a tuple with the coordinates of a N-dimensional array.
@@ -526,7 +334,7 @@ def add_comment(filename, comment):
     write_fits(filename, data=data, header=header, overwrite=True)
 
 
-def edit_header(filename, key, value, verbose=True):
+def edit_header(filename, key, value, verbose=False):
     """
     Read in a fits file and change the value of a given keyword.
     """
@@ -755,48 +563,6 @@ def plot_map(
         fig.scalebar.set_label(f"{int(scalebar.value)}{unit}")
 
     return plot_checkout(fig, show, savefig, block=block) if checkout else fig
-
-
-def pol_angle(stokes_q, stokes_u):
-    """Calculates the polarization angle from Q and U Stokes component.
-
-    Args:
-        stokes_q (float): Q-Stokes component [Jy].
-        stokes_u (float): U-Stokes component [Jy].
-
-    Returns:
-        float: Polarization angle.
-    
-    Disclaimer: This function is directly copied from polaris-tools.
-    """
-    # Polarization angle from Stokes Q component
-    q_angle = 0.
-    if stokes_q >= 0:
-        q_angle = np.pi / 2.
-    # Polarization angle from Stokes U component
-    u_angle = 0.
-    if stokes_u >= 0:
-        u_angle = np.pi / 4.
-    elif stokes_u < 0:
-        if stokes_q >= 0:
-            u_angle = np.pi * 3. / 4.
-        elif stokes_q < 0:
-            u_angle = -np.pi / 4.
-    # x vector components from both angles
-    x = abs(stokes_q) * np.sin(q_angle)
-    x += abs(stokes_u) * np.sin(u_angle)
-    # y vector components from both angles
-    y = abs(stokes_q) * np.cos(q_angle)
-    y += abs(stokes_u) * np.cos(u_angle)
-    # Define a global direction of the polarization vector 
-    # since polarization vectors are ambiguous in both directions.
-    if x < 0:
-        x *= -1.0
-        y *= -1.0
-    # Polarization angle calculated from Q and U components
-    pol_angle = np.arctan2(y, x)
-
-    return pol_angle, x, y
 
 
 @elapsed_time
