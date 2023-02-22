@@ -37,7 +37,7 @@ class AnalyticalModel():
                 'ppdisk': 300 * u.au.to(u.cm),
                 'filament': 1 * u.pc.to(u.cm), 
                 'user': 100 * u.au.to(u.cm), 
-            }.get(model)
+            }.get(model, 100 * u.au.to)
         else:
             self.bbox = bbox * u.au.to(u.cm)
 
@@ -400,42 +400,87 @@ class AnalyticalModel():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-
-    def plot_dens_3d(self): 
-        """ Render the 3D field using Mayavi """
+    def plot_3d(self, density=False, temperature=False): 
+        """ Render the interpolated 3D field using Mayavi """
         try:
-            utils.print_('Visualizing the 3D field ...')
             from mayavi import mlab
+            from mayavi.api import Engine
+            from mayavi.modules.text3d import Text3D
+            from mayavi.modules.grid_plane import GridPlane
+
+            utils.print_('Visualizing the interpolated field ...')
+
+            if density:
+                data = self.dens
+                title = r'Dust Density (g cm$^{-3}$)'
+
+            elif temperature:
+                data = self.temp
+                title = r'Gas Temperature (g cm$^{-3}$)'
+            
+            else:
+                return False
+
+            # Initialize the figure and scene
+            engine = Engine()
+            engine.start()
             fig = mlab.figure(
-                size=(900, 700) , bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
+                size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2))
 
-            mlab.contour3d(
-                self.dens, 
-                vmin=self.plotmin, 
-                vmax=self.plotmax, 
-                opacity=0.7,
-                contours=20,
-            )
+            # Render data
+            plot = mlab.contour3d(
+                data, contours=20, opacity=0.2, colormap='CMRmap',
+                vmin=self.plotmin, vmax=self.plotmax)
 
-            if self.vfield is not None:
-                # Add streamlines to mayavi
-                utils.print_(
-                    'Plotting 3D vector fields is yet to be implemented.')
-                #mlab.flow(self.vfield.vx, self.vfield.vy, self.vfield.vz) 
+            # Add a colorbar
+            cbar = mlab.colorbar(plot, orientation='vertical', title=title)
 
-            mlab.show()
+            # Add a bounding box frame             
+            bbox = int(np.round(self.bbox * u.cm.to(u.au), 1))
+            #mlab.outline(
+            #    figure=fig, 
+            #    extent=[0, 2*bbox-1] * 3, 
+            #)
+            #mlab.axes(
+            #    ranges=[-bbox, bbox] * 3,
+            #    xlabel='AU', ylabel='AU', zlabel='AU', nb_labels=3
+            #)
+        
+            # Handle figure items
+            manager = engine.scenes[0].children[0].children[0]
 
-        except Exception as e:
-            utils.print_('Unable to show the 3D grid.',  red=True)
-            utils.print_(e, bold=True)
+            # Customize the colobar
+            lut = manager.scalar_lut_manager
+            lut.title_text_property.italic = False
+            lut.title_text_property.font_family = 'times'
+            lut.title_text_property.font_size = 23
 
+            # Paint one face of the box to represent the observing plane
+            obs_plane = GridPlane()
+            engine.add_filter(obs_plane, manager)
+            obs_plane.grid_plane.axis = 'z'
+            obs_plane.grid_plane.position = 0
+            obs_plane.actor.property.representation = 'surface'
+            obs_plane.actor.property.opacity = 0.2
+            obs_plane.actor.property.color = (0.76, 0.72, 0.87)
+            
+            # Label the plane in 3D
+            obs_label = Text3D()
+            engine.add_filter(obs_label, manager)
+            obs_label.text = 'Observer Plane'
+            obs_label.actor.property.color = (0.76, 0.72, 0.87)
+            obs_label.position = np.array([30, 15, 0])
+            obs_label.scale = np.array([6, 6, 6])
+            obs_label.orientation = np.array([0, 0, 90])
+            obs_label.orient_to_camera = False
 
-    def plot_temp_3d(self): 
-        """ Render the 3D field using Mayavi """
-        try:
-            utils.print_('Visualizing the 3D field ...')
-            from mayavi import mlab
-            mlab.contour3d(self.temp, contours=20, opacity=0.2)
+            utils.print_('HINT: If you wanna play with the figure, press '+\
+                'the nice icon in the upper left corner.', blue=True)
+            utils.print_(
+                "Try, IsoSurface -> Actor -> Representation = Wireframe. " +\
+                "If you don't see much, it's probably a matter of adjusting "+\
+                "the contours. ", blue=True)
+
             mlab.show()
 
         except Exception as e:
