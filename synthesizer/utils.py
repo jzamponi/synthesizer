@@ -124,13 +124,19 @@ def file_exists(filename, raise_=True):
     
     if '*' in filename:
         if len(glob(filename)) == 0:
-            raise FileNotFoundError(msg) if raise_ else False
+            if raise_:
+                raise FileNotFoundError(msg)
+            else:
+                return False
         else:
             return True
         
     else:
         if not os.path.exists(filename): 
-            raise FileNotFoundError(msg) if raise_ else False
+            if raise_:
+                raise FileNotFoundError(msg)
+            else:
+                return False
         else:
             return True
 

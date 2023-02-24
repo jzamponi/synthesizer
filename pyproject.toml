@@ -25,6 +25,7 @@ dependencies = [
     "aplpy",
     "requests",
     "mpmath",
+    "h5py",
 ]
 requires-python = ">=3.8"
 
