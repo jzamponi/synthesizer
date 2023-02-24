@@ -45,6 +45,7 @@ class CasaScript():
         self.totaltime = '1h'
         self.indirection = 'J2000 16h32m22.63 -24d28m31.8'
         self.hourangle = 'transit'
+        self.refdate = '2021/01/02', 
         self.obsmode = 'int'
         self.telescope = None
         self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
@@ -52,13 +53,13 @@ class CasaScript():
 
         # tclean
         self.vis = f'{self.project}/{self.project}.{self.arrayfile}.noisy.ms'
-        self.imagename = lambda q: f'{self.project}/clean_{q}'
+        self.imagename = lambda s: f'{self.project}/clean_{s}'
         self.imsize = 100
         if self.resolution is None:
             self.cell = '0.008arcsec'
         else:
             self.cell = f'{self.resolution / self.pix_per_beam}arcsec'
-        self.reffreq = self.inwidth
+        self.reffreq = self.incenter
         self.specmode = 'mfs'
         self.gridder = 'standard'
         self.deconvolver = 'multiscale'
@@ -67,11 +68,13 @@ class CasaScript():
         self.robust = 0.5
         self.niter = 1e4
         self.threshold = '5e-5Jy'
+        self.pbcor = True
         self.interactive = False
         self.verbose = False
 
         # exportfits
         self.dropstokes = True
+        self.dropdeg = True
 
     def _find_telescope(self):
         """ Find a proper telescope given the observing wavelength (microns) """
@@ -106,25 +109,37 @@ class CasaScript():
         self.arrayfile = f'{self.telescope}.cycle{self.cycle}.{self.arr}'
         return self.arrayfile + '.cfg'
 
-    def write(self, name=None):
+    def write(self, name):
         """ Write a CASA script using the CasaScript parameters """
-
-        if name is not None: self.name = name
+        
+        self.name = name
 
         stokes = ['I', 'Q', 'U'] if self.polarization else ['I']
     
         with open(self.name, 'w+') as f:
             utils.print_(f'Writing template script: {self.name}')
             f.write('# Template CASA script to simulate observations. \n')
-            f.write('# Written by Synthesizer. \n\n')
+            f.write('# Written by the Synthesizer. \n\n')
 
-            for q in stokes:
+            for s in stokes:
+
+                # Overwrite string values if they were overriden from self.read()
+                if isinstance(self.skymodel, str):
+                    self.skymodel = self.skymodel.replace('I', s)
+                else:
+                    self.skymodel = self.skymodel(s)
+
+                if isinstance(self.imagename, str):
+                    self.imagename = self.imagename.replace('I', s)
+                else:
+                    self.imagename = self.imagename(s)
+    
                 if self.simobserve:
-                    f.write(f'print("\033[1m\\n[alma_simulation] ')
-                    f.write(f'Observing Stokes {q} ...\033[0m\\n")\n')
+                    f.write(f'print("\033[1m\\n[syn_obs] ')
+                    f.write(f'Observing Stokes {s} ...\033[0m\\n")\n')
                     f.write(f'simobserve( \n')
                     f.write(f'    project = "{self.project}", \n')
-                    f.write(f'    skymodel = "{self.skymodel(q)}", \n')
+                    f.write(f'    skymodel = "{self.skymodel}", \n')
                     f.write(f'    inbright = "{self.inbright}", \n')
                     f.write(f'    incell = "{self.incell}", \n')
                     f.write(f'    incenter = "{self.incenter}", \n')
@@ -136,6 +151,7 @@ class CasaScript():
                     f.write(f'    totaltime = "{self.totaltime}", \n')
                     f.write(f'    hourangle = "{self.hourangle}", \n')
                     f.write(f'    obsmode = "{self.obsmode}", \n')
+                    f.write(f'    refdate = "{self.refdate}", \n')
                     f.write(f'    antennalist = "{self.arrayconfig}", \n')
                     f.write(f'    thermalnoise = "{self.thermalnoise}", \n')
                     f.write(f'    graphics = "{self.graphics}", \n')
@@ -144,12 +160,12 @@ class CasaScript():
                     f.write(f') \n')
             
                 if self.clean:
-                    f.write(f'print("\033[1m\\n[alma_simulation] ')
-                    f.write(f'Cleaning Stokes {q} ...\033[0m\\n")\n')
+                    f.write(f'print("\033[1m\\n[syn_obs] ')
+                    f.write(f'Cleaning Stokes {s} ...\033[0m\\n")\n')
                     f.write(f' \n')
                     f.write(f'tclean( \n')
                     f.write(f'    vis = "{self.vis}", \n')
-                    f.write(f'    imagename = "{self.imagename(q)}", \n')
+                    f.write(f'    imagename = "{self.imagename}", \n')
                     f.write(f'    imsize = {self.imsize}, \n')
                     f.write(f'    cell = "{self.cell}", \n')
                     f.write(f'    reffreq = "{self.reffreq}", \n')
@@ -161,19 +177,27 @@ class CasaScript():
                     f.write(f'    robust = {self.robust}, \n')
                     f.write(f'    niter = {int(self.niter)}, \n')
                     f.write(f'    threshold = "{self.threshold}", \n')
+                    f.write(f'    pbcor = {self.pbcor}, \n')
                     f.write(f'    interactive = {self.interactive}, \n')
                     f.write(f'    verbose = {self.verbose}, \n')
                     f.write(f') \n')
 
+                    f.write(f'imregrid( \n')
+                    f.write(f'    "{self.imagename}.image", \n')
+                    f.write(f'    template = "{self.project}/{self.project}.{self.arrayfile}.skymodel", \n')
+                    f.write(f'    output = "{self.imagename}.image_modelsize", \n')
+                    f.write(f'    overwrite = True, \n')
+                    f.write(f') \n\n')
+
                 if self.exportfits:
-                    f.write(f'print("\033[1m\\n[alma_simulation] ')
-                    f.write(f'Exporting Stokes {q} ...\033[0m\\n")\n')
+                    f.write(f'print("\033[1m\\n[syn_obs] ')
+                    f.write(f'Exporting Stokes {s} ...\033[0m\\n")\n')
                     f.write(f' \n')
                     f.write(f'exportfits( \n')
-                    f.write(f'    imagename = "{self.imagename(q)}.image", \n')
-                    f.write(f'    fitsimage = "{self.fitsimage(q)}", \n')
+                    f.write(f'    imagename = "{self.imagename}.image_modelsize", \n')
+                    f.write(f'    fitsimage = "{self.fitsimage}", \n')
                     f.write(f'    dropstokes = {self.dropstokes}, \n')
-                    f.write(f'    dropdeg = {self.dropstokes}, \n')
+                    f.write(f'    dropdeg = {self.dropdeg}, \n')
                     f.write(f'    overwrite = True, \n')
                     f.write(f') \n\n')
                 
@@ -184,30 +208,30 @@ class CasaScript():
         # Raise an error if file doesn't exist, including wildcards
         utils.file_exists(name)
 
-        f = open(name, 'r')
+        self.name = name
 
-        # Make sure at least simobserve or tclean are defined within the script
-#        for line in f.readlines():
-#            if re.search('simobserve', line) or re.search('tclean', line):
-#                pass
-#            else:
-#                raise ValueError(f'{name} is not a valid CASA script. Either '+\
-#                    'simobserve() or tclean() function calls must be given')
         def strip_line(l):
             l = l.split('=')[1]
             l = l.strip('\n')
             l = l.strip(',')
             l = l.strip()
             l = l.strip(',')
-            l = l.remove('"')
-            l = l.remove("'")
+            l = l.strip('"')
+            l = l.strip("'")
             if ',' in l and not '[' in l: l = l.split(',')[0]
             return l
 
+        f = open(str(name), 'r')
+
         for line in f.readlines():
+            # Main boolean switches
+            if 'Simobserve' in line and '=' in line: self.simobserve = strip_line(line)
+            if 'Clean' in line and '=' in line: self.clean = strip_line(line)
+            if 'polarization' in line and '=' in line: self.polarization = strip_line(line)
+        
             # Simobserve
             if 'project' in line: self.project = strip_line(line)
-            if 'skymodel' in line: self.skymodel = strip_line(line)
+            if 'skymodel ' in line and '=' in line: self.skymodel = strip_line(line)
             if 'inbright' in line: self.inbright = strip_line(line)
             if 'incell' in line: self.incell = strip_line(line)
             if 'mapsize' in line: self.mapsize = strip_line(line)
@@ -217,6 +241,7 @@ class CasaScript():
             if 'integration' in line: self.integration = strip_line(line)
             if 'totaltime' in line: self.totaltime = strip_line(line)
             if 'indirection' in line: self.indirection = strip_line(line)
+            if 'refdate' in line: self.refdate = strip_line(line)
             if 'hourangle' in line: self.hourangle = strip_line(line)
             if 'obsmode' in line: self.obsmode = strip_line(line)
             if 'antennalist' in line: self.arrayconfig = strip_line(line)
@@ -224,12 +249,14 @@ class CasaScript():
             if 'graphics' in line: self.graphics = strip_line(line)
             if 'overwrite' in line: self.overwrite = strip_line(line)
             if 'verbose' in line: self.verbose = strip_line(line)
+            self.arrayfile = self.arrayconfig.strip('.cfg')
     
             # tclean
             if 'vis' in line: self.vis = strip_line(line)
             if 'imagename' in line: self.imagename = strip_line(line)
             if 'imsize' in line: self.imsize = strip_line(line)
             if 'cell' in line: self.cell = strip_line(line)
+            if 'reffreq' in line: self.reffreq = strip_line(line)
             if 'specmode' in line: self.specmode = strip_line(line)
             if 'gridder' in line: self.gridder = strip_line(line)
             if 'deconvolver' in line: self.deconvolver = strip_line(line)
@@ -238,22 +265,26 @@ class CasaScript():
             if 'robust' in line: self.robust = strip_line(line)
             if 'niter' in line: self.niter = strip_line(line)
             if 'threshold' in line: self.threshold = strip_line(line)
+            if 'pbcor' in line: self.pbcor = strip_line(line)
             if 'mask' in line: self.mask = strip_line(line)
             if 'interactive' in line: self.interactive = strip_line(line)
 
             # Exportfits
             if 'fitsimage' in line: self.fitsimage = strip_line(line)
             if 'dropstokes' in line: self.dropstokes = strip_line(line)
+            if 'dropdeg' in line: self.dropdeg = strip_line(line)
 
         f.close()
 
     def _clean_project(self):
         """ Delete any previous project to avoid the CASA clashing """
 
-        if (self.overwrite and os.path.exists('synobs_data')) or \
-            (not self.simobserve or not self.clean or not self.exportfits): 
-            utils.print_(f'Deleting previous observing project: {self.project}')
-            subprocess.run('rm -r synobs_data', shell=True)
+        if self.overwrite and os.path.exists('synobs_data'):
+            if not self.simobserve or not self.clean or not self.exportfits: 
+
+                utils.print_(
+                    f'Deleting previous observing project: {self.project}')
+                subprocess.run('rm -r synobs_data', shell=True)
 
     def run(self):
         """ Run the ALMA/JVLA simulation script """

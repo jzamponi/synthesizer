@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+import subprocess
 from glob import glob
 from functools import wraps
 from pathlib import Path, PosixPath
@@ -19,6 +20,11 @@ from astropy import constants as c
 home = Path.home()
 pwd = Path(os.getcwd())
 
+
+class NotInstalled(Exception):
+    def __init__(self, message=''):
+        message = f'{color.red}{message}{color.none}'
+        super().__init__(message)
 
 class color:
     red = "\033[91m"
@@ -118,23 +124,15 @@ def file_exists(filename, raise_=True):
     
     if '*' in filename:
         if len(glob(filename)) == 0:
-            if raise_:
-                raise FileNotFoundError(msg)
-            else:
-                return False
+            raise FileNotFoundError(msg) if raise_ else False
         else:
-            if not raise_:
-                return True
+            return True
         
     else:
         if not os.path.exists(filename): 
-            if raise_:
-                raise FileNotFoundError(msg)
-            else:
-                return False
+            raise FileNotFoundError(msg) if raise_ else False
         else:
-            if not raise_:
-                return True
+            return True
 
 def download_file(url, msg=None, verbose=True, *args, **kwargs):
     """ Perform an HTTP GET request to fetch files from internet """ 
@@ -165,13 +163,18 @@ def download_file(url, msg=None, verbose=True, *args, **kwargs):
         print_(f'No internet connection. Unable to download file.', red=True)
         return False
 
+def which(program):
+    """ Call the which unix command to check whether a given program is
+        in the PATH, i.e., executable, or not. 
+        which returns 0 if the program is found, and 1 otherwise.
+        In Python 0 and 1 are False and True, so we catch the latter only.
+    """
+    
+    not_found = subprocess.run(['which', f'{program}'], stdout=subprocess.PIPE)
 
-def ring(soundfile=None):
-    """ Play a sound from system. Useful to notify when a function finishes."""
-    if not isinstance(soundfile, (str,PosixPath)):
-        soundfile = "/usr/share/sounds/freedesktop/stereo/service-login.oga"
-
-    os.system(f"paplay {soundfile} >/dev/null 2>&1")
+    if not_found.returncode:
+        raise NotInstalled(
+            f'{program} is not installed on this machine, or not in the PATH')
 
 
 def plot_checkout(fig, show, savefig, path="", block=True):
@@ -452,22 +455,6 @@ def plot_map(
     # If data was changed, rewrite file
     if any([rot90, transpose, flipud, fliplr, rescale, bright_temp]):
         write_fits(filename, data.squeeze(), hdr, True, verbose)
-
-    # Remove non-celestial WCS
-    filename_ = filename
-    if hdr.get("NAXIS") > 2:
-        tempfile = '.temp_file.fits'
-        # <patch>: Use the header from the observation of IRAS16293B
-        # but keep the phasecenter of the original input file
-        print_('Setting the header to that from IRAS16293B', verbose, bold=True)
-        hdr_ = set_hdr_to_iras16293B(hdr)
-        write_fits(
-            tempfile, 
-            data=data.squeeze(), 
-            header=hdr_, 
-            overwrite=True
-        )
-        filename = tempfile    
 
     # Initialize the figure
     fig = FITSFigure(str(filename), figsize=figsize, *args, **kwargs)

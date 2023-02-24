@@ -65,20 +65,20 @@ class CartesianGrid():
                 f'Input SPH file does not exist{utils.color.none}')
 
         if source.lower() == 'sphng':
-            self.sph = SPHng(filename, remove_sink=True)
+            self.sph = SPHng(filename, temp=self.add_temp)
 
         elif source.lower() == 'gizmo':
-            self.sph = Gizmo(filename)
+            self.sph = Gizmo(filename, temp=self.add_temp)
 
         elif source.lower() == 'gadget':
-            self.sph = Gadget(filename)
+            self.sph = Gadget(filename, temp=self.add_temp)
 
         elif source.lower() == 'arepo':
-            self.sph = Arepo(filename)
+            self.sph = Arepo(filename, temp=self.add_temp)
 
         elif source.lower() == 'phantom':
             utils.not_implemented()
-            self.sph = Phantom(filename)
+            self.sph = Phantom(filename, temp=self.add_temp)
 
         else:
             print('')
@@ -488,7 +488,7 @@ class CartesianGrid():
 
             # Render data
             plot = mlab.contour3d(
-                data, contours=20, opacity=0.2, colormap='inferno')
+                data, contours=100, opacity=0.2, colormap='inferno')
 
             # Add a colorbar
             cbar = mlab.colorbar(plot, orientation='vertical', title=title)
@@ -497,7 +497,7 @@ class CartesianGrid():
             bbox = int(np.round(self.bbox * u.cm.to(u.au), 1))
             mlab.outline(
                 figure=fig, 
-                extent=[0, 2*bbox-1] * 3, 
+                extent=[0, self.ncells] * 3, 
             )
             mlab.axes(
                 ranges=[-bbox, bbox] * 3,
@@ -535,7 +535,9 @@ class CartesianGrid():
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
             utils.print_(
-                "Try, IsoSurface -> Actor -> Representation = Wireframe. " +\
+                "Try, IsoSurface -> Actor -> Representation = Wireframe. ",
+                blue=True)
+            utils.print_(
                 "If you don't see much, it's probably a matter of adjusting "+\
                 "the contours. ", blue=True)
 

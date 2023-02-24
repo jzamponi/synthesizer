@@ -8,18 +8,15 @@ from synthesizer import utils
 
 class SPHng:
     """ Handle binary snapshots from the SPHng code. """
-    def __init__(self, filename, remove_sink=True, cgs=True, verbose=True):
+    def __init__(self, filename, temp=False, remove_sink=True):
         """
             Notes:
 
-            Assumes your binary file is formatted with a header stating the quantities,
-            assumed to be f4 floats. May not be widely applicable.
+            This reader assumes your file is binary and formatted 
+            with a header stating the quantities, assumed to be 
+            f4 floats. May not be widely applicable.
 
-            For these filenames, the header is of the form...
-
-            # id t x y z vx vy vz mass hsml rho T u
-
-            where:
+            Header is: id t x y z vx vy vz mass hsml rho T u, where
 
             id = particle ID number
             t = simulation time [years]
@@ -31,9 +28,8 @@ class SPHng:
             T = particle temperature [K]
             u = particle internal energy [ignore]
             
-            outlier_index = 31330
+            There's an outlier (probably a sink particle) with index = 31330
         """
-
         try:
             # Read file in binary format
             with open(filename, "rb") as f:
@@ -44,12 +40,11 @@ class SPHng:
             utils.print_('Error trying to read SPHng binary file.', red=True)
             utils.print_(
                 'File is probably from another code. Set --source', bold=True)
-            raise ValueError(e)
+            raise 
 
         # Turn data into CGS 
-        if cgs:
-            data[:, 2:5] *= u.au.to(u.cm)
-            data[:, 8] *= u.M_sun.to(u.g)
+        data[:, 2:5] *= u.au.to(u.cm)
+        data[:, 8] *= u.M_sun.to(u.g)
 
         # Remove the cell data of the outlier, probably a sink particle
         if remove_sink:
@@ -66,7 +61,8 @@ class SPHng:
         self.y = data[:, 3]
         self.z = data[:, 4]
         self.rho_g = data[:, 10]
-        self.temp = data[:, 11]
+        if temp:
+            self.temp = data[:, 11]
 
 class Gizmo:
     """ Handle HDF5 snapshots from the GIZMO code. """
@@ -101,7 +97,7 @@ class Gizmo:
 
 class Gadget:
     """ Handle snapshots from the Gadget code. """
-    def __init__(self, filename):
+    def __init__(self, filename, temp=False):
         # Read in particle coordinates and density
         data = h5py.File(filename, 'r')['PartType0']
         coords = np.array(data['Coordinates'])
@@ -116,22 +112,23 @@ class Gadget:
         self.y -= np.average(self.y, weights=self.rho_g)
         self.z -= np.average(self.z, weights=self.rho_g)
 
-        # Read in temperature if available
-        if 'Temperature' in data.keys():
-            self.temp = data['Temperature']
+        if temp:
+            # Read in temperature if available
+            if 'Temperature' in data.keys():
+                self.temp = data['Temperature']
 
-        # Or derive from a barotropic equation of state
-        elif 'Pressure' in data.keys():
-            kB = c.k_B.cgs.value
-            mu = 2.3 * (c.m_e + c.m_p).cgs.value
-            self.temp = (mu / kB) * np.array(data['Pressure']) / self.rho_g
+            # Or derive from a barotropic equation of state
+            elif 'Pressure' in data.keys():
+                kB = c.k_B.cgs.value
+                mu = 2.3 * (c.m_e + c.m_p).cgs.value
+                self.temp = (mu / kB) * np.array(data['Pressure']) / self.rho_g
 
-        else:
-            self.temp = np.zeros(self.rho_g.shape)
+            else:
+                self.temp = np.zeros(self.rho_g.shape)
 
 class Arepo:
     """ Handle snapshots from the AREPO code. """
-    def __init__(self, filename):
+    def __init__(self, filename, temp=False):
 
         # Read in particle coordinates and density
         data = h5py.File(filename, 'r')['PartType0']
@@ -153,31 +150,32 @@ class Arepo:
         self.y -= np.average(self.y, weights=self.mass)
         self.z -= np.average(self.z, weights=self.mass)
 
-        # Read in temperature if available
-        if 'Temperature' in data.keys():
-            self.temp = data.get('Temperature')
+        if temp:
+            # Read in temperature if available
+            if 'Temperature' in data.keys():
+                self.temp = data.get('Temperature')
 
-        # Derive from a barotropic equation of state (Wurster et al. 2018, Eq.5)
-        elif 'Pressure' in data.keys():
-            k_B = c.k_B.cgs.value
-            m_H = (c.m_e + c.m_p).cgs.value
-            rho_c = 1e-14
-            rho_d = 1e-10
-            T_iso = 15
-            cs_iso2 = k_B * T_iso / 2.33 / m_H
-            self.temp = T_iso * np.ones(self.rho_g.shape)
+            # Derive from a barotropic EOS (Wurster et al. 2018, Eq.5)
+            elif 'Pressure' in data.keys():
+                k_B = c.k_B.cgs.value
+                m_H = (c.m_e + c.m_p).cgs.value
+                rho_c = 1e-14
+                rho_d = 1e-10
+                T_iso = 15
+                cs_iso2 = k_B * T_iso / 2.33 / m_H
+                self.temp = T_iso * np.ones(self.rho_g.shape)
 
-            self.temp[rho_c <= self.rho_g < rho_c] = \
-                        T_iso * (self.rho_g/rho_c)**(7/5)
+                self.temp[rho_c <= self.rho_g < rho_c] = \
+                            T_iso * (self.rho_g/rho_c)**(7/5)
 
-            self.temp[self.rho_g >= rho_d] = \
-                T_iso * (self.rho_g/rho_c)**(7/5) * (self.rho_g/rho_d)**(11/10)
-        else:
-            self.temp = np.zeros(self.rho_g.shape)
+                self.temp[self.rho_g >= rho_d] = T_iso * \
+                    (self.rho_g/rho_c)**(7/5) * (self.rho_g/rho_d)**(11/10)
+            else:
+                self.temp = np.zeros(self.rho_g.shape)
 
 class Phantom:
     """ Handle snapshots from the PHANTOM code. """
-    def __init__(self, filename):
+    def __init__(self, filename, temp=False):
         
         # Read in particle coordinates and density
         data = h5py.File(filename, 'r')['particles']
@@ -190,3 +188,6 @@ class Phantom:
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
         self.rho_g = dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
+    
+        if temp:
+            self.temp = np.zeros(self.rho_g.shape)

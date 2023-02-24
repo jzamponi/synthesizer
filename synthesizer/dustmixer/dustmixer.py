@@ -194,8 +194,9 @@ class Dust():
         # Download the optical constants from the internet if path is a url
         if "http" in path:
             utils.download_file(path)
+            path = path.split('/')[-1]
 
-        # Strip the filename from the full given path
+        # Strip the filename from the full given url
         filename = path.split('/')[-1]
 
         # Read the table
@@ -559,7 +560,7 @@ class Dust():
         
         utils.print_(f'Integrating opacities ', end='')
         print(f'and scattering matrix ' if self.scatmatrix else '', end='')
-        print(f'a power-law slope of {q = }')
+        print(f'using a power-law slope of {q = }')
 
         # Mass integral: int (a^q * a^3) da = [amax^(q+4) - amin^(q-4)]/(q-4)
         q4 = self.q + 4
@@ -827,7 +828,7 @@ class Dust():
     def _get_kappa_at_lam(self, lam):
         """ Return the extinction dust opacity at a given wavelength """
 
-        return np.float(self.interpolate(
+        return float(self.interpolate(
             self.l, self.kext, at=lam*u.micron.to(u.cm)))
 
 

@@ -35,9 +35,10 @@ class AnalyticalModel():
                 'plaw': 8500 * u.au.to(u.cm),    
                 'pcore': 0.1 * u.pc.to(u.cm), 
                 'ppdisk': 300 * u.au.to(u.cm),
+                'l1544': 5000 * u.au.to(u.cm),
                 'filament': 1 * u.pc.to(u.cm), 
                 'user': 100 * u.au.to(u.cm), 
-            }.get(model, 100 * u.au.to)
+            }.get(model, 100 * u.au.to(u.cm))
         else:
             self.bbox = bbox * u.au.to(u.cm)
 
@@ -58,6 +59,9 @@ class AnalyticalModel():
         self.Y = y
         self.Z = z
         r_c = self.bbox
+        m_H2 = (2.3 * (const.m_p + const.m_e).cgs.value)
+        G = const.G.cgs.value
+        kB = const.k_B.cgs.value
         self.plotmin = None
         self.plotmax = None
 
@@ -84,7 +88,7 @@ class AnalyticalModel():
             rho_c = 9e-18 / self.g2d
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * (r / r_c)**(-slope)
-            self.plotmin = 1e-20
+            self.plotmin = 1e-19
             if self.add_temp:
                 self.temp = 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / r)
 
@@ -94,6 +98,16 @@ class AnalyticalModel():
             r = np.sqrt(x**2 + y**2 + z**2)
             self.dens = rho_c * r_c**2 / (r**2 + r_c**2)
             
+        # L1544 Prestellar Core (Chacon-Tanarro et al. 2019)
+        elif self.model == 'l1544':
+            rho_0 = 1.6e6 * m_H2
+            alpha = 2.6
+            r_flat = 2336 * u.au.to(u.cm)
+            r = np.sqrt(x**2 + y**2 + z**2)
+            self.dens = rho_0 / (1 + (r / r_flat)**alpha)
+            if self.add_temp:
+                self.temp = 15 * np.ones(self.dens.shape)
+
         elif self.model == 'ppdisk':
             # Protoplanetary disk model 
             rin = 1 * u.au.to(u.cm)
@@ -105,9 +119,6 @@ class AnalyticalModel():
             rho_bg = 1e-30
             T_0 = 30
             T_slope = 3 / 7
-            G = const.G.cgs.value
-            kB = const.k_B.cgs.value
-            m_H2 = 2.6 * (const.m_p + const.m_e).cgs.value
 
             # Inner rim and gap parameters
             rim_rout = 0
@@ -417,6 +428,7 @@ class AnalyticalModel():
             elif temperature:
                 data = self.temp
                 title = r'Gas Temperature (g cm$^{-3}$)'
+                self.plotmin = None
             
             else:
                 return False
@@ -429,7 +441,7 @@ class AnalyticalModel():
 
             # Render data
             plot = mlab.contour3d(
-                data, contours=20, opacity=0.2, colormap='CMRmap',
+                data, contours=100, opacity=0.2, colormap='CMRmap',
                 vmin=self.plotmin, vmax=self.plotmax)
 
             # Add a colorbar
@@ -437,14 +449,14 @@ class AnalyticalModel():
 
             # Add a bounding box frame             
             bbox = int(np.round(self.bbox * u.cm.to(u.au), 1))
-            #mlab.outline(
-            #    figure=fig, 
-            #    extent=[0, 2*bbox-1] * 3, 
-            #)
-            #mlab.axes(
-            #    ranges=[-bbox, bbox] * 3,
-            #    xlabel='AU', ylabel='AU', zlabel='AU', nb_labels=3
-            #)
+            mlab.outline(
+                figure=fig, 
+                extent=[0, self.ncells] * 3, 
+            )
+            mlab.axes(
+                ranges=[-bbox, bbox] * 3,
+                xlabel='AU', ylabel='AU', zlabel='AU', nb_labels=3
+            )
         
             # Handle figure items
             manager = engine.scenes[0].children[0].children[0]
@@ -477,7 +489,9 @@ class AnalyticalModel():
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
             utils.print_(
-                "Try, IsoSurface -> Actor -> Representation = Wireframe. " +\
+                "Try, IsoSurface -> Actor -> Representation = Wireframe. ",
+                blue=True)
+            utils.print_(
                 "If you don't see much, it's probably a matter of adjusting "+\
                 "the contours. ", blue=True)
 

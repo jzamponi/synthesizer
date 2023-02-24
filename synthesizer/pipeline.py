@@ -19,23 +19,34 @@ from synthesizer import synobs
 from synthesizer import gridder
 from synthesizer import dustmixer
 
+# Store the source code directory
+source_path = Path(__file__).resolve()
+source_dir = source_path.parent
 
 class Pipeline:
     
-    def __init__(self, lam=1300, amax=10, nphot=1e5, nthreads=1, sootline=300,
-            lmin=0.1, lmax=1e5, nlam=200, star=None, dgrowth=False, csubl=0, 
-            material='sg', polarization=False, alignment=False, overwrite=False,
-            verbose=True):
+    def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=3.5, nang=181, 
+            nphot=1e5, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
+            dgrowth=False, csubl=0, sootline=300, material='sg', 
+            polarization=False, alignment=False, 
+            overwrite=False, verbose=True):
         self.steps = []
         self.lam = int(lam)
         self.lmin = lmin
         self.lmax = lmax
         self.nlam = nlam
         self.lgrid = np.logspace(np.log10(lmin), np.log10(lmax), nlam)
-        self.amax = str(int(amax))
+        self.amax = amax
+        self.amin = amin
+        self.na = na
+        self.q = q
+        self.nang = nang
         self.material = material
         self.nphot = int(nphot)
         self.nthreads = int(nthreads)
+        self.npix = None
+        self.incl = None
+        self.sizeau = None
         self.polarization = polarization
         self.alignment = alignment
         if polarization:
@@ -51,12 +62,16 @@ class Pipeline:
             self.polarization = True
     
         self.csubl = csubl
-        self.nspec = 1 if self.csubl == 0 else 2
-        self.dcomp = [material]*2 if self.csubl == 0 else [material, material+'o']
+        if self.csubl > 0:
+            self.nspec = 2
+            self.material2 = self.material[:-1]
+        else:
+            self.nspec = 1
+
         self.sootline = sootline
         self.dgrowth = dgrowth
-        self.opacfile = 'dustkapscatmat_' if self.polarization else 'dustkappa_' 
         self.kappa = None
+
         if star is None:
             self.xstar = 0
             self.ystar = 0
@@ -72,9 +87,6 @@ class Pipeline:
             self.mstar = star[4]
             self.tstar = star[5]
 
-        self.npix = None
-        self.incl = None
-        self.sizeau = None
         self.overwrite = overwrite
         self.verbose = verbose
 
@@ -201,8 +213,7 @@ class Pipeline:
 
 
     @utils.elapsed_time
-    def dust_opacity(self, amin, amax, na, q=-3.5, nang=3, material=None, 
-            show_nk=False, pb=True, show_opac=False, savefig=None):
+    def dustmixer(self, show_nk=False, pb=True, show_opac=False, savefig=None):
         """
             Call dustmixer to generate dust opacity tables. 
             New dust materials can be manually defined here if desired.
@@ -211,16 +222,11 @@ class Pipeline:
         print('')
         utils.print_("Calculating dust opacities ...\n", bold=True)
 
-        if material is not None: self.material = material
-        self.amin = amin
-        self.amax = amax
-        self.na = na
-        self.q = q 
-        self.a_dist = np.logspace(np.log10(amin), np.log10(amax), na)
-        if self.polarization and nang < 181:
+        self.a_dist = np.logspace(
+            np.log10(self.amin), np.log10(self.amax), self.na)
+
+        if self.polarization and self.nang < 181:
             self.nang = 181
-        else:
-            self.nang = nang
 
         # Use 1 until the parallelization of polarization is properly implemented
         nth = self.nthreads
@@ -231,10 +237,15 @@ class Pipeline:
         mix.set_lgrid(self.lmin, self.lmax, self.nlam)
         mix.scatmatrix = self.polarization
 
-        source_path = Path(__file__).resolve()
-        source_dir = source_path.parent
         pathnk = Path(source_dir/'dustmixer/nk')
-        
+
+        # Make sure the source n k tables are accesible. If not, download
+        if not utils.file_exists(
+            f'{pathnk}/astrosil-Draine2003.lnk', raise_=False):
+
+            pathnk = 'https://raw.githubusercontent.com/jzamponi/'+\
+                'utils/main/opacity_tables'
+
         if self.material == 's':
             mix.name = 'Silicate'
             mix.set_nk(f'{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
@@ -242,7 +253,7 @@ class Pipeline:
         
         elif self.material == 'g':
             mix.name = 'Graphite'
-            mix.set_nk('{pathnk}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
+            mix.set_nk(f'{pathnk}/c-gra-Draine2003.lnk', skip=1, get_dens=True)
             mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
@@ -278,7 +289,7 @@ class Pipeline:
             mix.name = 'Sil-Gra-Org'
             sil = copy.deepcopy(mix)
             sil.name = 'Silicate'
-            sil.set_nk('{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
+            sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk', skip=1, get_dens=True)
             sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
             if show_nk: sil.plot_nk(show=show_nk, savefig=savefig)
 
@@ -309,6 +320,12 @@ class Pipeline:
             # Sum the opacities weighted by their mass fractions
             mix = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
 
+        elif self.material == 'dsharp':
+            utils.not_implemented('Opacity: DSHARP')
+
+        elif self.material == 'diana':
+            utils.not_implemented('Opacity: DIANA')
+    
         else:
             try:
                 mix.name = self.material.split('/')[-1].split('.')[0]
@@ -325,10 +342,10 @@ class Pipeline:
         if show_opac or savefig is not None:
             mix.plot_opacities(show=show_opac, savefig=savefig)
 
-        mix.write_opacity_file(name=f'{self.material}-a{int(self.amax)}um')
+        mix.write_opacity_file(name=self._get_opac_name(self.csubl))
 
         if self.alignment:
-            mix.write_align_factor(f'{self.material}-a{int(self.amax)}um')
+            mix.write_align_factor(name=self._get_opac_name(self.csubl))
 
         # Store the current dust opacity in the pipeline instance
         self.kappa = mix._get_kappa_at_lam(self.lam) 
@@ -378,42 +395,52 @@ class Pipeline:
 
         if dustopac:
             # Create a dust opacity file
-            self.amax = int(self.amax)
             with open('dustopac.inp', 'w+') as f:
                 f.write('2\n')
                 f.write(f'{self.nspec}\n')
                 f.write('---------\n')
                 f.write(f'{self.inputstyle}\n')
                 f.write('0\n')
-                f.write(f'{self._get_opac_file_name(self.nspec, self.dgrowth)}\n')
+                f.write(f'{self._get_opac_name(self.csubl)}\n')
 
                 if self.nspec > 1:
                     # Define a second species 
                     f.write('---------\n')
                     f.write(f'{self.inputstyle}\n')
                     f.write('0\n')
-                    f.write(f'{self._get_opac_file_name(self.nspec, self.dgrowth)}\n')
+                    if self.dgrowth:
+                        f.write(f'{self._get_opac_name(dgrowth=self.dgrowth)}\n')
+                    else:
+                        f.write(f'{self._get_opac_name(material2=True)}\n')
                 f.write('---------\n')
 
         if dustkappa:
 
+            amax = int(self.amax)
+
             # Fetch the corresponding opacity table from a public repo
-            table = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
-                f'opacity_tables/dustkappa_{self.dcomp[0]}-a{self.amax}um.inp'
-
-            utils.download_file(table)
-
+            repo = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
+                f'opacity_tables'
+    
             if self.csubl > 0:
-                # Download also the table for a second dust composition
-                table = table.replace(f'{self.dcomp[0]}', f'{self.dcomp[1]}')
-                if 'sgo' in table:
-                    table = table.replace('um.inp', f'um-{int(self.csubl)}org.inp')
+                # Download opacity of the first species 
+                utils.download_file(
+                    f'{repo}/dustkappa_{self._get_opac_name(self.csubl)}.inp')
 
+                # Download opacity of the second species. If dgrowth, use 1000um
                 if self.dgrowth:
-                    # Download also the table for grown dust
-                    table = table.replace(f'{self.amax}', '1000') 
+                    utils.download_file(
+                        f'{repo}/dustkappa_' +\
+                        f'{self._get_opac_name(dgrowth=self.dgrowth)}.inp')
+                else:
+                    utils.download_file(f'{repo}/' +\
+                        f'dustkappa_{self._get_opac_name(material2=True)}.inp')
 
-                utils.download_file(table)
+            else:
+                # Download opacity for the single dust species 
+                utils.download_file(
+                    f'{repo}/dustkappa_{self._get_opac_name()}.inp')
+
 
         if dustkapalignfact:
             # To do: convert the graphite_oblate.dat and silicate_oblate.dat 
@@ -438,6 +465,10 @@ class Pipeline:
 
         print('')
         utils.print_("Running a thermal Monte Carlo ...", bold=True)
+
+        # Make sure RADMC3D is installed and callable
+        utils.which('radmc3d') 
+
         self.nphot = nphot
 
         # Generate only the input files that are not available in the directory
@@ -467,18 +498,15 @@ class Pipeline:
                             'dustmixer, as in synthesizer --opacity using '+\
                             'default values.', blue=True)
 
-                        self.dust = self.dust_opacity(amin=0.1, amax=10, 
-                            na=100, q=3.5, nang=181, material=self.material)
+                        self.dust = self.dustmixer()
             else:
                 if len(glob('dustkapscat*')) == 0 or self.overwrite:
                     utils.print_(
                         f'Unable to download opacity table. I will call ' +\
-                        'dustmixer, as synthesizer --opacity using default '+\
-                        ' values.', blue=True)
+                        'dustmixer, as in synthesizer --opacity using '+\
+                        'defualt values.', blue=True)
 
-                    self.dust = self.dust_opacity(amin=0.1, amax=10,  
-                        na=100, q=3.5, nang=181, material=self.material)
-                
+                    self.dust = self.dustmixer()
 
         # Call RADMC3D and pipe the output also to radmc3d.out
         try:
@@ -508,6 +536,9 @@ class Pipeline:
         print('')
         utils.print_("Ray-tracing the model density and temperature ...\n", 
             bold=True)
+
+        # Make sure RADMC3D is installed and callable
+        utils.which('radmc3d') 
 
         self.distance = distance
         self.tau = tau
@@ -555,19 +586,18 @@ class Pipeline:
                     except Exception as e:
                         utils.print_(
                             f'Unable to download opacity table. I will call ' +\
-                            'dustmixer, as in synthesizer --opacity.', bold=True
-                        )
-                        self.dust_opacity(amin=0.1, amax=10, na=100,  
-                            q=3.5, nang=181, material=self.material)
+                            'dustmixer, as in synthesizer --opacity using '+\
+                            'default values.', blue=True)
+                        
+                        self.dust = self.dustmixer()
             else:
                 if len(glob('dustkapscat*')) == 0 or self.overwrite:
                     utils.print_(
                         f'Unable to download opacity table. I will call ' +\
-                        'dustmixer, as in synthesizer --opacity.', bold=True
-                    )
-                    self.dust_opacity(amin=0.1, amax=10, na=100,  
-                        q=3.5, nang=181, material=self.material)
-                        
+                        'dustmixer, as in synthesizer --opacity using '+\
+                        'default values.', blue=True)
+                    
+                    self.dust = self.dustmixer()
 
         # If align factors were calculated within the pipeline, don't overwrite
         if self.alignment:
@@ -675,11 +705,13 @@ class Pipeline:
         # Register the pipeline step 
         self.steps.append('raytrace')
 
+
     @utils.elapsed_time
     def synthetic_observation(self, show=False, cleanup=True, 
             script=None, simobserve=True, clean=True, exportfits=True, 
             obstime=1, resolution=None, obsmode='int', graphic=True, 
-            telescope=None, verbose=False):
+            use_template=False, telescope=None, verbose=False, 
+            ):
         """ 
             Prepare the input for the CASA simulator from the RADMC3D output,
             and call CASA to run a synthetic observation.
@@ -688,9 +720,12 @@ class Pipeline:
         print('')
         utils.print_('Running synthetic observation ...\n', bold=True)
 
+        # Make sure RADMC3D is installed and callable
+        utils.which('casa') 
+
         # If the observing wavelength is outside the working range of CASA, 
         # simplify the synthetic obs. to a PSF convolution and thermal noise
-        if self.lam < 400 or self.lam > 4500:
+        if self.lam < 400 or self.lam > 4e6:
     
             if resolution is not None:
                 self.resolution = resolution
@@ -714,30 +749,60 @@ class Pipeline:
                 img_q.write_fits('synobs_Q.fits')
                 img_u.write_fits('synobs_U.fits')
 
+        # Use casa simobserve/tclean
         else:
             if script is None:
-                # Create a minimal template CASA script
+
                 script = synobs.CasaScript(lam=self.lam)
+
+                if use_template and self.lam not in [1300, 3000, 7000, 18000]: 
+                    utils.print_(
+                        f"There's no template available at {self.lam} um "+\
+                        'I will create a simple one named casa_script.py. '+\
+                        'You can modify it later and re-run with ' +\
+                        'synthesizer --synobs --script casa_script.py',
+                        bold=True)
+                    use_template = False
+
+                if use_template:
+                    utils.print_(
+                        f'Using template casa script at {self.lam} microns')
+
+                    template = {
+                        1300: 'alma_1.3mm.py',
+                        3000: 'alma_3mm.py',
+                        7000: 'vla_7mm.py',
+                        18000: 'vla_18mm.py',
+                    }[self.lam]
+
+                    script.name = str(source_dir/f'synobs/templates/{template}')
+                    script.read(script.name)                    
+
+                else:
+                    # Create a minimal template CASA script
+                    script.resolution = resolution
+                    script.obsmode = obsmode
+                    script.telescope = telescope
+                    if self.npix is not None: script.imsize = int(self.npix + 100)
+                    script.totaltime = f'{obstime}h'
+
+                # Tailor the script to the pipeline setup
                 script.polarization = self.polarization
                 script.simobserve = simobserve
                 script.clean = clean
                 script.graphic = graphic
                 script.overwrite = self.overwrite
-                script.resolution = resolution
-                script.obsmode = obsmode
-                script.telescope = telescope
-                if self.npix is not None: script.npix = int(self.npix + 20)
-                script.totaltime = f'{obstime}h'
                 script.verbose = False
                 script.write('casa_script.py')
 
-            elif 'http' in script: 
-                # Download the script if a URL is provided
-                url = script
-                utils.download_file(url)
-                script = synobs.CasaScript()
-                script.name = script.split('/')[-1]
-                script.read(script.name)
+            else:
+                if 'http' in script: 
+                    # Download the script if a URL is provided
+                    utils.download_file(script)
+
+                script_name = script.split('/')[-1]
+                script = synobs.CasaScript(lam=self.lam)
+                script.read(script_name)
 
             self.script = script
 
@@ -745,7 +810,7 @@ class Pipeline:
             script.run()
 
             # Clean-up and remove unnecessary files created by CASA 
-            if not simobserve or not tclean or not exportfits:
+            if not simobserve or not clean or not exportfits:
                 script.cleanup()
 
         # Show the new synthetic image
@@ -820,7 +885,7 @@ class Pipeline:
             else:
                 fig = utils.plot_map(
                     filename='synobs_I.fits',
-                    bright_temp=False,
+                    bright_temp=True,
                     verbose=False,
                 )
         except Exception as e:
@@ -833,6 +898,8 @@ class Pipeline:
         utils.file_exists('amr_grid.inp')
         rho = np.loadtxt('dust_density.inp', skiprows=3)
         amr = np.loadtxt('amr_grid.inp', skiprows=6)
+
+        # Integrate density weigthed by the dust opacity along the line-of-sight
         dl = np.diff(amr)[0]
         nx = int(np.cbrt(rho.size))
         rho = rho.reshape((nx, nx, nx))
@@ -855,21 +922,28 @@ class Pipeline:
 
         utils.write_fits('tau.fits', data=tau2d, overwrite=True)
 
-    def _get_opac_file_name(self, csubl=0, dgrowth=False):
+    def _get_opac_name(self, csubl=0, dgrowth=False, material2=False):
         """ Get the name of the currently used opacity file dustk*.inp """
 
+        amax = int(self.amax)
+        csubl = int(csubl)
+
         if csubl > 0:
-            ext = f'{self.dcomp[1]}-a{self.amax}um-{int(self.csubl)}org'
-        else:
-            ext = f'{self.material}-a{self.amax}um'
+            opacname = f'{self.material}-a{amax}um-{csubl}org'
 
-        if dgrowth:
-            ext = f'{self.dcomp[0]}-a1000um'
-        else:
-            ext = f'{self.dcomp[0]}-a{self.amax}um'
+        elif material2:
+            opacname = f'{self.material2}-a{amax}um'
 
-        self.opacfile = self.opacfile + ext + '.inp'
-        return ext 
+        elif dgrowth:
+            opacname = f'{self.material2}-a1000um'
+
+        else:
+            opacname = f'{self.material}-a{amax}um'
+
+        prefix = 'dustkapscat_' if self.polarization else 'dustkappa_'
+        self.opacfile = prefix + opacname + '.inp'
+
+        return opacname 
     
     def _get_opacity(self):
         """ Read in an opacity file, interpolate and find the opacity at lambda """
@@ -880,7 +954,7 @@ class Pipeline:
            return self.kappa 
 
         # Generate the opacfile string and make sure file exists
-        self._get_opac_file_name()
+        self._get_opac_name(csubl=self.csubl)
 
         try:
             # Read in opacity file (dustkap*.inp) and interpolate to find k_ext
@@ -894,15 +968,14 @@ class Pipeline:
             self.k_abs = d['col2']
             self.k_sca = d['col3'] if iformat > 1 else np.zeros(l.shape)
             self.k_ext = self.k_abs + self.k_sca
-            self.kappa = np.float(interp1d(l, self.k_ext)(self.lam))
+            self.kappa = float(interp1d(l, self.k_ext)(self.lam))
 
             return self.kappa
 
         except Exception as e:
             utils.print_(
-                f'{e}\n' +\
-                f"I couldn't obtain the opacity from {self.opacfile}. " +\
-                "I will assume k_ext = 1 g/cm3.", bold=True)
+                f"{e} I couldn't obtain the opacity from {self.opacfile}. " +\
+                "I will assume k_ext = 1 g/cm3.")
 
             return 1.0
 
@@ -923,7 +996,7 @@ class Pipeline:
                     msg = lambda m: f'{utils.color.red}\r{m}{utils.color.none}'
                     errmsg = msg(f'[RADMC3D] {line}...')
 
-                    if 'g=<cos(theta)>' in line or 'kappa_s' in line:
+                    if 'g=<cos(theta)>' in line or 'the scat' in line:
                         errmsg += f' Try increasing --na or --nang '
                         errmsg += f'(currently, na: {self.na} nang {self.nang})'
 
@@ -943,3 +1016,15 @@ class Pipeline:
         except AttributeError:
             g = np.loadtxt('amr_grid.inp', skiprows=6)
             return (g[-1] - g[0]) / 2
+
+    def plot_grid_2d(self):
+        """ Plot the grid's density and temperature midplanes from files,
+            in case they are not currently available from pipeline.grid
+        """
+        utils.not_implemented('Plot grid midplane')
+        
+    def plot_grid_3d(self):
+        """ Render the grid's density and temperature in 3D from files,
+            in case they are not currently available from pipeline.grid
+        """
+        utils.not_implemented('Render grid 3D')
