@@ -105,6 +105,15 @@ class Pipeline:
         self.rout = rout * u.au.to(u.cm) if rout is not None else rout
         self.g2d = g2d
 
+        # Make sure the model temp is read when c-sublimation is enabled
+        if self.csubl > 0 and not temperature:
+            utils.print_('--sublimation was given but not --temperature.') 
+            utils.print_("I will set --temperature to read in the model's "+\
+                f'temperature and set the sootline at {self.sootline} K.') 
+
+            temperature = True
+
+
         # Create a grid instance
         print('')
         utils.print_('Creating model grid ...\n', bold=True)
@@ -658,24 +667,15 @@ class Pipeline:
         utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
 
         # Write pipeline's info to the FITS headers
-        utils.edit_header(fitsfile, 'INCL', self.incl)
-        utils.edit_header(fitsfile, 'SCATMODE', self.scatmode)
-        utils.edit_header(fitsfile, 'NPHOT', self.nphot)
-        utils.edit_header(fitsfile, 'OPACITY', self.kappa)
-        utils.edit_header(fitsfile, 'MATERIAL', self.material)
-        utils.edit_header(fitsfile, 'CSUBL', self.csubl)
-        utils.edit_header(fitsfile, 'NSPEC', self.nspec)
-
-        if self.polarization:
-            for st in ['Q', 'U']:
-                stfile = fitsfile.replace('I', st)
-                utils.radmc3d_casafits(stfile, stokes=st, dpc=distance)
-                utils.edit_header(stfile, 'INCL', self.incl)
-                utils.edit_header(stfile, 'NPHOT', self.nphot)
-                utils.edit_header(stfile, 'OPACITY', self.kappa)
-                utils.edit_header(stfile, 'MATERIAL', self.material)
-                utils.edit_header(stfile, 'CSUBL', self.csubl)
-                utils.edit_header(stfile, 'NSPEC', self.nspec)
+        for st in ['I', 'Q', 'U'] if self.polarization else ['I']:
+            stfile = fitsfile.replace('I', st)
+            utils.radmc3d_casafits(stfile, stokes=st, dpc=distance)
+            utils.edit_header(stfile, 'INCL', self.incl)
+            utils.edit_header(stfile, 'NPHOT', self.nphot)
+            utils.edit_header(stfile, 'OPACITY', self.kappa)
+            utils.edit_header(stfile, 'MATERIAL', self.material)
+            utils.edit_header(stfile, 'CSUBL', self.csubl)
+            utils.edit_header(stfile, 'NSPEC', self.nspec)
 
         # Plot the new image in Jy/pixel
         if show:
@@ -775,6 +775,8 @@ class Pipeline:
                         18000: 'vla_18mm.py',
                     }[self.lam]
 
+                    if self.polarization: template.replace('1.3mm', '1.3mm_pol')
+
                     script.name = str(source_dir/f'synobs/templates/{template}')
                     script.read(script.name)                    
 
@@ -808,6 +810,10 @@ class Pipeline:
 
             # Call CASA
             script.run()
+
+            # Add the missing fits frequency keyword
+            for s in ['I', 'Q', 'U'] if self.polarization else ['I']:
+                utils.edit_header(f'synobs_{s}.fits', 'RESTFRQ', script.reffreq)
 
             # Clean-up and remove unnecessary files created by CASA 
             if not simobserve or not clean or not exportfits:

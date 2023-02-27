@@ -420,6 +420,9 @@ def plot_map(
     """
     from aplpy import FITSFigure
 
+    # Temporal fits file to write and plot if data is modified
+    tempfile = '.temp_file.fits'
+
     # Read from FITS file if input is a filename
     if isinstance(filename, (str,PosixPath)):
         data, hdr = fits.getdata(filename, header=True)
@@ -453,14 +456,19 @@ def plot_map(
                 bmin=hdr.get("bmin") * u.deg.to(u.arcsec),
                 bmaj=hdr.get("bmaj") * u.deg.to(u.arcsec),
             )
+            hdr['BUNIT'] = 'K'
+
         except Exception as e:
             print_(f'{e}', verbose)
             print_('Beam or frequency keywords not available. ' +\
             'Impossible to convert into T_b.', verbose, bold=True)
     
-    # If data was changed, rewrite file
-    if any([rot90, transpose, flipud, fliplr, rescale, bright_temp]):
-        write_fits(filename, data.squeeze(), hdr, True, verbose)
+    # If data is modified, write to a temporal file
+    if any(
+        [rot90, transpose, flipud, fliplr, rescale is not None, bright_temp]
+    ):
+        write_fits(tempfile, data.squeeze(), hdr, True, verbose)
+        filename = tempfile
 
     # Initialize the figure
     fig = FITSFigure(str(filename), figsize=figsize, *args, **kwargs)
@@ -554,6 +562,8 @@ def plot_map(
         fig.scalebar.set_font(size=23)
         fig.scalebar.set_linewidth(3)
         fig.scalebar.set_label(f"{int(scalebar.value)}{unit}")
+
+    if filename == tempfile: os.remove(tempfile)
 
     return plot_checkout(fig, show, savefig, block=block) if checkout else fig
 

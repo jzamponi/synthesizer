@@ -182,7 +182,7 @@ def synthesizer():
     parser.add_argument('--sublimation', action='store', type=float, default=0,
         help='Percentage of refractory carbon that evaporates from the dust')
 
-    parser.add_argument('--soot-line', action='store', type=float, default=300,
+    parser.add_argument('--sootline', action='store', type=float, default=300,
         help='Temperature at which carbon is supposed to sublimate')
 
     parser.add_argument('--dust-growth', action='store_true', default=False,  
@@ -246,7 +246,7 @@ def synthesizer():
     pipeline = Pipeline(
         lam=cli.lam, lmin=cli.lmin, lmax=cli.lmax, nlam=cli.nlam,
         amin=cli.amin, amax=cli.amax, na=cli.na,
-        csubl=cli.sublimation, sootline=cli.soot_line, dgrowth=cli.dust_growth,
+        csubl=cli.sublimation, sootline=cli.sootline, dgrowth=cli.dust_growth,
         polarization=cli.polarization, alignment=cli.alignment, star=cli.star, 
         nphot=cli.nphot, nthreads=cli.nthreads, 
         material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet

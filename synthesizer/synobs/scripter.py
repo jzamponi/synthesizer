@@ -45,7 +45,7 @@ class CasaScript():
         self.totaltime = '1h'
         self.indirection = 'J2000 16h32m22.63 -24d28m31.8'
         self.hourangle = 'transit'
-        self.refdate = '2021/01/02', 
+        self.refdate = '2017/05/20', 
         self.obsmode = 'int'
         self.telescope = None
         self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
@@ -257,6 +257,7 @@ class CasaScript():
             if 'imsize' in line: self.imsize = strip_line(line)
             if 'cell' in line: self.cell = strip_line(line)
             if 'reffreq' in line: self.reffreq = strip_line(line)
+            if 'restfrq' in line: self.restfrq = strip_line(line)
             if 'specmode' in line: self.specmode = strip_line(line)
             if 'gridder' in line: self.gridder = strip_line(line)
             if 'deconvolver' in line: self.deconvolver = strip_line(line)

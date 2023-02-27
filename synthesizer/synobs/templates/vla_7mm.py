@@ -1,9 +1,7 @@
 # Setup based on Liu et al. (2018)
 
-import time
 Simobserve = True
 Clean = True
-polarization = False
 
 if Simobserve:
     simobserve(

@@ -291,7 +291,6 @@ class AnalyticalModel():
         try:
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the density grid midplane')
-            plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
             plt.rcParams['xtick.top'] = True
@@ -325,7 +324,7 @@ class AnalyticalModel():
             if np.all(slice_ == np.zeros(slice_.shape)): 
                 raise ValueError('Model density is exactly 0.')
 
-            plt.title(r'Dust Density Midplane (g cm$^-3$)')
+            plt.title(r'Dust Density Midplane (g cm$^{-3}$)')
             plt.imshow(
                 slice_, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
@@ -369,7 +368,6 @@ class AnalyticalModel():
         try:
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the temperature grid midplane at z = 0')
-            plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
             plt.rcParams['xtick.top'] = True

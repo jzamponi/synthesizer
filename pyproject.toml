@@ -16,15 +16,15 @@ classifiers = [
 ]
 keywords = ["", "", ""]
 dependencies = [
+    "requests",
     "astropy",
     "matplotlib",
     "numpy",
     "scipy",
-    "progressbar2",
-    "mayavi",
-    "aplpy",
-    "requests",
     "mpmath",
+    "progressbar2",
+    "aplpy",
+    "mayavi",
     "h5py",
 ]
 requires-python = ">=3.8"
