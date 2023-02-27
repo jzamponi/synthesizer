@@ -296,5 +296,6 @@ class CasaScript():
     def cleanup(self):
         if utils.file_exists('casa-*.log', raise_=False) or\
                 utils.file_exists('*.last', raise_=False):
+
             utils.print_('Cleaning up ... deleting casa-*.log and *.last files')
             subprocess.run('rm casa-*.log *.last', shell=True)

@@ -294,11 +294,17 @@ def synthesizer():
 
    
     # Allow synthesizer to also plot already existing data when no step is run 
+    if cli.show_nk and not cli.opacity:
+        pipeline.plot_nk()
+
+    if cli.show_opacity and not cli.opacity:
+        pipeline.plot_opacities()
+
     if cli.show_grid_2d and not cli.grid:
-        pipeline.plot_grid_2d()
+        pipeline.plot_grid_2d(temp=cli.temperature)
 
     if cli.show_grid_3d and not cli.grid:
-        pipeline.plot_grid_3d()
+        pipeline.plot_grid_3d(temp=cli.temperature)
 
     if cli.show_rt and not cli.raytrace:
         pipeline.plot_rt()
@@ -314,7 +320,7 @@ def synthesizer():
     if not any([
         cli.grid, cli.opacity, cli.monte_carlo, cli.raytrace, 
         cli.synobs, cli.quiet, cli.show_grid_2d, cli.show_grid_3d,
-        cli.show_rt, cli.show_synobs
+        cli.show_rt, cli.show_synobs, cli.show_opacity, cli.show_nk,
     ]):
 
         utils.print_('Nothing to do. Main options are:' +\

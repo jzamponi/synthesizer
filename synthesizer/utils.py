@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+import warnings
 import subprocess
 from glob import glob
 from functools import wraps
@@ -116,11 +117,17 @@ def elapsed_time(caller):
         return f
     return wrapper
 
+def latest_file(filename):
+    """ Return the name of the most recent file given the file pattern 
+        filename. It supports wildcards. 
+        It basically emulates the bash command $ ls -t filename
+    """
+    return max(glob(filename), key=lambda f: os.path.getctime(f))
 
-def file_exists(filename, raise_=True):
+def file_exists(filename, raise_=True, msg=''):
     """ Raise an error if a file doesnt exist. Supports linux wildcards. """
 
-    msg = f'{color.red}{filename} not found.{color.none}'
+    msg = f'{color.red}{filename} not found. {msg}{color.none}'
     
     if '*' in filename:
         if len(glob(filename)) == 0:
@@ -418,7 +425,10 @@ def plot_map(
     """
     Plot a fits file using the APLPy library.
     """
-    from aplpy import FITSFigure
+    import aplpy
+
+    # Supress multiple info/warnings from APLPy about header keyword fixes
+    aplpy.core.log.setLevel('ERROR')
 
     # Temporal fits file to write and plot if data is modified
     tempfile = '.temp_file.fits'
@@ -471,7 +481,7 @@ def plot_map(
         filename = tempfile
 
     # Initialize the figure
-    fig = FITSFigure(str(filename), figsize=figsize, *args, **kwargs)
+    fig = aplpy.FITSFigure(str(filename), figsize=figsize, *args, **kwargs)
     fig.set_auto_refresh(True)
     fig.show_colorscale(cmap=cmap, vmax=vmax, vmin=vmin, stretch=stretch)
     
@@ -601,7 +611,6 @@ def polarization_map(
     Extract I, Q, U and V from the polaris output
     and create maps of Pfrac and Pangle using APLpy.
     """
-    from aplpy import FITSFigure
 
     # Enable verbosity
     global VERBOSE

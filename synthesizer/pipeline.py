@@ -5,6 +5,7 @@ import sys
 import copy
 import random
 import requests
+import warnings
 import subprocess
 import numpy as np
 from glob import glob
@@ -234,18 +235,19 @@ class Pipeline:
         self.a_dist = np.logspace(
             np.log10(self.amin), np.log10(self.amax), self.na)
 
-        if self.polarization and self.nang < 181:
-            self.nang = 181
+        if self.polarization and self.nang < 181: self.nang = 181
 
         # Use 1 until the parallelization of polarization is properly implemented
         nth = self.nthreads
         nth = 1
 
+        # Initialize a Dust object and set its wavelenght grid to the pipeline's
         mix = dustmixer.Dust()
         mix.pb = pb
         mix.set_lgrid(self.lmin, self.lmax, self.nlam)
         mix.scatmatrix = self.polarization
 
+        # Source code location where optical constants .lnk are stored
         pathnk = Path(source_dir/'dustmixer/nk')
 
         # Make sure the source n k tables are accesible. If not, download
@@ -426,29 +428,41 @@ class Pipeline:
         if dustkappa:
 
             amax = int(self.amax)
-
-            # Fetch the corresponding opacity table from a public repo
-            repo = 'https://raw.githubusercontent.com/jzamponi/utils/main/' +\
-                f'opacity_tables'
     
-            if self.csubl > 0:
-                # Download opacity of the first species 
-                utils.download_file(
-                    f'{repo}/dustkappa_{self._get_opac_name(self.csubl)}.inp')
+            ofile = 'dustkappa' if not self.polarization else 'dustkapscatmat'
 
-                # Download opacity of the second species. If dgrowth, use 1000um
-                if self.dgrowth:
+            try:
+                # Fetch the corresponding opacity table from a public repo
+                repo = 'https://raw.githubusercontent.com/jzamponi/'+\
+                    f'utils/main/opacity_tables'
+        
+                if self.csubl > 0:
+                    # Download opacity of the first species 
                     utils.download_file(
-                        f'{repo}/dustkappa_' +\
-                        f'{self._get_opac_name(dgrowth=self.dgrowth)}.inp')
-                else:
-                    utils.download_file(f'{repo}/' +\
-                        f'dustkappa_{self._get_opac_name(material2=True)}.inp')
+                        f'{repo}/{ofile}_{self._get_opac_name(self.csubl)}.inp')
 
-            else:
-                # Download opacity for the single dust species 
-                utils.download_file(
-                    f'{repo}/dustkappa_{self._get_opac_name()}.inp')
+                    # Download opacity of the second species. If dgrowth use 1mm
+                    if self.dgrowth:
+                        utils.download_file(
+                            f'{repo}/{ofile}_' +\
+                            f'{self._get_opac_name(dgrowth=self.dgrowth)}.inp')
+                    else:
+                        utils.download_file(f'{repo}/' +\
+                            f'{ofile}_{self._get_opac_name(material2=True)}.inp')
+
+                else:
+                    # Download opacity for the single dust species 
+                    utils.download_file(
+                        f'{repo}/{ofile}_{self._get_opac_name()}.inp')
+
+            # If unable to download from the repo, calculate it using dustmixer
+            except Exception as e:
+                utils.print_(
+                    f'Unable to download opacity table. I will call ' +\
+                    'dustmixer, as in synthesizer --opacity using '+\
+                    'default values.', blue=True)
+                
+                self.dust = self.dustmixer()
 
 
         if dustkapalignfact:
@@ -480,6 +494,13 @@ class Pipeline:
 
         self.nphot = nphot
 
+        # Make sure there's at least a grid, density and temp. distribution
+        utils.file_exists('amr_grid.inp', 
+            msg='You must create a model grid first. Use synthesizer --grid')
+
+        utils.file_exists('dust_density.inp', 
+            msg='You must create a density model first. Use synthesizer --grid')
+
         # Generate only the input files that are not available in the directory
         self.generate_input_files(inpfile=True, mc=True)
 
@@ -495,27 +516,8 @@ class Pipeline:
             self.generate_input_files(dustopac=True)
 
         # If opacites were calculated within the pipeline, don't overwrite them
-        if 'dustmixer' not in self.steps:
-            # If not manually provided, download it from the repo
-            if not self.polarization:
-                if len(glob('dustkappa*')) == 0 or self.overwrite:
-                    try:
-                        self.generate_input_files(dustkappa=True)
-                    except Exception as e:
-                        utils.print_(
-                            f'Unable to download opacity table. I will call ' +\
-                            'dustmixer, as in synthesizer --opacity using '+\
-                            'default values.', blue=True)
-
-                        self.dust = self.dustmixer()
-            else:
-                if len(glob('dustkapscat*')) == 0 or self.overwrite:
-                    utils.print_(
-                        f'Unable to download opacity table. I will call ' +\
-                        'dustmixer, as in synthesizer --opacity using '+\
-                        'defualt values.', blue=True)
-
-                    self.dust = self.dustmixer()
+        if not utils.file_exists('dustka*.inp', raise_=False) or self.overwrite:
+            self.generate_input_files(dustkappa=True)
 
         # Call RADMC3D and pipe the output also to radmc3d.out
         try:
@@ -549,6 +551,56 @@ class Pipeline:
         # Make sure RADMC3D is installed and callable
         utils.which('radmc3d') 
 
+        # Make sure there's at least a grid, density and temp. distribution
+        utils.file_exists('amr_grid.inp', 
+            msg='You must create a model grid first. Use synthesizer --grid')
+
+        utils.file_exists('dust_density.inp', 
+            msg='You must create a density model first. Use synthesizer --grid')
+
+        utils.file_exists('dust_temperature.dat',
+            msg='You must create a temperature model first. '+\
+                'Use synthesizer -g --temperature or synthesizer -mc')
+
+        # Generate only the input files that are not available in the directory
+        if not os.path.exists('radmc3d.inp') or self.overwrite:
+            self.generate_input_files(inpfile=True)
+
+        if not os.path.exists('wavelength_micron.inp') or self.overwrite:
+            self.generate_input_files(wavelength=True)
+
+        if not os.path.exists('stars.inp') or self.overwrite:
+            self.generate_input_files(stars=True)
+
+        # Write a new dustopac file only if dustmixer was used or if unexistent
+        if not os.path.exists('dustopac.inp') or \
+            'dustmixer' in self.steps or self.overwrite:
+            self.generate_input_files(dustopac=True)
+
+        # If opacites were calculated within the pipeline, don't overwrite them
+        if not utils.file_exists('dustka*.inp', raise_=False) or self.overwrite:
+            self.generate_input_files(dustkappa=True)
+
+        # If align factors were calculated within the pipeline, don't overwrite
+        if self.alignment:
+            if 'dustmixer' not in self.steps:
+                # If not manually provided, download it from the repo
+                if len(glob('dustkapalignfact*')) == 0:
+                    self.generate_input_files(dustkapalignfact=True)
+
+            if not os.path.exists('grainalign_dir.inp'):
+                self.generate_input_files(grainalign=True)
+
+        # Now double check that all necessary input files are available 
+        utils.file_exists('radmc3d.inp')
+        utils.file_exists('wavelength_micron.inp')
+        utils.file_exists('stars.inp')
+        utils.file_exists('dustopac.inp')
+        utils.file_exists('dustkapscat*' if self.polarization else 'dustkappa*')
+        if self.alignment: 
+            utils.file_exists('dustkapalignfact*')
+            utils.file_exists('grainalign_dir.inp')
+
         self.distance = distance
         self.tau = tau
         self.tau_surf = tau_surf
@@ -570,66 +622,6 @@ class Pipeline:
 
         # To do: What's the diff. between passing noscat and setting scatmode=0
         if noscat: self.scatmode = 0
-
-        # Generate only the input files that are not available in the directory
-        self.generate_input_files(inpfile=True)
-
-        if not os.path.exists('wavelength_micron.inp') or self.overwrite:
-            self.generate_input_files(wavelength=True)
-
-        if not os.path.exists('stars.inp') or self.overwrite:
-            self.generate_input_files(stars=True)
-
-        # Write a new dustopac file only if dustmixer was used or if unexistent
-        if not os.path.exists('dustopac.inp') or \
-            'dustmixer' in self.steps or self.overwrite:
-            self.generate_input_files(dustopac=True)
-
-        # If opacites were calculated within the pipeline, don't overwrite them
-        if 'dustmixer' not in self.steps:
-            # If not manually provided, download it from the repo
-            if not self.polarization:
-                if len(glob('dustkappa*')) == 0 or self.overwrite:
-                    try:
-                        self.generate_input_files(dustkappa=True)
-                    except Exception as e:
-                        utils.print_(
-                            f'Unable to download opacity table. I will call ' +\
-                            'dustmixer, as in synthesizer --opacity using '+\
-                            'default values.', blue=True)
-                        
-                        self.dust = self.dustmixer()
-            else:
-                if len(glob('dustkapscat*')) == 0 or self.overwrite:
-                    utils.print_(
-                        f'Unable to download opacity table. I will call ' +\
-                        'dustmixer, as in synthesizer --opacity using '+\
-                        'default values.', blue=True)
-                    
-                    self.dust = self.dustmixer()
-
-        # If align factors were calculated within the pipeline, don't overwrite
-        if self.alignment:
-            if 'dustmixer' not in self.steps:
-                # If not manually provided, download it from the repo
-                if len(glob('dustkapalignfact*')) == 0:
-                    self.generate_input_files(dustkapalignfact=True)
-
-            if not os.path.exists('grainalign_dir.inp'):
-                self.generate_input_files(grainalign=True)
-
-        # Now double check that all necessary input files are available 
-        utils.file_exists('amr_grid.inp')
-        utils.file_exists('dust_density.inp')
-        utils.file_exists('dust_temperature.dat')
-        utils.file_exists('radmc3d.inp')
-        utils.file_exists('wavelength_micron.inp')
-        utils.file_exists('stars.inp')
-        utils.file_exists('dustopac.inp')
-        utils.file_exists('dustkapscat*' if self.polarization else 'dustkappa*')
-        if self.alignment: 
-            utils.file_exists('dustkapalignfact*')
-            utils.file_exists('grainalign_dir.inp')
 
         # Generate a 2D optical depth map
         if self.tau:
@@ -832,10 +824,13 @@ class Pipeline:
         utils.print_('Plotting image.out')
 
         try:
+            utils.file_exists('radmc3d_I.fits')
+
             if self.alignment:
                 utils.print_(f'Rotating vectors by 90 deg.', blue=True)
 
             if self.polarization:
+
                 fig = utils.polarization_map(
                     source='radmc3d',
                     render='I', 
@@ -859,7 +854,7 @@ class Pipeline:
             fig.tick_labels.hide()
         except Exception as e:
             utils.print_(
-                f'Unable to plot radmc3d image.\n{e}', bold=True)
+                f'Unable to plot: {e}', bold=True)
     
     def plot_synobs(self):
         utils.print_(f'Plotting the new synthetic image')
@@ -896,7 +891,7 @@ class Pipeline:
                 )
         except Exception as e:
             utils.print_(
-                f'Unable to plot synobs_I.fits:\n{e}', bold=True)
+                f'Unable to plot: {e}', bold=True)
 
     def plot_tau(self, show=False):
         utils.print_(f'Generating optical depth map at {self.lam} microns')
@@ -928,6 +923,59 @@ class Pipeline:
 
         utils.write_fits('tau.fits', data=tau2d, overwrite=True)
 
+    def plot_grid_2d(self, temp=False):
+        """ Plot the grid's density and temperature midplanes from files,
+            in case they are not currently available from pipeline.grid
+        """
+        utils.not_implemented('Plot grid midplane')
+        utils.file_exists('amr_grid.inp')
+        utils.file_exists('dust_density.inp')
+        if temp: utils.file_exists('dust_temperature.inp')
+        
+    def plot_grid_3d(self, temp=False):
+        """ Render the grid's density and temperature in 3D from files,
+            in case they are not currently available from pipeline.grid
+        """
+        utils.not_implemented('Render grid 3D')
+        utils.file_exists('amr_grid.inp')
+        utils.file_exists('dust_density.inp')
+        if temp: utils.file_exists('dust_temperature.inp')
+
+    def plot_nk(self):
+        """ Plot optical constants from the .lnk tables """
+        utils.file_exists('*.lnk')
+        filename = utils.latest_file('*.lnk')
+        dust = dustmixer.Dust()
+        dust.set_nk(filename, skip=1, get_dens=True)
+        dust.plot_nk()
+
+    def plot_opacities(self):
+        """ Plot opacities from file. Uses the lastly created dustkap* file """
+        utils.file_exists('dustkap*.inp')
+        filename = utils.latest_file('dustkap*.inp')
+        utils.print_(f'Reading from the most recent opacity table: {filename}')
+        
+        header = np.loadtxt(filename, max_rows=2)
+        iformat = int(header[0])
+        nlam = int(header[1])
+        skip = 3 if 'kapscat' in filename else 2
+        d = ascii.read(filename, data_start=skip, data_end=nlam + skip)
+        l = d['col1']
+        k_abs = d['col2']
+        k_sca = d['col3']
+        k_ext = k_abs + k_sca
+
+        fig = plt.figure()
+
+        plt.loglog(l, k_sca, ls=':', c='black', label=r'$\kappa_{\rm sca}$')
+        plt.loglog(l, k_abs, ls='--', c='black', label=r'$\kappa_{\rm abs}$')
+        plt.loglog(l, k_ext, ls='-', c='black', label=r'$\kappa_{\rm ext}$')
+        plt.legend()
+        plt.xlabel('Wavelength (microns)')
+        plt.ylabel(r'Dust opacity $\kappa$ (cm$^2$ g$^{-1}$)')
+        plt.tight_layout()
+        plt.show()
+
     def _get_opac_name(self, csubl=0, dgrowth=False, material2=False):
         """ Get the name of the currently used opacity file dustk*.inp """
 
@@ -954,6 +1002,9 @@ class Pipeline:
     def _get_opacity(self):
         """ Read in an opacity file, interpolate and find the opacity at lambda """
         from scipy.interpolate import interp1d
+
+        # Supress a Numpy (>=1.22) warning from loadtxt
+        warnings.filterwarnings('ignore')
 
         # Check if it was created by dustmixer
         if self.kappa is not None:
@@ -1023,14 +1074,3 @@ class Pipeline:
             g = np.loadtxt('amr_grid.inp', skiprows=6)
             return (g[-1] - g[0]) / 2
 
-    def plot_grid_2d(self):
-        """ Plot the grid's density and temperature midplanes from files,
-            in case they are not currently available from pipeline.grid
-        """
-        utils.not_implemented('Plot grid midplane')
-        
-    def plot_grid_3d(self):
-        """ Render the grid's density and temperature in 3D from files,
-            in case they are not currently available from pipeline.grid
-        """
-        utils.not_implemented('Render grid 3D')
