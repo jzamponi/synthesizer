@@ -176,7 +176,7 @@ def download_file(url, msg=None, verbose=True, *args, **kwargs):
         print_(f'No internet connection. Unable to download file.', red=True)
         return False
 
-def which(program):
+def which(program, msg=''):
     """ Call the which unix command to check whether a given program is
         in the PATH, i.e., executable, or not. 
         which returns 0 if the program is found, and 1 otherwise.
@@ -187,7 +187,8 @@ def which(program):
 
     if not_found.returncode:
         raise NotInstalled(
-            f'{program} is not installed on this machine, or not in the PATH')
+            f'{program} is not installed on this machine, or not in the PATH.'+\
+            f' {msg}')
 
 
 def plot_checkout(fig, show, savefig, path="", block=True):

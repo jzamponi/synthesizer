@@ -16,6 +16,7 @@ from astropy.io import ascii, fits
 from scipy.interpolate import griddata
 
 from synthesizer import utils
+from synthesizer import raytrace
 from synthesizer import synobs
 from synthesizer import gridder
 from synthesizer import dustmixer
@@ -490,7 +491,15 @@ class Pipeline:
         utils.print_("Running a thermal Monte Carlo ...", bold=True)
 
         # Make sure RADMC3D is installed and callable
-        utils.which('radmc3d') 
+        utils.which('radmc3d', 
+            msg="""You can easily install it with the following commands:
+                    - git clone https://github.com/dullemond/radmc3d-2.0.git
+                    - cd radmc3d-2.0/src
+                    - make
+                    - export PATH=$PWD:$PATH    
+                    - cd ../../
+                    - synthesizer --raytrace
+                """) 
 
         self.nphot = nphot
 
@@ -539,7 +548,7 @@ class Pipeline:
     @utils.elapsed_time
     def raytrace(self, lam=None, incl=None, npix=None, sizeau=None, show=True, 
             distance=141, tau=False, tau_surf=None, show_tau_surf=False, 
-            noscat=False, fitsfile='radmc3d_I.fits', radmc3d_cmds=''):
+            noscat=False, radmc3d_cmds=''):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
@@ -549,7 +558,15 @@ class Pipeline:
             bold=True)
 
         # Make sure RADMC3D is installed and callable
-        utils.which('radmc3d') 
+        utils.which('radmc3d', 
+            msg="""\n\nYou can easily install it with the following commands:
+                    - git clone https://github.com/dullemond/radmc3d-2.0.git
+                    - cd radmc3d-2.0/src
+                    - make
+                    - export PATH=$PWD:$PATH    
+                    - cd ../../
+                    - synthesizer --raytrace
+                """) 
 
         # Make sure there's at least a grid, density and temp. distribution
         utils.file_exists('amr_grid.inp', 
@@ -642,7 +659,7 @@ class Pipeline:
         try:
             utils.print_(f'Executing command: {cmd}')
             self._radmc3d_banner()
-            os.system(f'{cmd} 2>&1 | tee --append radmc3d.out')
+            os.system(f'{cmd} 2>&1 | tee -a radmc3d.out')
 
         except KeyboardInterrupt:
             raise Exception('Received SIGKILL. Execution halted by user.')
@@ -656,6 +673,7 @@ class Pipeline:
             f'{self._get_opacity():.2} cm2/g', blue=True)
 
         # Generate FITS files from the image.out
+        fitsfile = 'radmc3d_I.fits'
         utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
 
         # Write pipeline's info to the FITS headers
@@ -676,13 +694,11 @@ class Pipeline:
         # Generate a 3D surface at tau = tau_surf
         if self.tau_surf is not None:
             try:
-                utils.print_(
-                    'Generating tau surface at tau = {self.tau_surf}')
-                os.system(f'radmc3d tausurf {self.tau_surf} ' +\
-                f'lambda {self.lam} noscat '
-                f'npix {self.npix} ' if self.npix is not None else ' ' +\
-                f'sizeau {self.sizeau} ' if self.sizeau is not None else ' '+\
-                f'incl {self.incl} ' if self.incl is not None else ' ')
+                utils.print_('Generating tau surface at tau = {self.tau_surf}')
+                cmd.replace('image', f'tausurf {self.tau_surf}')
+                cmd.replace('stokes', '')
+                cmd.replace('noscat', '')
+                os.system(f'{cmd}')
 
                 os.rename('image.out', 'tauimage.out')
             except Exception as e:

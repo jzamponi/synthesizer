@@ -360,7 +360,7 @@ class CartesianGrid():
         
             # Extract the middle plane 
             plane = self.ncells//2 - 1
-    
+
             # Select the axis to plot
             if axis == 'xy' or axis == 0:
                 slice_ = self.interp_dens[..., plane].T
