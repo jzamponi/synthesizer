@@ -133,6 +133,11 @@ class CasaScript():
                     self.imagename = self.imagename.replace('I', s)
                 else:
                     self.imagename = self.imagename(s)
+
+                if isinstance(self.fitsimage, str):
+                    self.fitsimage = self.fitsimage.replace('I', s)
+                else:
+                    self.fitsimage = self.fitsimage(s)
     
                 if self.simobserve:
                     f.write(f'print("\033[1m\\n[syn_obs] ')

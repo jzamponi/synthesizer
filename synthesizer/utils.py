@@ -396,8 +396,23 @@ def fix_header_axes(file):
         edit_header(file, 'PC2_3', 'del', False)
         edit_header(file, 'PC3_3', 'del', False)
 
+def get_beam(filename, verbose=False):
+    """ Print or return the info from the header associated to the beam """
+    
+    data, hdr = fits.getdata(filename, header=True)
 
-@elapsed_time
+    beam = {
+        'bmaj': hdr.get('BMAJ', default=0) * u.deg.to(u.arcsec), 
+        'bmin': hdr.get('BMIN', default=0) * u.deg.to(u.arcsec), 
+        'bpa': hdr.get('BPA', default=0), 
+    }
+    
+    print_(f"Bmaj: {beam['bmaj']:.2f} arcsec", verbose=verbose)
+    print_(f"Bmin: {beam['bmin']:.2f} arcsec", verbose=verbose)
+    print_(f"Bpa: {beam['bpa']:.2f} deg", verbose=verbose)
+
+    return beam
+
 def plot_map(
     filename,
     header=None,
@@ -579,7 +594,6 @@ def plot_map(
     return plot_checkout(fig, show, savefig, block=block) if checkout else fig
 
 
-@elapsed_time
 def polarization_map(
     source = 'radmc3d', 
     render="intensity",
@@ -621,7 +635,7 @@ def polarization_map(
     pwd = os.getcwd()
 
     # Read the Stokes components from a data cube
-    if source in ['alma', 'vla', 'radmc3d']:
+    if source in ['alma', 'vla', 'radmc3d', 'synobs']:
         hdr = fits.getheader(f'{source}_I.fits')
 
         I = fits.getdata(f'{source}_I.fits').squeeze()

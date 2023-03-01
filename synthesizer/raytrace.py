@@ -27,11 +27,11 @@ class RADMC3D:
         self.cmd = cmd
 
     def run(self):
-        utils.print_(f'Executing command: {cmd}')
+        utils.print_(f'Executing command: {self.cmd}')
         self._banner()
 
         try:
-            os.system(f'{cmd} 2>&1 | tee -a {logfile}')
+            os.system(f'{self.cmd} 2>&1 | tee -a {self.logfile}')
 
         except KeyboardInterrupt:
             raise Exception('Received SIGKILL. Execution halted by user.')
@@ -46,8 +46,8 @@ class RADMC3D:
         """ Raise an exception to halt synthesizer if RADMC3D ended in Error """
 
         # Read radmc3d.out and stop the pipeline if RADMC3D finished in error
-        utils.file_exists('radmc3d.out')
-        with open ('radmc3d.out', 'r') as out:
+        utils.file_exists(self.logfile)
+        with open (self.logfile, 'r') as out:
             for line in out.readlines():
                 line = line.lower()
                 if 'error' in line or 'stop' in line:
@@ -78,19 +78,28 @@ class RADMC3D:
         utils.file_exists('wavelength_micron.inp')
         utils.file_exists('stars.inp')
         utils.file_exists('dustopac.inp')
-        utils.file_exists('dustkapscat*' if self.polarization else 'dustkappa*')
+        utils.file_exists('dustkapscat*' if self.stokes else 'dustkappa*')
         if self.alignment: 
             utils.file_exists('dustkapalignfact*')
             utils.file_exists('grainalign_dir.inp')
 
     def installer_help(self):
-        utils.print_("""
+        shell = os.environ('SHELL')
+
+        if 'bash' in shell:
+            shfile = '.bashrc'
+        elif 'zsh' in shell:
+            shfile = '.profile'
+        elif 'tcshell' in shell:
+            shfile = '.profile'
+    
+        utils.print_(f"""
             You can easily install it with the following commands:
                 - git clone https://github.com/dullemond/radmc3d-2.0.git
                 - cd radmc3d-2.0/src
                 - make
-                - echo "export PATH=$PWD:$PATH" >> ~/.bashrc
-                - source ~/.bashrc
+                - echo "export PATH=$PWD:$PATH" >> ~/{shfile}
+                - source ~/.{shfile}
                 - cd ../../
                 - synthesizer --raytrace
             """, blue=True)
@@ -101,6 +110,6 @@ class RADMC3D:
             os.system('cd radmc3d-2.0/src')
             os.system('make')
             os.system('export PATH=$PWD:$PATH')
-            os.system('source ~/.bashrc')
+            os.system(f'source ~/{shfile}')
             os.system('cd ../../')
             self.run()

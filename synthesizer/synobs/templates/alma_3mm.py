@@ -59,21 +59,3 @@ if Clean:
         dropstokes = True, 
         overwrite = True
     )
-
-    # Smooth to match the 1.3mm resolution. Meant for the spectral index map.
-    imsmooth(
-        'synobs_I.fits', 
-        major = '0.081855237483972arcsec', 
-        minor = '0.06690255552529199arcsec', 
-        pa = '79.39564514160deg', 
-        targetres = True, 
-        outfile = 'smoothed'
-    )
-
-    exportfits(
-        'smoothed', 
-        fitsimage = 'synobs_I_smoothed1.3mm.fits', 
-        dropstokes = True, 
-        overwrite = True
-    )
-    os.system('rm -r smoothed')

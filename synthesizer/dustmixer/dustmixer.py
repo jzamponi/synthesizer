@@ -153,38 +153,32 @@ class Dust():
         self.l = np.logspace(np.log10(lmin), np.log10(lmax), nlam)
         self.l = self.l * u.micron.to(u.cm)
 
-    def interpolate(self, l_in, q, at):
+    def interpolate(self, x_in, y, at):
         """ Linearly interpolate a quantity within the wavelength grid. """
 
-        return interp1d(l_in, q)(at)
+        return interp1d(x_in, y)(at)
 
-    def extrapolate(self, q, boundary):
+    def extrapolate(self, y, boundary):
         """ Extrapolate a quantity within the wavelength grid. """
     
         if boundary == 'lower':
             # Extrapolate as a constant, i.e., prepend a copy of the first value
-            return np.insert(q, 0, q[0])
+            return np.insert(y, 0, y[0])
 
         elif boundary == 'upper':
-            # Extrapolate in log-log
-            l = self.l_nk
-            if l[0] < l[1]:
-                new_q = q[-1] * np.exp(
-                    (np.log(l.max())-np.log(l[-1])) * 
-                    (np.log(q[-1]) - np.log(q[-2])) / 
-                    (np.log(l[-1]) - np.log(l[-2]))
-                )
-            else:
-                new_q = q[0] * np.exp(
-                    (np.log(l.max())-np.log(l[0])) * 
-                    (np.log(q[0]) - np.log(q[1])) / 
-                    (np.log(l[0]) - np.log(l[1]))
-                )
+            # Extrapolate in log-log: y = c·x^a
+            x = self.l_nk
 
-            return np.insert(q, -1, new_q)
+            # Interval to find the extrapolation slope, from y1[-1] to y0[x0]  
+            x0 = -8
+            a = (np.log(y[x0])-np.log(y[-1])) / (np.log(x[x0])-np.log(x[-1]))
+            c = np.exp(np.log(y[-1]) - a * np.log(x[-1]))
+            new_y = c * x.max()**a
 
-    def set_nk(self, path, skip=0, microns=True, meters=False, cm=False, 
-            get_dens=False):
+            return np.insert(y, -1, new_y)
+
+    def set_nk(self, path, skip=1, microns=True, meters=False, cm=False, 
+            get_dens=True):
         """ Set n and k values by reading them from file. 
             Assumes wavelength is provided in microns unless specified otherwise
             Also, can optionally read the density from the file, assuming it is
@@ -241,7 +235,7 @@ class Dust():
         # Interpolate optical constants within the new wavelenght grid
         self.n = self.interpolate(self.l_nk, self.n, at=self.l)
         self.k = self.interpolate(self.l_nk, self.k, at=self.l)
-
+        
     def mix(self, other):
         """
             Mix two dust components using the bruggeman rule. 
