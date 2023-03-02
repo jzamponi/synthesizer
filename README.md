@@ -10,6 +10,11 @@ Additionally, Synthesizer includes Dustmixer. This is a tool to generate dust op
     $ cd synthesizer
     $ python3 -m pip install .
 
+for pip users. If use conda, 
+
+    $ conda develop .
+
+
 ## Run the code:
 
 Synthesizer requires at least one of its five main options to run:

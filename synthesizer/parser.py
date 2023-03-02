@@ -194,7 +194,7 @@ def synthesizer():
     parser.add_argument('--radmc3d', action='store', type=str, default='',
         help='Additional commands to be passed to RADMC3D.', nargs="*")
 
-    parser.add_argument('--synobs', action='store_true', default=False,
+    parser.add_argument('-so', '--synobs', action='store_true', default=False,
         help='Call CASA to run a synthetic observation from the new image')
 
     parser.add_argument('--dont-observe', action='store_true', default=False,
