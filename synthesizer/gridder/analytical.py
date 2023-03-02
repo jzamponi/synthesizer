@@ -4,12 +4,13 @@ import astropy.constants as const
 import matplotlib.pyplot as plt
 
 from synthesizer.gridder.vector_field import VectorField
-from synthesizer.gridder.custom_model import CustomModel
+# from synthesizer.gridder.custom_model import CustomModel
+from synthesizer.model_loader import ModelLoader
 from synthesizer import utils 
 
 class AnalyticalModel():
     def __init__(self, model, bbox, ncells=100, g2d=100, temp=False, nspec=1, 
-        csubl=0, sootline=300):
+        csubl=0, sootline=300, custom_model=None):
         """
         Create an analytical density model indexed by the variable model.
         All quantities should be treated in cgs unless explicitly converted.
@@ -71,7 +72,7 @@ class AnalyticalModel():
                 utils.print_('Using a default half-box size of 100 au. '+\
                     f'You can change it with --bbox')
 
-            model = CustomModel(x, y, z)
+            model = ModelLoader(custom_model)(x,y,z) #CustomModel(x, y, z)
             self.dens = model.dens
             self.temp = model.temp
             self.vfield = model.vfield                
