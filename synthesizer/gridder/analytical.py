@@ -29,6 +29,8 @@ class AnalyticalModel():
         self.carbon = 0.375
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
 
+        self.custom_model = custom_model
+
         if bbox is None:
             # Set default half-box sizes for predefined models
             self.bbox = {
@@ -71,8 +73,9 @@ class AnalyticalModel():
             if self.bbox == 100*u.au.to(u.cm):
                 utils.print_('Using a default half-box size of 100 au. '+\
                     f'You can change it with --bbox')
-
-            model = ModelLoader(custom_model)(x,y,z) #CustomModel(x, y, z)
+            
+            loader=ModelLoader()
+            model = loader(self.custom_model)(x,y,z) #CustomModel(x, y, z)
             self.dens = model.dens
             self.temp = model.temp
             self.vfield = model.vfield                
