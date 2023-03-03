@@ -68,6 +68,8 @@ class CasaScript():
         self.robust = 0.5
         self.niter = 1e4
         self.threshold = '5e-5Jy'
+        self.mask = ''
+        self.uvrange = ''
         self.pbcor = True
         self.interactive = False
         self.verbose = False
@@ -182,6 +184,8 @@ class CasaScript():
                     f.write(f'    robust = {self.robust}, \n')
                     f.write(f'    niter = {int(self.niter)}, \n')
                     f.write(f'    threshold = "{self.threshold}", \n')
+                    f.write(f'    uvrange = "{self.uvrange}", \n')
+                    f.write(f'    mask = "{self.mask}", \n')
                     f.write(f'    pbcor = {self.pbcor}, \n')
                     f.write(f'    interactive = {self.interactive}, \n')
                     f.write(f'    verbose = {self.verbose}, \n')
@@ -223,6 +227,7 @@ class CasaScript():
             l = l.strip(',')
             l = l.strip('"')
             l = l.strip("'")
+            if isinstance(l, (list, tuple)): l = l[0]
             if ',' in l and not '[' in l: l = l.split(',')[0]
             return l
 
@@ -271,8 +276,9 @@ class CasaScript():
             if 'robust' in line: self.robust = strip_line(line)
             if 'niter' in line: self.niter = strip_line(line)
             if 'threshold' in line: self.threshold = strip_line(line)
-            if 'pbcor' in line: self.pbcor = strip_line(line)
+            if 'uvrange' in line: self.uvrange = strip_line(line)
             if 'mask' in line: self.mask = strip_line(line)
+            if 'pbcor' in line: self.pbcor = strip_line(line)
             if 'interactive' in line: self.interactive = strip_line(line)
 
             # Exportfits
@@ -286,11 +292,14 @@ class CasaScript():
         """ Delete any previous project to avoid the CASA clashing """
 
         if self.overwrite and os.path.exists('synobs_data'):
-            if not self.simobserve or not self.clean or not self.exportfits: 
+            if not self.simobserve: 
+                utils.print_(f'Deleting previous cleaning output.')
+                subprocess.run('rm -r synobs_data/clean_I*', shell=True)
 
-                utils.print_(
-                    f'Deleting previous observing project: {self.project}')
+            if self.simobserve and self.clean:
+                utils.print_(f'Deleting previous project: {self.project}.')
                 subprocess.run('rm -r synobs_data', shell=True)
+                
 
     def run(self):
         """ Run the ALMA/JVLA simulation script """

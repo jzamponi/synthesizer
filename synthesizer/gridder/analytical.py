@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from synthesizer.gridder.vector_field import VectorField
 from synthesizer.gridder.custom_model import CustomModel
+from synthesizer.gridder import models
 from synthesizer import utils 
 
 class AnalyticalModel():
@@ -58,141 +59,67 @@ class AnalyticalModel():
         self.X = x
         self.Y = y
         self.Z = z
+        field = self.vfield
         r_c = self.bbox
-        m_H2 = (2.3 * (const.m_p + const.m_e).cgs.value)
-        G = const.G.cgs.value
-        kB = const.k_B.cgs.value
         self.plotmin = None
         self.plotmax = None
 
         # Custom user-defined model
         if self.model == 'user':
             if self.bbox == 100*u.au.to(u.cm):
-                utils.print_('Using a default half-box size of 100 au. '+\
+                utils.print_(
+                    'Using a default half-box size of 100 au. '+\
                     f'You can change it with --bbox')
 
-            model = CustomModel(x, y, z)
-            self.dens = model.dens
-            self.temp = model.temp
-            self.vfield = model.vfield                
+            model = CustomModel(x, y, z, field)
 
         # Constant density  
         elif self.model == 'constant':          
-            self.dens = 1e-12 * np.ones(self.dens.shape)
-            if self.add_temp:
-                self.temp = 15 * np.ones(self.temp.shape)
+            model = models.Constant(x, y, z, field)
 
         # Radial power-law 
         elif self.model == 'plaw':
-            slope = 2
-            rho_c = 9e-18 / self.g2d
-            r = np.sqrt(x**2 + y**2 + z**2)
-            self.dens = rho_c * (r / r_c)**(-slope)
-            self.plotmin = 1e-19
-            if self.add_temp:
-                self.temp = 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / r)
+            model = models.PowerLaw(x, y, z, field)
 
-        # Prestellar Core: Bonnort-Eber sphere
+        # Prestellar Core 
         elif self.model == 'pcore':
-            rho_c = 1.07e-15
-            r = np.sqrt(x**2 + y**2 + z**2)
-            self.dens = rho_c * r_c**2 / (r**2 + r_c**2)
+            model = models.PrestellarCore(x, y, z, field)
             
-        # L1544 Prestellar Core (Chacon-Tanarro et al. 2019)
+        # L1544 Prestellar Core 
         elif self.model == 'l1544':
-            rho_0 = 1.6e6 * m_H2
-            alpha = 2.6
-            r_flat = 2336 * u.au.to(u.cm)
-            r = np.sqrt(x**2 + y**2 + z**2)
-            self.dens = rho_0 / (1 + (r / r_flat)**alpha)
-            if self.add_temp:
-                self.temp = 15 * np.ones(self.dens.shape)
+            model = models.L1544(x, y, z, field)
 
+        # Protoplanetary Disk
         elif self.model == 'ppdisk':
-            # Protoplanetary disk model 
-            rin = 1 * u.au.to(u.cm)
-            h_0 = 0.1 
-            rho_slope = 0.9
-            flaring = 0.0
-            Mdisk = 5e-3 * u.Msun.to(u.g)
-            Mstar = 1 * u.Msun.to(u.g)
-            rho_bg = 1e-30
-            T_0 = 30
-            T_slope = 3 / 7
+            model = models.PPdisk(x, y, z, field)
 
-            # Inner rim and gap parameters
-            rim_rout = 0
-            srim_rout = 0.8
-            rim_slope = 0
-            sigma_gap = 5 * u.au.to(u.cm)
-            rin_gap = 10 * u.au.to(u.cm)
-            rout_gap = 50 * u.au.to(u.cm)
-            gap_c = 100 * u.au.to(u.cm)
-            gap_stddev = 5 * u.au.to(u.cm)
-            densredu_gap = 1e-7
-
-            # Surface density
-            r = np.sqrt(x**2 + y**2)
-            r3d = np.sqrt(x**2 + y**2 + z**2)
-            T_r = T_0 * (r3d/r_c)**-T_slope
-            c_s = np.sqrt(kB * T_r / m_H2)
-            v_K = np.sqrt(G * Mstar / r**3)
-            h = c_s / v_K * (r/r_c)**flaring
-            sigma_0 = (2 - rho_slope) * (Mdisk / 2 / np.pi / r_c**2)
-            sigma_g = sigma_0 * (r/r_c)**-rho_slope * \
-                np.exp(-(r/r_c)**(2-rho_slope))
-
-            # Add a smooth inner rim
-            if rim_rout > 0:
-                h_rin = np.sqrt(kB * T_0 * (rin/r_c)**-T_slope / m_H2) / \
-                    np.sqrt(G * Mstar / rin**3)
-                a = h_0 * (r/r_c)**rho_slope
-                b = h_0 * (rim_rout * rin / h_0)**rho_slope
-                c = h_rin * (r/rin)**(np.log10(b / h_rin) / np.log10(rim_rout))
-                h = (a**8 + c**8)**(1/8) * r
-                sigma_rim = sigma_0 * (srim_rout*rin/rout)**-rho_slope * \
-                    np.exp(-(r/rout)**(2-rho_slope)) * \
-                    (r/srim_rout/rin)**rim_slope
-                sigma_g = (sigma_g**-5 + sigma_rim**-5)**(1/-5)
-            
-            # Add a gap (as a radial gaussian density decrease)
-            gap = np.exp(-0.5 * (r-gap_c)**2 / sigma_gap**2) * (1/densredu_gap-1)
-            sigma_g /= (gap + 1)
-
-            # Density profile from hydrostatic equilibrium
-            rho_g = sigma_g / np.sqrt(2*np.pi) / h * np.exp(-z*z / (2*h*h))
-            rho_g = rho_g + rho_bg
-            self.dens = rho_g / self.g2d
-            self.plotmin = rho_bg
-
-            # Radial temperature profile
-            if self.add_temp:
-                self.temp = T_r
-
-        # Viscous gravitationally unstable accretion disk
+        # Gravitationally unstable disk
         elif self.model == 'gidisk':
             utils.not_implemented(f'Model: {self.model}')
-            # E. Vorobyov's suggesiton: 
-            # For the surface density, take a look at Galactic Dynamics (Biney...)
-            # For the scale height, Vorobyov & Basu 2008 or Rafikov 2009, 2015
+            model = models.GIdisk(x, y, z, field)
 
-        # PP Disk with logarithmic spiral arms (Huang et al. 2018b,c)
+        # Disk with spiral arms
         elif self.model == 'spiral-disk':
             utils.not_implemented(f'Model: {self.model}')
-            theta = np.tan(0.23)
-            r_theta = r_c * np.exp(b*theta)
+            model = models.SpiralDisk(x, y, z, field)
 
-        # Gas filament, modelled as a Plummer distribution (Arzoumanian+ 2011)
-        # Or from Koertgen+2018 and Tasker and Tan 2009
+        # Gas filament 
         elif self.model == 'filament':
             utils.not_implemented(f'Model: {self.model}')
-            p = 2
-            r_flat = 0.03 * u.pc.to(u.cm) 
-            r = np.sqrt(x**2 + y**2)
-            rho_ridge = 4e-19
-            self.dens = rho_ridge / (1 + (r/r_flat)**2)**(p/2)
-            if self.add_temp:
-                self.temp = 15 * np.ones(self.temp.shape)
+            model = models.Filament(x, y, z, field)
+    
+        else:
+            raise ValueError(
+                f'{utils.color.red}' +\
+                f'Model: {self.model} cannot be found.' +\
+                f'{utils.color.none}')
+
+        # Copy the model density and temperature to the current obj (anaytical)
+        self.dens = model.dens / self.g2d
+        if self.add_temp: self.temp = model.temp
+        if self.vfield is not None: self.vfield = model.vfield                
+        if model.plotmin is not None: self.plotmin = model.plotmin
+        if model.plotmax is not None: self.plotmax = model.plotmax
 
 
     def write_grid_file(self):

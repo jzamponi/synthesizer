@@ -23,7 +23,11 @@ class VectorField():
         self.vx = np.zeros((x.shape[0], y.shape[0], z.shape[0]))
         self.vy = np.zeros((x.shape[0], y.shape[0], z.shape[0]))
         self.vz = np.zeros((x.shape[0], y.shape[0], z.shape[0]))
-        self.morphology = morphology.lower()
+        if morphology is None:
+            return morphology
+        else:
+            self.morphology = morphology.lower()
+
         self.a_eff = a_eff
  
         if self.morphology == 'x':

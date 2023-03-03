@@ -21,7 +21,7 @@ if Simobserve:
         antennalist = 'alma.cycle3.5.cfg',
         thermalnoise = 'tsys-atm',
         seed = int(random.random() * 100),
-        graphics = 'both',
+        graphics = 'file',
         overwrite = True,
         verbose = True
     )

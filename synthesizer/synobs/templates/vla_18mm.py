@@ -19,7 +19,7 @@ if Simobserve:
         obsmode = 'int',
         antennalist = 'vla.a.cfg',
         thermalnoise = 'tsys-atm',
-        graphics = 'both',
+        graphics = 'file',
         overwrite = True,
         verbose = False,
     )

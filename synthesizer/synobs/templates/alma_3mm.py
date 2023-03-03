@@ -21,7 +21,7 @@ if Simobserve:
         obsmode = 'int',
         antennalist = 'alma.cycle5.10.cfg',
         thermalnoise = 'tsys-manual',
-        graphics = 'both',
+        graphics = 'file',
         overwrite = True,
         verbose = False
     )

@@ -1,4 +1,4 @@
-# Setup based on Liu et al. (2018)
+# Setup based on Zamponi et al. (submitted)
 
 Simobserve = True
 Clean = True
@@ -7,47 +7,47 @@ if Simobserve:
     simobserve(
         project = 'synobs_data',
         skymodel = 'radmc3d_I.fits',
-        incenter = '44GHz',
-        inwidth = '8GHz', 
+        incenter = '33GHz',
+        inwidth = '7GHz', 
         setpointings = True,
         integration = '2s',
-        totaltime = '46min',
+        totaltime = '0.8h',
         indirection = 'J2000 16h32m22.62 -24d28m32.5',
-        refdate = '2015/01/18', 
+        refdate = '2022/03/07', 
         hourangle = 'transit',
         obsmode = 'int',
-        antennalist = 'vla.cnb.cfg',
+        antennalist = 'vla.a.cfg',
         thermalnoise = 'tsys-atm',
         graphics = 'file',
         overwrite = True,
-        verbose = True
+        verbose = False
     )
 
 if Clean:
     tclean(
-        vis = 'synobs_data/synobs_data.vla.cnb.noisy.ms',
+        vis = 'synobs_data/synobs_data.vla.a.noisy.ms',
         imagename = 'synobs_data/clean_I',
-        imsize = 400,
-        cell = '0.03arcsec',
-        reffreq = '44GHz', 
+        imsize = 300,
+        cell = '0.0097arcsec',
+        reffreq = '33GHz', 
         specmode = 'mfs',
         gridder = 'standard',
         deconvolver = 'multiscale',
         scales = [1, 8, 20], 
         weighting = 'briggs',
-        robust = 0.0,
-        uvtaper = '0.1arcsec',
-        niter = 10000,
-        threshold = '4e-5Jy',
-        mask = 'centerbox[[200pix, 200pix], [50pix, 50pix]]', 
+        robust = 0.5,
+        niter = 50,
+        threshold = '2.27e-5Jy',
+        uvrange = ">215.3klambda", 
+        mask = 'synobs_data/synobs_data.vla.a.skymodel', 
         pbcor = True, 
-        interactive = True,
-        verbose = True
+        interactive = False,
+        verbose = False
     )
 
     imregrid(
         'synobs_data/clean_I.image', 
-        template='synobs_data/synobs_data.vla.cnb.skymodel.flat', 
+        template='synobs_data/synobs_data.vla.a.skymodel.flat', 
         output='synobs_data/clean_I.image_modelsize', 
         overwrite=True
     )

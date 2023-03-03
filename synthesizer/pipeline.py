@@ -730,7 +730,8 @@ class Pipeline:
         utils.print_('Running synthetic observation ...\n', bold=True)
 
         # Make sure RADMC3D is installed and callable
-        utils.which('casa') 
+        utils.which('casa', msg='It is easy to install. ' +\
+            'Go to https://casa.nrao.edu/casa_obtaining.shtml') 
 
         # If the observing wavelength is outside the working range of CASA, 
         # simplify the synthetic obs. to a PSF convolution and thermal noise
@@ -762,15 +763,18 @@ class Pipeline:
         else:
             if script is None:
 
-                script = synobs.CasaScript(lam=self.lam)
+                script = synobs.CasaScript(self.lam)
 
-                if use_template and self.lam not in [1300, 3000, 7000, 18000]: 
+                if use_template and self.lam not in [1300, 3000, 7000, 9000, 18000]: 
                     utils.print_(
                         f"There's no template available at {self.lam} um "+\
-                        'I will create a simple one named casa_script.py. '+\
-                        'You can modify it later and re-run with ' +\
+                        'I will create a simple one named casa_script.py.',
+                        blue=True)
+
+                    utils.print_('You can modify it later and re-run with ' +\
                         'synthesizer --synobs --script casa_script.py',
-                        bold=True)
+                        blue=True)
+
                     use_template = False
 
                 if use_template:
@@ -781,6 +785,7 @@ class Pipeline:
                         1300: 'alma_1.3mm.py',
                         3000: 'alma_3mm.py',
                         7000: 'vla_7mm.py',
+                        9000: 'vla_9mm.py',
                         18000: 'vla_18mm.py',
                     }[self.lam]
 
@@ -801,7 +806,7 @@ class Pipeline:
                 script.polarization = self.polarization
                 script.simobserve = simobserve
                 script.clean = clean
-                script.graphic = graphic
+                script.graphic = graphic if self.verbose else False
                 script.overwrite = self.overwrite
                 script.verbose = False
                 script.write('casa_script.py')
@@ -812,7 +817,7 @@ class Pipeline:
                     utils.download_file(script)
 
                 script_name = script.split('/')[-1]
-                script = synobs.CasaScript(lam=self.lam)
+                script = synobs.CasaScript(self.lam)
                 script.read(script_name)
 
             self.script = script
@@ -846,7 +851,6 @@ class Pipeline:
                 utils.print_(f'Rotating vectors by 90 deg.', blue=True)
 
             if self.polarization:
-
                 fig = utils.polarization_map(
                     source='radmc3d',
                     render='I', 
