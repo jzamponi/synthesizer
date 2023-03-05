@@ -1,4 +1,4 @@
-# Setup based on VLA observations from Chia-Lin Ko
+# Setup based on VLA observations from Zamponi et al. (submitted)
 
 import time
 Simobserve = True

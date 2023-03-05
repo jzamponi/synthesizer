@@ -153,10 +153,10 @@ class Dust():
         self.l = np.logspace(np.log10(lmin), np.log10(lmax), nlam)
         self.l = self.l * u.micron.to(u.cm)
 
-    def interpolate(self, x_in, y, at):
+    def interpolate(self, x, y, at):
         """ Linearly interpolate a quantity within the wavelength grid. """
 
-        return interp1d(x_in, y)(at)
+        return interp1d(x, y)(at)
 
     def extrapolate(self, y, boundary):
         """ Extrapolate a quantity within the wavelength grid. """
@@ -166,11 +166,11 @@ class Dust():
             return np.insert(y, 0, y[0])
 
         elif boundary == 'upper':
-            # Extrapolate in log-log: y = c·x^a
-            x = self.l_nk
-
             # Interval to find the extrapolation slope, from y1[-1] to y0[x0]  
             x0 = -8
+            x = self.l_nk
+
+            # Extrapolate in log-log: y = c·x^a
             a = (np.log(y[x0])-np.log(y[-1])) / (np.log(x[x0])-np.log(x[-1]))
             c = np.exp(np.log(y[-1]) - a * np.log(x[-1]))
             new_y = c * x.max()**a

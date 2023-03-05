@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 
 from synthesizer import utils

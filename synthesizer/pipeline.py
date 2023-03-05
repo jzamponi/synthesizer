@@ -11,8 +11,8 @@ import numpy as np
 from glob import glob
 from pathlib import Path
 import astropy.units as u
-import astropy.constants as const
 import matplotlib.pyplot as plt
+import astropy.constants as const
 from astropy.io import ascii, fits
 from scipy.interpolate import griddata
 
@@ -33,6 +33,7 @@ class Pipeline:
             dgrowth=False, csubl=0, sootline=300, material='sg', 
             polarization=False, alignment=False, 
             overwrite=False, verbose=True):
+
         self.steps = []
         self.lam = int(lam)
         self.freq = const.c.cgs.value / (self.lam * u.micron.to(u.cm))

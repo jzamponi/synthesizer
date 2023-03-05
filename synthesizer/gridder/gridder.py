@@ -56,8 +56,6 @@ class CartesianGrid():
                 self.x, self.y, self.z, self.dens and self.temp (optional) 
          """
 
-        import h5py
-
         utils.print_(
             f'Reading data from: {filename} | Format: {source.upper()}', end='')
         if not os.path.exists(filename): 
@@ -98,8 +96,6 @@ class CartesianGrid():
 
     def read_amr(self, filename, sourle='athena++'):
         """ Read AMR data """
-
-        import h5py
 
         utils.print_(f'Reading data from: {filename} | Format: {source}')
         if not os.path.exists(filename): 

@@ -11,11 +11,11 @@ m_H2 = (2.3 * (const.m_p + const.m_e).cgs.value)
 G = const.G.cgs.value
 kB = const.k_B.cgs.value
 
-#class BaseModel(ABC):
-class BaseModel():
+class BaseModel(ABC):
     """ 
-        This a base class for the rest of the models below.
-        All following objects should inherit from BaseModel.
+        This is an Astract Base class for the rest of the models below.
+        All following objects should inherit from BaseModel, to ensure 
+        self.dens, self.temp and self.vfield are set.
     """
 
     def __init__(self, x, y, z, field='z'):
@@ -29,7 +29,6 @@ class BaseModel():
 
     @property
     @abstractmethod
-    # Make sure dens property is being set
     def dens(self):
         pass
 

@@ -53,8 +53,15 @@ For details, run:
 
 
 #### Compatibility with hydrodynamical codes 
-Synthesizer is very young and at the moment only SPHng binary files and GIZMO, AREPO & GADGET HDF5 snapshots are supported. Creating interfaces to new codes is easy to implement but it takes time. For AMR codes, grid and density (and optionally temperature) information is needed to generate the input for RADMC3D. For SPH codes, all synthesizer needs are point coordinates x, y, z and density (and optionally temperature), all in cgs units. It does the gridding by interpolating point coordinates into a regular cartesian mesh. 
-If you're interested in using synthesizer and your hydro code is not yet supported, feel free to get in contact and provide snapshot-reading routines. The implementation should be quite strightforward.  
+Currently supported (M)HD codes:
+
+    - GIZMO
+    - AREPO
+    - GADGET
+    - ZeusTW
+
+Synthesizer is very young and at the moment only snapshots from the above listed codes are supported. Creating interfaces to new codes is easy to implement but it takes time. For AMR codes, grid and density (and optionally temperature) information is needed to generate the input for RADMC3D. For SPH codes, all synthesizer needs are point coordinates x, y, z and density (and optionally temperature), all in cgs units. It does the gridding by interpolating point coordinates into a regular cartesian mesh. 
+If you're interested in using synthesizer and your hydro code is not yet supported, feel free to get in contact. The implementation should be quite strightforward.  
 
 #### Requisites:
 
