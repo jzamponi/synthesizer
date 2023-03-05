@@ -199,19 +199,19 @@ class Pipeline:
 
         # Plot the density midplane
         if show_2d:
-            self.grid.plot_dens_midplane()
+            self.grid.plot_midplane('density')
 
         # Plot the temperature midplane
         if show_2d and temperature:
-            self.grid.plot_temp_midplane()
+            self.grid.plot_midplane('temperature')
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
-            self.grid.plot_3d(density=True)
+            self.grid.plot_3d('density')
 
         # Render the temperature volume in 3D using Mayavi
         if show_3d and temperature:
-            self.grid.plot_3d(temperature=True)
+            self.grid.plot_3d('temperature')
         
         # Call RADMC3D to read the grid file and generate a VTK representation
         if vtk:
@@ -844,6 +844,7 @@ class Pipeline:
 
 
 
+    @utils.elapsed_time
     def plot_rt(self):
         utils.print_('Plotting radmc3d_I.fits')
 
@@ -880,6 +881,7 @@ class Pipeline:
             utils.print_(
                 f'Unable to plot: {e}', bold=True)
     
+    @utils.elapsed_time
     def plot_synobs(self):
         utils.print_(f'Plotting the new synthetic image')
 
@@ -920,6 +922,7 @@ class Pipeline:
             utils.print_(
                 f'Unable to plot: {e}', bold=True)
 
+    @utils.elapsed_time
     def plot_tau(self, show=False):
         utils.print_(f'Generating optical depth map at {self.lam} microns')
         utils.file_exists('dust_density.inp')
@@ -950,24 +953,52 @@ class Pipeline:
 
         utils.write_fits('tau.fits', data=tau2d, overwrite=True)
 
+    @utils.elapsed_time
     def plot_grid_2d(self, temp=False):
         """ Plot the grid's density and temperature midplanes from files,
             in case they are not currently available from pipeline.grid
         """
-        utils.not_implemented('Plot grid midplane')
-        utils.file_exists('amr_grid.inp')
         utils.file_exists('dust_density.inp')
-        if temp: utils.file_exists('dust_temperature.inp')
+        utils.print_('Reading density from dust_density.inp')
+        dens = np.loadtxt('dust_density.inp', skiprows=3).T
+        nx = int(np.cbrt(dens.size))
+        dens = dens.reshape((nx, nx, nx))
+        bbox = self._get_bbox()
+        grid = gridder.CartesianGrid(nx, bbox)
+        grid.plot_midplane('density', data=dens)
+
+        if temp: 
+            utils.file_exists('dust_temperature.dat')
+            utils.print_('Reading temperature from dust_temperature.dat')
+            temp = np.loadtxt('dust_temperature.dat', skiprows=3)
+            temp = temp.reshape((nx, nx, nx))
+            grid = gridder.CartesianGrid(nx, bbox)
+            grid.plot_midplane('temperature', data=temp)
         
+    @utils.elapsed_time
     def plot_grid_3d(self, temp=False):
         """ Render the grid's density and temperature in 3D from files,
             in case they are not currently available from pipeline.grid
         """
-        utils.not_implemented('Render grid 3D')
-        utils.file_exists('amr_grid.inp')
         utils.file_exists('dust_density.inp')
-        if temp: utils.file_exists('dust_temperature.inp')
+        utils.print_('Reading density from dust_density.inp')
+        dens = np.loadtxt('dust_density.inp', skiprows=3).T
+        nx = int(np.cbrt(dens.size))
+        dens = dens.reshape((nx, nx, nx))
+        bbox = self._get_bbox()
+        utils.print_(r'Rendering a box of {nx}^3 pixels')
+        grid = gridder.CartesianGrid(nx, bbox)
+        grid.plot_3d('density', data=dens)
 
+        if temp: 
+            utils.file_exists('dust_temperature.dat')
+            utils.print_('Reading temperature from dust_temperature.dat')
+            temp = np.loadtxt('dust_temperature.dat', skiprows=3)
+            temp = temp.reshape((nx, nx, nx))
+            grid = gridder.CartesianGrid(nx, bbox)
+            grid.plot_3d('temperature', data=temp)
+
+    @utils.elapsed_time
     def plot_nk(self):
         """ Plot optical constants from the .lnk tables """
         utils.file_exists('*.lnk')
@@ -976,6 +1007,7 @@ class Pipeline:
         dust.set_nk(filename, skip=1, get_dens=True)
         dust.plot_nk()
 
+    @utils.elapsed_time
     def plot_opacities(self):
         """ Plot opacities from file. Uses the lastly created dustkap* file """
         utils.file_exists('dustkap*.inp')

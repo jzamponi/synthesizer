@@ -335,7 +335,7 @@ class CartesianGrid():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
-    def plot_dens_midplane(self, axis='xz'):
+    def plot_midplane(self, field, data=None):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
@@ -348,6 +348,22 @@ class CartesianGrid():
             plt.rcParams['ytick.minor.visible'] = True
             plt.close('all')
 
+            # Detect what field to use
+            if data is None:
+                data = {
+                    'density': self.interp_dens, 
+                    'temperature': self.interp_temp
+                }[field]
+            else:
+                data = data.T
+            
+            # Set the plot title for the right field
+            title = {
+                'density': r'Dust Density (g cm$^{-3}$)', 
+                'temperature': r'Gas Temperature (g cm$^{-3}$)',
+            }[field]
+
+            # Set the bbox if existent
             if self.bbox is None:
                 extent = self.bbox
             else:
@@ -357,103 +373,73 @@ class CartesianGrid():
             # Extract the middle plane 
             plane = self.ncells//2 - 1
 
-            # Select the axis to plot
-            if axis == 'xy' or axis == 0:
-                slice_ = self.interp_dens[..., plane].T
-            elif axis == 'xz' or axis == 1:
-                slice_ = self.interp_dens[:, plane, :].T
-            elif axis == 'yz' or axis == 2:
-                slice_ = self.interp_dens[plane, ...].T
+            data_xy = data[:, :, plane].T
+            data_xz = data[:, plane, :].T
 
-            vmin = slice_.min() if slice_.min() > 0 else None
-            vmax = slice_.max() if slice_.max() < np.inf else None
+            vmin = data_xy.min() if data_xy.min() > 0 else None
+            vmax = data_xy.max() if data_xy.max() < np.inf else None
 
-            if np.all(slice_ == np.zeros(slice_.shape)): 
-                raise ValueError('Density midplane is exactly 0.')
+            if np.all(data_xy == np.zeros(data_xy.shape)): 
+                raise ValueError(f'{field} midplane is exactly 0.')
 
-            plt.title(r'Dust Density Midplane (g cm$^{-3}$)')
-            plt.imshow(slice_, 
+            fig, p = plt.subplots(nrows=1, ncols=2, figsize=(10, 5.5))
+
+            pxy = p[0].imshow(
+                data_xy, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
-                cmap='BuPu',
+                cmap='BuPu' if field == 'density' else 'inferno',
                 extent=extent,
             )
-            plt.colorbar()
-            plt.xlabel('AU')
-            plt.ylabel('AU')
+            pxz = p[1].imshow(
+                data_xz, 
+                norm=LogNorm(vmin=vmin, vmax=vmax), 
+                cmap='BuPu' if field == 'density' else 'inferno',
+                extent=extent,
+            )
+            cxy = fig.colorbar(pxy, ax=p[0], pad=0.01, orientation='horizontal')
+            cxz = fig.colorbar(pxy, ax=p[1], pad=0.01, orientation='horizontal')
+            cxy.set_label(title)
+            cxz.set_label(title)
+            p[0].set_title('Midplane XY')
+            p[1].set_title('Midplane XZ')
+            p[0].set_ylabel('Y (AU)')
+            p[1].set_ylabel('Z (AU)')
+            p[0].set_xticklabels([])
+            p[1].set_xticklabels([])
 
             try:
-                if self.vfield is not None:
-                    plt.streamplot(
+                if self.vfield is not None and field == 'density':
+                    p[0].streamplot(
                         np.linspace(-bbox, bbox, self.ncells), 
                         np.linspace(-bbox, bbox, self.ncells), 
                         self.vfield.vx[..., plane], 
-                        self.vfield.vz[..., plane],
+                        self.vfield.vy[..., plane],
+                        linewidth=0.5,
+                        color='k', 
+                        density=0.7, 
+                    )
+                    plt.streamplot(
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        self.vfield.vx[:, plane, :], 
+                        self.vfield.vz[:, plane, :],
                         linewidth=0.5,
                         color='k', 
                         density=0.7, 
                     )
             except Exception as e:
+                raise
                 utils.print_('Unable to add vector stream lines',  red=True)
                 utils.print_(e, bold=True)
+
+            plt.tight_layout()
             plt.show()
 
         except Exception as e:
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-    def plot_temp_midplane(self, axis='xz'):
-        """ Plot the temperature midplane at z=0 using Matplotlib """
-        try:
-            from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the temperature grid midplane')
-            plt.rcParams['xtick.direction'] = 'in'
-            plt.rcParams['ytick.direction'] = 'in'
-            plt.rcParams['xtick.top'] = True
-            plt.rcParams['ytick.right'] = True
-            plt.rcParams['xtick.minor.visible'] = True
-            plt.rcParams['ytick.minor.visible'] = True
-            plt.close('all')
-
-            if self.bbox is None:
-                extent = self.bbox
-            else:
-                extent = [-self.bbox * u.cm.to(u.au), 
-                        self.bbox * u.cm.to(u.au)] * 2
-
-            # Extract the middle plane
-            plane = self.ncells//2 - 1
-
-            # Select the axis to plot
-            if axis == 'xy' or axis == 0:
-                slice_ = self.interp_temp[..., plane].T
-            elif axis == 'xz' or axis == 1:
-                slice_ = self.interp_temp[:, plane, :].T
-            elif axis == 'yz' or axis == 2:
-                slice_ = self.interp_temp[plane, ...].T
-
-            vmin = slice_.min() if slice_.min() > 0 else None
-            vmax = slice_.max() if slice_.max() < np.inf else None
-
-            if np.all(slice_ == np.zeros(slice_.shape)): 
-                raise ValueError('Temperature midplane is exactly 0.')
-
-            plt.imshow(
-                slice_,
-                norm=LogNorm(vmin=vmin, vmax=vmax),
-                cmap='inferno',
-                extent=extent,
-            )
-            plt.colorbar()
-            plt.xlabel('AU')
-            plt.ylabel('AU')
-            plt.title(r'Temperature Midplane (K)')
-            plt.show()
-
-        except Exception as e:
-            utils.print_('Unable to show the 2D grid slice.',  red=True)
-            utils.print_(e, bold=True)
-
-    def plot_3d(self, density=False, temperature=False): 
+    def plot_3d(self, field, data=None): 
         """ Render the interpolated 3D field using Mayavi """
         try:
             from mayavi import mlab
@@ -463,16 +449,16 @@ class CartesianGrid():
 
             utils.print_('Visualizing the interpolated field ...')
 
-            if density:
-                data = self.interp_dens
-                title = r'Dust Density (g cm$^{-3}$)'
-
-            elif temperature:
-                data = self.interp_temp
-                title = r'Gas Temperature (g cm$^{-3}$)'
+            if data is None:
+                data = {
+                    'density': self.interp_dens, 
+                    'temperature': self.intep_temp
+                }[field]
             
-            else:
-                return False
+            title = {
+                'density': r'Dust Density (g cm$^{-3}$)', 
+                'temperature': r'Gas Temperature (g cm$^{-3}$)',
+            }[field]
 
             # Initialize the figure and scene
             engine = Engine()
