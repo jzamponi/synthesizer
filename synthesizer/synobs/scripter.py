@@ -45,7 +45,7 @@ class CasaScript():
         self.totaltime = '1h'
         self.indirection = 'J2000 16h32m22.63 -24d28m31.8'
         self.hourangle = 'transit'
-        self.refdate = '2017/05/20', 
+        self.refdate = '2017/05/20' 
         self.obsmode = 'int'
         self.telescope = None
         self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
@@ -119,7 +119,7 @@ class CasaScript():
         stokes = ['I', 'Q', 'U'] if self.polarization else ['I']
     
         with open(self.name, 'w+') as f:
-            utils.print_(f'Writing template script: {self.name}')
+            utils.print_(f'Writing template script: {self.name}', blue=True)
             f.write('# Template CASA script to simulate observations. \n')
             f.write('# Written by the Synthesizer. \n\n')
 

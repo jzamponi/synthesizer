@@ -800,8 +800,10 @@ class Pipeline:
                     script.resolution = resolution
                     script.obsmode = obsmode
                     script.telescope = telescope
-                    if self.npix is not None: script.imsize = int(self.npix + 100)
                     script.totaltime = f'{obstime}h'
+                    if self.npix is None: 
+                        self.npix = fits.getheader('radmc3d_I.fits').get('NAXIS1')
+                    script.imsize = int(self.npix + 100)
 
                 # Tailor the script to the pipeline setup
                 script.polarization = self.polarization
@@ -868,6 +870,7 @@ class Pipeline:
             else:
                 fig = utils.plot_map(
                     filename='radmc3d_I.fits', 
+                    scalebar=50*u.au, 
                     bright_temp=False,
                     verbose=False,
                 )
@@ -909,7 +912,8 @@ class Pipeline:
             else:
                 fig = utils.plot_map(
                     filename='synobs_I.fits',
-                    bright_temp=True,
+                    scalebar=50*u.au,
+                    bright_temp=False,
                     verbose=False,
                 )
         except Exception as e:
