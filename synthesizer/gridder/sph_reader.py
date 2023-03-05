@@ -205,6 +205,7 @@ class Arepo(SPHCode):
         dens = np.array(self.data.get('Density'))
         return dens * 1e-10 * (u.Msun/u.au**3).to(u.g/u.cm**3)
 
+    @property
     def temp(self):
         if self.add_temp:
             # Read in temperature if available
@@ -215,19 +216,27 @@ class Arepo(SPHCode):
             elif 'Pressure' in self.data.keys():
                 k_B = c.k_B.cgs.value
                 m_H = (c.m_e + c.m_p).cgs.value
-                rho_c = 1e-14
-                rho_d = 1e-10
-                T_iso = 15
+                rho_c = 1e-14 * np.ones(self.rho_g.shape)
+                rho_d = 1e-10 * np.ones(self.rho_g.shape)
+                T_iso = 14 * np.ones(self.rho_g.shape)
                 cs_iso2 = k_B * T_iso / 2.33 / m_H
-                T = T_iso * np.ones(self.rho_g.shape)
 
-                T[rho_c <= self.rho_g < rho_d] = \
-                            T_iso * (self.rho_g/rho_c)**(7/5)
+                #T1 = np.where(self.rho_g >= rho_c, 
+                T1 = np.where(
+                    (rho_c <= self.rho_g) & (self.rho_g < rho_d), 
+                    T_iso * (self.rho_g / rho_c)**(7/5), 
+                    T_iso
+                )
 
-                T[self.rho_g >= rho_d] = T_iso * \
-                    (self.rho_g/rho_c)**(7/5) * (self.rho_g/rho_d)**(11/10)
+                T2 = np.where(
+                    self.rho_g >= rho_d, 
+                    T_iso * (self.rho_g / rho_d)**(7/5) * \
+                            (self.rho_g / rho_d)**(11/10), 
+                    T1
+                )
 
-                return T
+                return T2
+
             else:
                 return np.zeros(self.rho_g.shape)
 

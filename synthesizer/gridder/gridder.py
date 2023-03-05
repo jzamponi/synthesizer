@@ -155,7 +155,7 @@ class CartesianGrid():
 
             # Iterate over particles and delete upon reject
             for i in range(self.x.size):
-                if self.x[i] < -self.bbox or self.x[i] > self.bbox :
+                if self.x[i] < -self.bbox or self.x[i] > self.bbox:
                     to_remove.append(i)
 
             for j in range(self.y.size):
