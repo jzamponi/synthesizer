@@ -69,7 +69,7 @@ def synthesizer():
 
     parser.add_argument('--vector-field', action='store', type=str, default=None, 
         choices=['x', 'y', 'z', 'toroidal', 'radial', 'hourglass', 
-        'helicoidal', 'dipole', 'quadrupole'], 
+        'helicoidal', 'dipole', 'quadrupole', 'custom'], 
         help='Create a vectory field for alignment of elongated grains.')
 
     parser.add_argument('--temperature', action='store_true', default=False, 

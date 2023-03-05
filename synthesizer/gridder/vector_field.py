@@ -51,19 +51,19 @@ class VectorField():
             self.vz = z / r
  
         elif self.morphology in ['h', 'hourglass']:
-            a = 0.01
-            factor = np.sqrt(
+            a = 1
+            factor = 1 / np.sqrt(
                 1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
-            self.vx = a * x * z * np.exp(-a * z*z) / factor
-            self.vy = a * y * z * np.exp(-a * z*z) / factor
-            self.vz = 1 / factor 
+            self.vx = a * x * z * np.exp(-a * z*z) * factor
+            self.vy = a * y * z * np.exp(-a * z*z) * factor
+            self.vz = factor 
 
         elif self.morphology in ['hel', 'helicoidal']:
             # Helicoidal = Superpoistion of Toroidal & Hourglass
             r = np.sqrt(x**2 + y**2)
             toro = np.array([y/r, -x/r, np.zeros(z.shape)])
 
-            a = 0.1
+            a = 1e-5
             factor = np.sqrt(
                 1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
             hour = np.array([
@@ -89,8 +89,27 @@ class VectorField():
             self.vz = (3*z*(-3*x**2 - 3*y**2 + 2*z**2)) / r7
 
         elif self.morphology == 'custom':
-            # Let vx, vy, vz be plain zeros with x, y, z shapes
+            # hourglass from polaris 
+            r = np.sqrt(x**2 + y**2 + z**2)
+            th = np.arccos(z / r)
+            ph = np.arctan2(y, x)
+            gamma = 5
+            r0 = r
+            factor = gamma * r0**2 / (r + r0)**2
+            self.vx = factor * np.cos(th) * np.cos(ph)
+            self.vx = factor * np.cos(th) * np.sin(ph)
+            self.vz = factor * np.sin(th)
+        
+        elif self.morphology == 'catenoid':
             normalize = False
+            
+            # Catenoid in parametric equations
+            r = np.sqrt(x**2 + y**2 + z**2)
+            u = np.arccos(z / r)
+            a = 0.99
+            self.vx = a * np.cosh(z/a) * np.cos(u)
+            self.vy = a * np.cosh(z/a) * np.sin(u)
+            self.vz = z
 
         # Normalize the field
         if normalize:

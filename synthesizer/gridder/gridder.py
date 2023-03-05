@@ -418,7 +418,7 @@ class CartesianGrid():
                         color='k', 
                         density=0.7, 
                     )
-                    plt.streamplot(
+                    p[1].streamplot(
                         np.linspace(-bbox, bbox, self.ncells), 
                         np.linspace(-bbox, bbox, self.ncells), 
                         self.vfield.vx[:, plane, :], 

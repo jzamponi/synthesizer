@@ -213,7 +213,7 @@ class AnalyticalModel():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
-    def plot_dens_midplane(self):
+    def plot_midplane(self, field, data=None):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
@@ -226,110 +226,105 @@ class AnalyticalModel():
             plt.rcParams['ytick.minor.visible'] = True
             plt.close('all')
 
+            # Detect what field to use
+            if data is None:
+                data = {
+                    'density': self.dens, 
+                    'temperature': self.temp
+                }[field]
+            else:
+                data = data.T
+            
+            # Set the plot title for the right field
+            title = {
+                'density': r'Dust Density (g cm$^{-3}$)', 
+                'temperature': r'Gas Temperature (g cm$^{-3}$)',
+            }[field]
+
+            # Set the bbox if existent
             if self.bbox is None:
                 extent = self.bbox
             else:
                 bbox = self.bbox * u.cm.to(u.au)
                 extent = [-bbox, bbox] * 2
         
+            # Extract the middle plane 
             plane = self.ncells//2 - 1
-            if self.model == 'ppdisk':
-                slice_ = self.dens[:, plane, :].T
-            else:
-                slice_ = self.dens[..., plane].T
 
-            if slice_.min() > 0:
-                vmin = slice_.min() if self.plotmin is None else self.plotmin 
+            data_xy = data[:, :, plane].T
+            data_xz = data[:, plane, :].T
+
+            if np.all(data_xy == np.zeros(data_xy.shape)): 
+                raise ValueError(f'{field} midplane is exactly 0.')
+
+            if data_xy.min() > 0:
+                if field == 'density' and self.plotmin is not None:
+                    vmin = self.plotmin
+                else:
+                    vmin = data_xy.min() 
             else:
                 vmin = None
 
-            if slice_.max() < np.inf:
-                vmax = slice_.max() if self.plotmax is None else self.plotmax 
+            if data_xy.max() < np.inf:
+                if field == 'density' and self.plotmax is not None:
+                    vmax = self.plotmax
+                else:
+                    vmax = data_xy.max() 
             else:
                 vmax = None
 
-            if np.all(slice_ == np.zeros(slice_.shape)): 
-                raise ValueError('Model density is exactly 0.')
+            fig, p = plt.subplots(nrows=1, ncols=2, figsize=(10, 5.5))
 
-            plt.title(r'Dust Density Midplane (g cm$^{-3}$)')
-            plt.imshow(
-                slice_, 
+            pxy = p[0].imshow(
+                data_xy, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
-                cmap='CMRmap',
+                cmap='BuPu' if field == 'density' else 'inferno',
                 extent=extent,
             )
-            plt.colorbar()
-            plt.xlabel('AU')
-            plt.ylabel('AU')
+            pxz = p[1].imshow(
+                data_xz, 
+                norm=LogNorm(vmin=vmin, vmax=vmax), 
+                cmap='BuPu' if field == 'density' else 'inferno',
+                extent=extent,
+            )
+            cxy = fig.colorbar(pxy, ax=p[0], pad=0.01, orientation='horizontal')
+            cxz = fig.colorbar(pxy, ax=p[1], pad=0.01, orientation='horizontal')
+            cxy.set_label(title)
+            cxz.set_label(title)
+            p[0].set_title('Midplane XY')
+            p[1].set_title('Midplane XZ')
+            p[0].set_ylabel('Y (AU)')
+            p[1].set_ylabel('Z (AU)')
+            p[0].set_xticklabels([])
+            p[1].set_xticklabels([])
 
-            if self.vfield is not None:
-                if self.model == 'ppdisk':
-                    v1 = self.vfield.vx[:, plane, :].T, 
-                    v2 = self.vfield.vz[:, plane, :].T,
-                else:
-                    v1 = self.vfield.vx[..., plane].T, 
-                    v2 = self.vfield.vy[..., plane].T,
-
-                try:
-                    plt.streamplot(
+            try:
+                if self.vfield is not None and field == 'density':
+                    p[0].streamplot(
                         np.linspace(-bbox, bbox, self.ncells), 
                         np.linspace(-bbox, bbox, self.ncells), 
-                        np.array(v1).squeeze(), 
-                        np.array(v2).squeeze(),
-                        color='white', 
+                        self.vfield.vx[..., plane].T, 
+                        self.vfield.vy[..., plane].T, 
                         linewidth=0.5,
-                        density=0.7,
+                        color='gray', 
+                        density=0.7, 
                         arrowsize=0.1, 
                     )
-                except Exception as e:
-                    utils.print_('Unable to add vector stream lines',  red=True)
-                    utils.print_(e, bold=True)
-            plt.show()
-
-        except Exception as e:
-            utils.print_('Unable to show the 2D grid slice.',  red=True)
-            utils.print_(e, bold=True)
-
-    def plot_temp_midplane(self):
-        """ Plot the temperature midplane at z=0 using Matplotlib """
-        try:
-            from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the temperature grid midplane at z = 0')
-            plt.rcParams['xtick.direction'] = 'in'
-            plt.rcParams['ytick.direction'] = 'in'
-            plt.rcParams['xtick.top'] = True
-            plt.rcParams['ytick.right'] = True
-            plt.rcParams['xtick.minor.visible'] = True
-            plt.rcParams['ytick.minor.visible'] = True
-            plt.close('all')
-
-            if self.bbox is None:
-                extent = self.bbox
-            else:
-                bbox = self.bbox * u.cm.to(u.au)
-                extent = [-bbox, bbox] * 2
-
-            plane = self.ncells//2 - 1
-            if self.model == 'ppdisk':
-                slice_ = self.temp[:, plane, :].T
-            else:
-                slice_ = self.temp[..., plane].T
-
-            if np.all(slice_ == np.zeros(slice_.shape)): 
-                raise ValueError('Model temperature is exactly 0.')
-                
-            vmin = slice_.min() if slice_.min() > 0 else None 
-            vmax = slice_.max() if slice_.max() < np.inf else None 
-
-            plt.imshow(slice_, 
-                cmap='inferno',
-                norm=LogNorm(vmin=vmin, vmax=vmax), 
-                extent=extent,
-            )
-            plt.colorbar()
-            plt.xlabel('AU')
-            plt.ylabel('AU')
-            plt.title(r'Temperature Midplane at $z=0$ (K)')
+                    p[1].streamplot(
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        np.linspace(-bbox, bbox, self.ncells), 
+                        self.vfield.vx[:, plane, :].T, 
+                        self.vfield.vz[:, plane, :].T, 
+                        linewidth=0.5,
+                        color='gray', 
+                        density=0.7, 
+                        arrowsize=0.1, 
+                    )
+            except Exception as e:
+                utils.print_('Unable to add vector stream lines',  red=True)
+                utils.print_(e, bold=True)
+            
+            plt.tight_layout()
             plt.show()
 
         except Exception as e:
