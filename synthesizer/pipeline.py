@@ -30,7 +30,7 @@ class Pipeline:
     
     def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=3.5, nang=181, 
             nphot=1e5, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
-            dgrowth=False, csubl=0, sootline=300, material='sg', 
+            dgrowth=False, csubl=0, sootline=300, material='sg', bbox=None,
             polarization=False, alignment=False, 
             overwrite=False, verbose=True):
 
@@ -92,6 +92,7 @@ class Pipeline:
             self.mstar = star[4]
             self.tstar = star[5]
 
+        self.bbox = bbox
         self.overwrite = overwrite
         self.verbose = verbose
 
@@ -1126,13 +1127,21 @@ class Pipeline:
             if --grid was given. Otherwise read from the grid file.
         """
 
-        try:
-            if self.bbox is not None:
-                return self.bbox
-            else:
-                g = np.loadtxt('amr_grid.inp', skiprows=6)
-                return (g[-1] - g[0]) / 2
-        except AttributeError:
-            g = np.loadtxt('amr_grid.inp', skiprows=6)
+        if self.bbox is not None:
+            return self.bbox
+        else:
+            gridid = int(np.loadtxt('amr_grid.inp', skiprows=1, max_rows=1))
+            ncells = int(np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)[0])
+
+            # Number of lines to skip from grid style (0: reg, 1: oct, 10: amr)
+            skip = {0: 6, 1: 7, 10: 7}[gridid]
+
+            # Number of lines to read
+            nlines = ncells * 3 + 3 
+
+            # Read in the grid
+            g = np.loadtxt('amr_grid.inp', skiprows=skip, max_rows=nlines)
+
+            # Return bbox as the difference between the first and last vertex
             return (g[-1] - g[0]) / 2
 

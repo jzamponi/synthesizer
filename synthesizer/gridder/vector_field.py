@@ -51,7 +51,7 @@ class VectorField():
             self.vz = z / r
  
         elif self.morphology in ['h', 'hourglass']:
-            a = 1
+            a = 5e-34
             factor = 1 / np.sqrt(
                 1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
             self.vx = a * x * z * np.exp(-a * z*z) * factor
@@ -63,7 +63,7 @@ class VectorField():
             r = np.sqrt(x**2 + y**2)
             toro = np.array([y/r, -x/r, np.zeros(z.shape)])
 
-            a = 1e-5
+            a = 5e-34
             factor = np.sqrt(
                 1 + (a*x*z)**2*np.exp(-2*a*z*z) + (a*y*z)**2*np.exp(-2*a*z*z))
             hour = np.array([
@@ -89,27 +89,12 @@ class VectorField():
             self.vz = (3*z*(-3*x**2 - 3*y**2 + 2*z**2)) / r7
 
         elif self.morphology == 'custom':
-            # hourglass from polaris 
-            r = np.sqrt(x**2 + y**2 + z**2)
-            th = np.arccos(z / r)
-            ph = np.arctan2(y, x)
-            gamma = 5
-            r0 = r
-            factor = gamma * r0**2 / (r + r0)**2
-            self.vx = factor * np.cos(th) * np.cos(ph)
-            self.vx = factor * np.cos(th) * np.sin(ph)
-            self.vz = factor * np.sin(th)
-        
-        elif self.morphology == 'catenoid':
             normalize = False
-            
-            # Catenoid in parametric equations
-            r = np.sqrt(x**2 + y**2 + z**2)
-            u = np.arccos(z / r)
-            a = 0.99
-            self.vx = a * np.cosh(z/a) * np.cos(u)
-            self.vy = a * np.cosh(z/a) * np.sin(u)
-            self.vz = z
+
+            # Feel free to write here your own vector field components.
+            # If you don't they'll just be zeros
+        
+
 
         # Normalize the field
         if normalize:

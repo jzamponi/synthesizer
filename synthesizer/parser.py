@@ -50,7 +50,7 @@ def synthesizer():
         help='Name of the input AMR grid file (snapshot from a grid-based code)')
 
     parser.add_argument('--source', action='store', default='sphng', 
-        choices=['sphng', 'gizmo', 'gadget', 'arepo', 'phantom', 
+        choices=['sphng', 'gizmo', 'gadget', 'arepo', 'phantom', 'nbody6', 
             'athena', 'zeustw', 'flash', 'enzo', 'ramses'], 
         help='Name of the code used to generate the inputfile.')
 
@@ -247,7 +247,7 @@ def synthesizer():
         amin=cli.amin, amax=cli.amax, na=cli.na,
         csubl=cli.sublimation, sootline=cli.sootline, dgrowth=cli.dust_growth,
         polarization=cli.polarization, alignment=cli.alignment, star=cli.star, 
-        nphot=cli.nphot, nthreads=cli.nthreads, 
+        bbox=cli.bbox, nphot=cli.nphot, nthreads=cli.nthreads, 
         material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet
     )
 

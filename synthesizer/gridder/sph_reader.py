@@ -250,7 +250,7 @@ class Phantom(SPHCode):
         # Derive density from the particle mass / h**3
         # src: https://github.com/dmentipl/plonk/blob/main/src/plonk/snap/readers/phantom.py
     
-        self.temp = temp
+        self.add_temp = temp
         self.x = coords[:, 0] * u.au.to(u.cm)
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
@@ -259,6 +259,47 @@ class Phantom(SPHCode):
     def rho_g(self):
         dens = np.array(self.data['Density'])
         return dens * 1e-10 * (u.Msun / u.au**3).to(u.g/u.cm**3)
+
+    @property
+    def temp(self):
+        return np.zeros(self.rho_g.shape)
+
+class Nbody6(SPHCode):
+    """ Handle snapshots from the Nbody6 code. """
+    def __init__(self, filename, temp=False):
+
+        self.add_temp = temp
+        
+        # Read in data from HDF5 file
+        if filename.endswith(('h5', 'hdf5')):
+            utils.not_implemented('Nbody6-HDF5')
+            self.data = h5py.File(filename, 'r')['particles']
+            coords = self.data['xyz'].value
+
+            # Derive density from the particle mass / h**3
+            self.mass = self.data[0] * u.Msun.to(u.g)
+            self.x = coords[:, 0] * u.pc.to(u.cm)
+            self.y = coords[:, 1] * u.pc.to(u.cm)
+            self.z = coords[:, 2] * u.pc.to(u.cm)
+
+        # Read in data from ASCII table
+        else:
+            self.data = np.loadtxt(filename)
+            self.mass = self.data[:, 0] * u.Msun.to(u.g)
+            self.x = self.data[:, 1] * u.pc.to(u.cm)
+            self.y = self.data[:, 2] * u.pc.to(u.cm)
+            self.z = self.data[:, 3] * u.pc.to(u.cm)
+            self.vx = self.data[:, 4] * (u.km/u.s).to(u.cm/u.s)
+            self.vy = self.data[:, 5] * (u.km/u.s).to(u.cm/u.s)
+            self.vz = self.data[:, 6] * (u.km/u.s).to(u.cm/u.s)
+            self.id = self.data[:, 7] 
+
+    @property
+    def rho_g(self):
+        radius = 1 * u.Rsun.to(u.cm)
+        vol = 4 / 3 * np.pi * radius**3
+        dens = self.mass / vol
+        return dens 
 
     @property
     def temp(self):

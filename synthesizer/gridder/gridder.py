@@ -36,6 +36,8 @@ class CartesianGrid():
         self.fz = 1
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
+        self.interp_dens = None
+        self.interp_temp = None
         self.vfield = None
         self.add_temp = temp
         self.ncells = ncells
@@ -77,6 +79,9 @@ class CartesianGrid():
         elif source.lower() == 'phantom':
             utils.not_implemented()
             self.sph = Phantom(filename, temp=self.add_temp)
+
+        elif source.lower() == 'nbody6':
+            self.sph = Nbody6(filename, temp=self.add_temp)
 
         else:
             print('')
@@ -452,7 +457,7 @@ class CartesianGrid():
             if data is None:
                 data = {
                     'density': self.interp_dens, 
-                    'temperature': self.intep_temp
+                    'temperature': self.interp_temp
                 }[field]
             
             title = {
