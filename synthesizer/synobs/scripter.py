@@ -70,6 +70,7 @@ class CasaScript():
         self.threshold = '5e-5Jy'
         self.mask = ''
         self.uvrange = ''
+        self.uvtaper = ''
         self.pbcor = True
         self.interactive = False
         self.verbose = False
@@ -127,17 +128,17 @@ class CasaScript():
 
                 # Overwrite string values if they were overriden from self.read()
                 if isinstance(self.skymodel, str):
-                    self.skymodel = self.skymodel.replace('I', s)
+                    self.skymodel = f'radmc3d_{s}.fits'
                 else:
                     self.skymodel = self.skymodel(s)
 
                 if isinstance(self.imagename, str):
-                    self.imagename = self.imagename.replace('I', s)
+                    self.imagename = f'synobs_data/clean_{s}.fits'
                 else:
                     self.imagename = self.imagename(s)
 
                 if isinstance(self.fitsimage, str):
-                    self.fitsimage = self.fitsimage.replace('I', s)
+                    self.fitsimage = f'synobs_{s}.fits'
                 else:
                     self.fitsimage = self.fitsimage(s)
     
@@ -185,6 +186,7 @@ class CasaScript():
                     f.write(f'    niter = {int(self.niter)}, \n')
                     f.write(f'    threshold = "{self.threshold}", \n')
                     f.write(f'    uvrange = "{self.uvrange}", \n')
+                    f.write(f'    uvtaper = "{self.uvtaper}", \n')
                     f.write(f'    mask = "{self.mask}", \n')
                     f.write(f'    pbcor = {self.pbcor}, \n')
                     f.write(f'    interactive = {self.interactive}, \n')
@@ -277,6 +279,7 @@ class CasaScript():
             if 'niter' in line: self.niter = strip_line(line)
             if 'threshold' in line: self.threshold = strip_line(line)
             if 'uvrange' in line: self.uvrange = strip_line(line)
+            if 'uvtaper' in line: self.uvtaper = strip_line(line)
             if 'mask' in line: self.mask = strip_line(line)
             if 'pbcor' in line: self.pbcor = strip_line(line)
             if 'interactive' in line: self.interactive = strip_line(line)

@@ -39,9 +39,9 @@ if Clean:
         uvtaper = '0.1arcsec',
         niter = 10000,
         threshold = '4e-5Jy',
-        mask = 'centerbox[[200pix, 200pix], [50pix, 50pix]]', 
+        mask = 'synobs_data/synobs_data.vla.cnb.skymodel', 
         pbcor = True, 
-        interactive = True,
+        interactive = False,
         verbose = True
     )
 

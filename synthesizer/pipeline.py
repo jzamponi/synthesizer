@@ -791,7 +791,8 @@ class Pipeline:
                         18000: 'vla_18mm.py',
                     }[self.lam]
 
-                    if self.polarization: template.replace('1.3mm', '1.3mm_pol')
+                    if self.polarization: 
+                        template = template.replace('1.3mm', '1.3mm_pol')
 
                     script.name = str(source_dir/f'synobs/templates/{template}')
                     script.read(script.name)                    

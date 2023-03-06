@@ -40,7 +40,7 @@ if Clean:
         weighting = 'briggs',
         robust = 0.5,
         uvtaper = '0.1arcsec',
-        mask = 'centerbox[[200pix, 200pix], [50pix, 50pix]]',
+        mask = 'synobs_data/synobs_data.alma.cycle3.5.skymodel',
         niter = 10000,
         threshold = '280uJy',
         pbcor = True, 
