@@ -1086,7 +1086,7 @@ class Pipeline:
             d = ascii.read(self.opacfile, data_start=skip, data_end=nlam + skip)
             l = d['col1']
             self.k_abs = d['col2']
-            self.k_sca = d['col3'] if iformat > 1 else np.zeros(l.shape)
+            self.k_sca = d['col3']
             self.k_ext = self.k_abs + self.k_sca
             self.kappa = float(interp1d(l, self.k_ext)(self.lam))
 

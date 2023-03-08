@@ -238,7 +238,7 @@ class AnalyticalModel():
             # Set the plot title for the right field
             title = {
                 'density': r'Dust Density (g cm$^{-3}$)', 
-                'temperature': r'Gas Temperature (g cm$^{-3}$)',
+                'temperature': r'Gas Temperature (K)',
             }[field]
 
             # Set the bbox if existent

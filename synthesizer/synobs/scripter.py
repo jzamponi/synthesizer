@@ -8,6 +8,7 @@
 
 import os
 import re
+import random
 import subprocess
 import numpy as np
 import astropy.units as u
@@ -50,6 +51,7 @@ class CasaScript():
         self.telescope = None
         self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
         self.thermalnoise = 'tsys-manual'
+        self.seed = lambda: int(random.randint(0, 1000))
 
         # tclean
         self.vis = f'{self.project}/{self.project}.{self.arrayfile}.noisy.ms'
@@ -162,6 +164,7 @@ class CasaScript():
                     f.write(f'    refdate = "{self.refdate}", \n')
                     f.write(f'    antennalist = "{self.arrayconfig}", \n')
                     f.write(f'    thermalnoise = "{self.thermalnoise}", \n')
+                    f.write(f'    seed = {self.seed()}, \n')
                     f.write(f'    graphics = "{self.graphics}", \n')
                     f.write(f'    overwrite = {self.overwrite}, \n')
                     f.write(f'    verbose = {self.verbose}, \n')
