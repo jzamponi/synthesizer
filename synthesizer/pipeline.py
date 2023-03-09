@@ -384,7 +384,7 @@ class Pipeline:
                 f.write(f'nphot = {int(self.nphot)}\n')
                 f.write(f'nphot_scat = {int(self.nphot)}\n')
                 f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
-                f.write(f'countwrite = {int(self.nphot / 100)}\n')
+                #f.write(f'countwrite = {int(self.nphot / 100)}\n')
                 f.write(f'mc_scat_maxtauabs = {int(5)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
                 if self.alignment and not mc: 
@@ -683,10 +683,10 @@ class Pipeline:
         for st in ['I', 'Q', 'U'] if self.polarization else ['I']:
             stfile = fitsfile.replace('I', st)
             utils.radmc3d_casafits(stfile, stokes=st, dpc=distance)
-            utils.edit_header(stfile, 'INCL', self.incl)
-            utils.edit_header(stfile, 'NPHOT', self.nphot)
+            utils.edit_header(stfile, 'NPHOT', f'{self.nphot:e}')
             utils.edit_header(stfile, 'OPACITY', self.kappa)
             utils.edit_header(stfile, 'MATERIAL', self.material)
+            utils.edit_header(stfile, 'INCL', self.incl)
             utils.edit_header(stfile, 'CSUBL', self.csubl)
             utils.edit_header(stfile, 'NSPEC', self.nspec)
 
