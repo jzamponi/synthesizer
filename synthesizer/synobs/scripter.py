@@ -50,6 +50,7 @@ class CasaScript():
         self.obsmode = 'int'
         self.telescope = None
         self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
+        self.arrayconfig = ""
         self.thermalnoise = 'tsys-manual'
         self.seed = lambda: int(random.randint(0, 1000))
 
@@ -94,14 +95,131 @@ class CasaScript():
                 'outside the sub-/milimeter wavelengths are currently not '+\
                 'implemented. But they will.')
 
-    def _find_array(self):
+    def find_array(self):
         """ Get the best antenna array that matches a desired angular resolution
-            To be implemented ...
+            by interpolating the tabulated resolutions to the one requested.
         """
-        utils.not_implemented()
-        if self.resolution is not None:
-            res = self.resolution
-            pass
+
+        from scipy.interpolate import interp1d
+
+        obs = self.telescope
+        res = self.resolution
+
+        if obs == 'aca':
+            return 'aca.cycle7.cfg'
+        
+        elif obs == 'atca':
+            return 'atca_all.cfg'
+
+        elif obs == 'vlba':
+            return 'vlba.cfg'
+
+        elif obs == 'meerkat':
+            return 'meerkat.cfg'
+
+        # List synthesized beams for diff. telescopes as matrices (Band, Array)
+        beams = {
+            # src: ALMA Technical Handbook Cycle 9
+            'alma': np.array([
+                [3.38, 2.30, 1.42, 0.92, 0.550, 0.310, 0.210, 0.096, 0.057, 0.042],
+                [2.25, 1.53, 0.94, 0.61, 0.360, 0.200, 0.140, 0.064, 0.038, 0.028],
+                [1.83, 1.24, 0.77, 0.50, 0.300, 0.170, 0.110, 0.052, 0.031, 0.023],
+                [1.47, 1.00, 0.62, 0.40, 0.240, 0.130, 0.092, 0.042, 0.025, 0.018],
+                [0.98, 0.67, 0.41, 0.27, 0.160, 0.089, 0.061, 0.028, 0.017, 0.012],
+                [0.74, 0.50, 0.31, 0.20, 0.120, 0.067, 0.046, 0.021, 0.012, 0.009],
+                [0.52, 0.35, 0.22, 0.14, 0.084, 0.047, 0.033, 0.015, 0.0088, np.NaN],
+                [0.39, 0.26, 0.16, 0.11, 0.063, 0.035, 0.024, 0.011, np.NaN, np.NaN],
+                ]), 
+            # science.nrao.edu/facilities/vla/docs/manuals/oss/performance/resolution
+            'vla': np.array([
+                [24.0, 80.0, 260., 850],
+                [5.60, 18.5, 60.0, 200],
+                [1.30, 4.30, 14.0, 46.],
+                [0.65, 2.10, 7.00, 23.],
+                [0.33, 1.00, 3.50, 12.],
+                [0.20, 0.60, 2.10, 7.2],
+                [0.13, 0.42, 1.40, 4.6],
+                [0.09, 0.28, 0.95, 3.1],
+                [0.06, 0.19, 0.63, 2.1],
+                [0.04, 0.14, 0.47, 1.5],
+                ]),
+            # src: http://sma1.sma.hawaii.edu/status.html#arrayconf
+            'sma': np.array([
+                [9, 3.5, 1.3, 0.5],
+                [6, 2.5, 0.8, 0.3], 
+            ]),
+            # src: https://www.iram.fr/IRAMFR/GILDAS/doc/pdf/noema-intro.pdf
+            'noema': np.array([
+                [np.NaN, np.NaN], 
+                [np.NaN, np.NaN], 
+                [np.NaN, np.NaN], 
+                [np.NaN, np.NaN], 
+            ]),
+        }
+        # To do: the band grids should have N_band+1 items, (more like band 
+        # grid walls) to capture values within the upper and lower band edges.
+
+        # List wavelength bands in microns
+        w = lambda nu: (c.c.cgs.value / (nu*u.GHz.to(u.Hz)))*u.cm.to(u.micron)
+        bands = {
+            'alma': np.array(
+                [w(i) for i in [83.3, 115, 167, 214, 273, 375, 500, 750, 999]]),
+            'vla': np.array(
+                [w(i) for i in [0.074, 0.35, 1.5, 3, 6, 10, 15, 22, 33, 45]]),
+            'sma': np.array([w(230), w(345)]),
+            'noema': np.array([w(70.384), w(127), w(196), w(276)]), 
+        }
+
+        # Returns True if the desired resolution is within the listed syn. beams
+        in_beams = lambda x: \
+            res > np.nanmin(beams[x]) and res < np.nanmax(beams[x])
+
+        # Raise error if the observing wavelength is outside the receiver bands
+        if self.lam < bands[obs].min() or self.lam > bands[obs].max():
+
+            raise ValueError(
+                f'{utils.color.red}' +
+                f'Observing wavelength {self.lam} µm is ' +
+                f'outside the {self.telescope.upper()} receiver bands.' +
+                f'{utils.color.none}'
+            )
+
+        # Store the number of antenna arrays defined in beams. 
+        nband = bands[obs].shape[0]
+        narrs = beams[obs].shape[1]
+        
+        # Find the matrix ID of the array that delivers the desired resolution
+        bandid = int(interp1d(bands[obs], range(nband))(self.lam))
+        utils.print_(f'{bandid = }', green=True)
+        utils.print_(f'{beams[obs][bandid] = }', green=True)
+        try:
+            arrid = int(interp1d(beams[obs][bandid], range(narrs))(res))
+
+        except:
+            raise ValueError(
+                f'{utils.color.red}' +
+                f'Requested resolution is not delivered by {obs} ' +
+                f'at {self.lam} µm.\nYou can force it by manually setting ' +
+                f'antennalist in your new casa_script.py {utils.color.none}'
+            )
+
+        utils.print_(f'{obs.upper()} Band {bandid+2}', green=True)
+
+        if obs == 'alma':
+            return f'alma.cycle7.{arrid}.cfg' if in_beams(obs) else ''
+
+        elif obs == 'vla':
+            arr = ['a', 'b', 'c', 'd'][arrid]
+            return f'vla.{arr}.cfg' if in_beams(obs) else ''
+
+        elif obs == 'noema':
+            arr = ['a', 'b', 'c', 'd'][arrid]
+            return f'pdbi-{arr}.cfg' if in_beams(obs) else ''
+
+        elif obs == 'sma':
+            arr = ['subcompact', 'compact', 'extended', 'vextended'][arrid]
+            return f'sma.{arr}.cfg' if in_beams(obs) else ''
+
 
     def _get_antenna_array(self, cycle, arr):
         """ Set the antennalist string for a given antenna configuration.

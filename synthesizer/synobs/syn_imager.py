@@ -34,7 +34,12 @@ class SynImage:
 
         # Rescale the flux from Jy/pixel to Jy/beam
         self.img = np.pi / 4 / np.log(2) * res**2 / self.pixsize**2 * self.img
+        
+        # Update the header
         self.hdr['BUNIT'] = 'Jy/beam'
+        self.hdr['BMAJ'] = res * u.arcsec.to(u.deg)
+        self.hdr['BMIN'] = res * u.arcsec.to(u.deg)
+        self.hdr['BPA'] = pa
 
     def add_noise(self, obstime, bandwidth=8e9, pwv=10, elevation=45):
         """ Add thermal noise to an image based on an observing time 

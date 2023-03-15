@@ -216,7 +216,8 @@ def synthesizer():
         help="Wheter to observe with an radio interferometer or a single-dish.")
     
     parser.add_argument('--telescope', action='store', type=str, default='alma',
-        choices=['alma', 'aca', 'vla'], 
+        choices=['alma', 'aca', 'vla', 'sma', 'noema', 'atca',  
+                'meerkat', 'vlba'], 
         help="Radio telescope to use. Default: ALMA")
 
     parser.add_argument('--script', action='store', default=None,

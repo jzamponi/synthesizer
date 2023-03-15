@@ -40,8 +40,8 @@ class color:
     it = "\033[3m"
     ul = '\033[4m'
 
-def print_(string, verbose=True, bold=False, red=False, fname=None, blue=False, 
-    ul=False, *args, **kwargs):
+def print_(string, verbose=True, bold=False, red=False, blue=False, green=False,
+    ul=False, fname=None, *args, **kwargs):
 
     # Get the name of the calling function by tracing one level up in the stack
     fname = sys._getframe(1).f_code.co_name if fname is None else fname
@@ -60,6 +60,9 @@ def print_(string, verbose=True, bold=False, red=False, fname=None, blue=False,
                 *args, **kwargs)
         elif blue:
             print(f"{color.blue}[{fname}] {string} {color.none}", flush=True, 
+                *args, **kwargs)
+        elif green:
+            print(f"{color.green}[{fname}] {string} {color.none}", flush=True, 
                 *args, **kwargs)
         elif ul:
             print(f"{color.ul}[{fname}] {string} {color.none}", flush=True, 

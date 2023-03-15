@@ -192,6 +192,38 @@ class CartesianGrid():
         utils.print_(f'Particles included: {self.x.size} | ' +
             f'Particles excluded: {self.npoints - self.x.size} ')
 
+    def find_resolution(self):
+        """
+        Find the minimum distance between points. 
+        If particles are too many, it uses only those
+        closer to the geometrical center than the mean distance.
+        """
+        
+        from scipy.spatial import distance
+
+        utils.print_('Calculating minimum distance between all particles')
+
+        try:
+            dmin = distance.pdist(np.vstack([self.x, self.y, self.z]).T).min()
+
+        except MemoryError as e:
+            # Use only the 10000 closest particles to the center
+            n = 10000
+            x = np.sort(np.abs(self.x))[-n:]
+            y = np.sort(np.abs(self.y))[-n:]
+            z = np.sort(np.abs(self.z))[-n:]
+            dmin = distance.pdist(np.vstack([x, y, z]).T).min()
+
+        if self.cellsize > self.resolution:
+            utils.print_(
+                f'The current cell size {self.cellsize*u.cm.to(u.au):.1}au '+\
+                f'is larger than the minimum particle separation '+\
+                f'{self.resolution*u.cm.to(u.au):.1}au. ', blue=True)
+            utils.print_('You might want to increase ncells or use a bbox', 
+                blue=True)
+
+        return dmin
+
     def interpolate_points(self, field, method='linear', fill='min'):
         """
             Interpolate a set of points in cartesian coordinates along with their
@@ -201,11 +233,14 @@ class CartesianGrid():
         # Construct the rectangular grid
         rmin = np.min([self.x.min(), self.y.min(), self.z.min()])
         rmax = np.max([self.x.max(), self.y.max(), self.z.max()])
+        self.bbox = (rmax - rmin) / 2
+        self.cellsize = self.bbox / self.ncells
+        #self.resolution = self.find_resolution()
+
         self.xc = np.linspace(rmin, rmax, self.ncells)
         self.yc = np.linspace(rmin, rmax, self.ncells)
         self.zc = np.linspace(rmin, rmax, self.ncells)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
-        self.bbox = (rmax - rmin) / 2
 
         utils.print_(f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +\
             f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells per side.')

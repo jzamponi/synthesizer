@@ -738,6 +738,10 @@ class Pipeline:
         # If the observing wavelength is outside the working range of CASA, 
         # simplify the synthetic obs. to a PSF convolution and thermal noise
         if self.lam < 400 or self.lam > 4e6:
+
+            utils.print_('Observing wavelength is outside mm/sub-mm range. ')
+            utils.print_(
+                'Limiting the observation to convolution and noise addition.')
     
             if resolution is not None:
                 self.resolution = resolution
@@ -799,15 +803,17 @@ class Pipeline:
 
                 else:
                     # Create a minimal template CASA script
-                    script.resolution = resolution
-                    script.obsmode = obsmode
-                    script.telescope = telescope
-                    script.totaltime = f'{obstime}h'
                     if self.npix is None: 
                         self.npix = fits.getheader('radmc3d_I.fits').get('NAXIS1')
                     script.imsize = int(self.npix + 100)
 
                 # Tailor the script to the pipeline setup
+                script.resolution = resolution
+                script.obsmode = obsmode
+                script.telescope = telescope
+                script.totaltime = f'{obstime}h'
+                script.arrayconfig = script.find_array()
+                utils.print_(f'{script.arrayconfig = }', green=True)
                 script.polarization = self.polarization
                 script.simobserve = simobserve
                 script.clean = clean
@@ -843,7 +849,6 @@ class Pipeline:
 
         # Register the pipeline step 
         self.steps.append('synobs')
-
 
 
     @utils.elapsed_time
