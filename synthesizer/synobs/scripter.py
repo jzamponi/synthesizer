@@ -49,8 +49,7 @@ class CasaScript():
         self.refdate = '2017/05/20' 
         self.obsmode = 'int'
         self.telescope = None
-        self.arrayconfig = self._get_antenna_array(cycle=4, arr=7)
-        self.arrayconfig = ""
+        self.antennalist = self._get_antenna_array(cycle=4, arr=7)
         self.thermalnoise = 'tsys-manual'
         self.seed = lambda: int(random.randint(0, 1000))
 
@@ -95,7 +94,7 @@ class CasaScript():
                 'outside the sub-/milimeter wavelengths are currently not '+\
                 'implemented. But they will.')
 
-    def find_array(self):
+    def find_antennalist(self):
         """ Get the best antenna array that matches a desired angular resolution
             by interpolating the tabulated resolutions to the one requested.
         """
@@ -106,16 +105,24 @@ class CasaScript():
         res = self.resolution
 
         if obs == 'aca':
-            return 'aca.cycle7.cfg'
+            self.antennalist = 'aca.cycle7.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return
         
         elif obs == 'atca':
-            return 'atca_all.cfg'
+            self.antennalist = 'atca_all.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return 
 
         elif obs == 'vlba':
-            return 'vlba.cfg'
+            self.antennalist = 'vlba.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return
 
         elif obs == 'meerkat':
-            return 'meerkat.cfg'
+            self.antennalist = 'meerkat.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return 
 
         # List synthesized beams for diff. telescopes as matrices (Band, Array)
         beams = {
@@ -190,8 +197,7 @@ class CasaScript():
         
         # Find the matrix ID of the array that delivers the desired resolution
         bandid = int(interp1d(bands[obs], range(nband))(self.lam))
-        utils.print_(f'{bandid = }', green=True)
-        utils.print_(f'{beams[obs][bandid] = }', green=True)
+
         try:
             arrid = int(interp1d(beams[obs][bandid], range(narrs))(res))
 
@@ -203,22 +209,28 @@ class CasaScript():
                 f'antennalist in your new casa_script.py {utils.color.none}'
             )
 
-        utils.print_(f'{obs.upper()} Band {bandid+2}', green=True)
-
         if obs == 'alma':
-            return f'alma.cycle7.{arrid}.cfg' if in_beams(obs) else ''
+            self.antennalist = f'alma.cycle7.{arrid + 1}.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return 
 
         elif obs == 'vla':
             arr = ['a', 'b', 'c', 'd'][arrid]
-            return f'vla.{arr}.cfg' if in_beams(obs) else ''
+            self.antennalist = f'vla.{arr}.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return 
 
         elif obs == 'noema':
             arr = ['a', 'b', 'c', 'd'][arrid]
-            return f'pdbi-{arr}.cfg' if in_beams(obs) else ''
+            self.antennalist = f'pdbi-{arr}.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return 
 
         elif obs == 'sma':
             arr = ['subcompact', 'compact', 'extended', 'vextended'][arrid]
-            return f'sma.{arr}.cfg' if in_beams(obs) else ''
+            self.antennalist = f'sma.{arr}.cfg'
+            self.arrayfile = self.antennalist.strip('.cfg') 
+            return 
 
 
     def _get_antenna_array(self, cycle, arr):
@@ -261,6 +273,12 @@ class CasaScript():
                     self.fitsimage = f'synobs_{s}.fits'
                 else:
                     self.fitsimage = self.fitsimage(s)
+
+                # Reset, to keep track in case arrayfile was updated
+                self.vis = \
+                    f'{self.project}/{self.project}.{self.arrayfile}.noisy.ms'
+
+                self.mask = self.vis.replace('noisy.ms', 'skymodel')
     
                 if self.simobserve:
                     f.write(f'print("\033[1m\\n[syn_obs] ')
@@ -280,7 +298,7 @@ class CasaScript():
                     f.write(f'    hourangle = "{self.hourangle}", \n')
                     f.write(f'    obsmode = "{self.obsmode}", \n')
                     f.write(f'    refdate = "{self.refdate}", \n')
-                    f.write(f'    antennalist = "{self.arrayconfig}", \n')
+                    f.write(f'    antennalist = "{self.antennalist}", \n')
                     f.write(f'    thermalnoise = "{self.thermalnoise}", \n')
                     f.write(f'    seed = {self.seed()}, \n')
                     f.write(f'    graphics = "{self.graphics}", \n')
@@ -316,7 +334,7 @@ class CasaScript():
 
                     f.write(f'imregrid( \n')
                     f.write(f'    "{self.imagename}.image", \n')
-                    f.write(f'    template = "{self.project}/{self.project}.{self.arrayfile}.skymodel", \n')
+                    f.write(f'    template = "{self.mask}", \n')
                     f.write(f'    output = "{self.imagename}.image_modelsize", \n')
                     f.write(f'    overwrite = True, \n')
                     f.write(f') \n\n')
@@ -377,12 +395,12 @@ class CasaScript():
             if 'refdate' in line: self.refdate = strip_line(line)
             if 'hourangle' in line: self.hourangle = strip_line(line)
             if 'obsmode' in line: self.obsmode = strip_line(line)
-            if 'antennalist' in line: self.arrayconfig = strip_line(line)
+            if 'antennalist' in line: self.antennalist = strip_line(line)
             if 'thermalnoise' in line: self.thermalnoise = strip_line(line)
             if 'graphics' in line: self.graphics = strip_line(line)
             if 'overwrite' in line: self.overwrite = strip_line(line)
             if 'verbose' in line: self.verbose = strip_line(line)
-            self.arrayfile = self.arrayconfig.strip('.cfg')
+            self.arrayfile = self.antennalist.strip('.cfg')
     
             # tclean
             if 'vis' in line: self.vis = strip_line(line)

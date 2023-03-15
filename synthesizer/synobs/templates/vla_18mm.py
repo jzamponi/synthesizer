@@ -40,7 +40,7 @@ if Clean:
         niter = 10000,
         threshold = '2e-5Jy',
         pbcor = True, 
-        mask = 'centerbox[[200pix, 200pix], [50pix, 50pix]]', 
+        mask = 'synobs_data/synobs_data.vla.a.skymodel', 
         interactive = False,
         verbose = False,
     )

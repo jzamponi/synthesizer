@@ -48,7 +48,7 @@ if Clean:
     
     imregrid(
         'synobs_data/clean_I.image', 
-        template = 'synobs_data/synobs_data.alma.cycle5.10.skymodel.flat', 
+        template = 'synobs_data/synobs_data.alma.cycle5.10.skymodel', 
         output = 'synobs_data/clean_I.image_modelsize', 
         overwrite = True
     )

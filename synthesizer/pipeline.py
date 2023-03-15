@@ -812,8 +812,7 @@ class Pipeline:
                 script.obsmode = obsmode
                 script.telescope = telescope
                 script.totaltime = f'{obstime}h'
-                script.arrayconfig = script.find_array()
-                utils.print_(f'{script.arrayconfig = }', green=True)
+                if script.resolution is not None: script.find_antennalist()
                 script.polarization = self.polarization
                 script.simobserve = simobserve
                 script.clean = clean
