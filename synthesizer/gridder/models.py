@@ -213,6 +213,8 @@ class GIdisk(BaseModel):
      E. Vorobyov's suggesiton: 
      For the surface density, take a look at Galactic Dynamics (Biney...)
      For the scale height, Vorobyov & Basu 2008 or Rafikov 2009, 2015
+
+     For a more recent model, follow the prescription from Yamamuro et al 2023.
     """
 
     def __init__(self, x, y, z, field):
