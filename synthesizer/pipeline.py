@@ -98,7 +98,7 @@ class Pipeline:
 
     @utils.elapsed_time
     def create_grid(self, model=None, sphfile=None, amrfile=None, 
-            source='sphng', bbox=None, rout=None, ncells=None, 
+            source='sphng', bbox=None, rout=None, ncells=None, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=True):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
@@ -208,7 +208,7 @@ class Pipeline:
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
-            self.grid.plot_3d('density')
+            self.grid.plot_3d('density', tau=tau)
 
         # Render the temperature volume in 3D using Mayavi
         if show_3d and temperature:

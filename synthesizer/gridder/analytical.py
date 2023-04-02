@@ -41,7 +41,8 @@ class AnalyticalModel():
                 'user': 100 * u.au.to(u.cm), 
             }.get(model, 100 * u.au.to(u.cm))
         else:
-            self.bbox = bbox * u.au.to(u.cm)
+            self.bbox = bbox
+
 
     def create_model(self):
         """ Setup a density model box """
@@ -331,7 +332,7 @@ class AnalyticalModel():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-    def plot_3d(self, density=False, temperature=False): 
+    def plot_3d(self, field, data=None, tau=False): 
         """ Render the interpolated 3D field using Mayavi """
         try:
             from mayavi import mlab
@@ -341,17 +342,20 @@ class AnalyticalModel():
 
             utils.print_('Visualizing the interpolated field ...')
 
-            if density:
-                data = self.dens
-                title = r'Dust Density (g cm$^{-3}$)'
-
-            elif temperature:
-                data = self.temp
-                title = r'Gas Temperature (g cm$^{-3}$)'
-                self.plotmin = None
-            
+            # Detect what field to use
+            if data is None:
+                data = {
+                    'density': self.dens, 
+                    'temperature': self.temp
+                }[field]
             else:
-                return False
+                data = data.T
+            
+            # Set the plot title for the right field
+            title = {
+                'density': r'Dust Density (g cm$^{-3}$)', 
+                'temperature': r'Gas Temperature (K)',
+            }[field]
 
             # Initialize the figure and scene
             engine = Engine()
@@ -361,8 +365,7 @@ class AnalyticalModel():
 
             # Render data
             plot = mlab.contour3d(
-                data, contours=100, opacity=0.2, colormap='CMRmap',
-                vmin=self.plotmin, vmax=self.plotmax)
+                data, contours=100, opacity=0.2, colormap='inferno')
 
             # Add a colorbar
             cbar = mlab.colorbar(plot, orientation='vertical', title=title)
@@ -406,14 +409,29 @@ class AnalyticalModel():
             obs_label.orientation = np.array([0, 0, 90])
             obs_label.orient_to_camera = False
 
+            # Add an optional tau = 1 surface
+            if tau:
+                utils.print_('Adding optical depth surface at tau = 1')
+                dl = bbox * u.au.to(u.cm) * 2 / data.shape[0]
+                kappa = 1
+                tau1 = np.cumsum(data * kappa * dl, axis=0).T
+
+                if tau1.max() < 1:
+                    utils.print_(
+                        'The highest optical depth is tau = {tau1.max()}. ' +
+                        'No tau = 1 surface will be displayed.')
+                else:
+                    tausurf = mlab.contour3d(
+                        tau1, contours=[1], opacity=0.5, color=(0, 0, 1))
+
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
             utils.print_(
-                "Try, IsoSurface -> Actor -> Representation = Wireframe. ",
+                "      Try, IsoSurface -> Actor -> Representation = Wireframe. ",
                 blue=True)
             utils.print_(
-                "If you don't see much, it's probably a matter of adjusting "+\
-                "the contours. ", blue=True)
+                "      If you don't see much, it's probably a matter of "+\
+                "adjusting the contours. ", blue=True)
 
             mlab.show()
 
