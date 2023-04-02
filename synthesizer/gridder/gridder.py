@@ -195,7 +195,7 @@ class CartesianGrid():
     def find_resolution(self):
         """
         Find the minimum distance between points. 
-        If particles are too many, it uses only those
+        If particles are too many, it uses only those that are 
         closer to the geometrical center than the mean distance.
         """
         
@@ -219,7 +219,7 @@ class CartesianGrid():
                 f'The current cell size {self.cellsize*u.cm.to(u.au):.1}au '+\
                 f'is larger than the minimum particle separation '+\
                 f'{self.resolution*u.cm.to(u.au):.1}au. ', blue=True)
-            utils.print_('You might want to increase ncells or use a bbox', 
+            utils.print_('You may want to increase ncells or use a bbox', 
                 blue=True)
 
         return dmin
@@ -479,7 +479,7 @@ class CartesianGrid():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-    def plot_3d(self, field, data=None): 
+    def plot_3d(self, field, data=None, tau=False): 
         """ Render the interpolated 3D field using Mayavi """
         try:
             from mayavi import mlab
@@ -552,14 +552,29 @@ class CartesianGrid():
             obs_label.orientation = np.array([0, 0, 90])
             obs_label.orient_to_camera = False
 
+            # Add an optional tau = 1 surface
+            if tau:
+                utils.print_('Adding optical depth surface at tau = 1')
+                dl = bbox * u.au.to(u.cm) * 2 / data.shape[0]
+                kappa = 1
+                tau1 = np.cumsum(data * kappa * dl, axis=0).T
+
+                if tau1.max() < 1:
+                    utils.print_(
+                        'The highest optical depth is tau = {tau1.max()}. ' +
+                        'No tau = 1 surface will be displayed.')
+                else:
+                    tausurf = mlab.contour3d(
+                        tau1, contours=[1], opacity=0.5, color=(0, 0, 1))
+
             utils.print_('HINT: If you wanna play with the figure, press '+\
                 'the nice icon in the upper left corner.', blue=True)
             utils.print_(
-                "Try, IsoSurface -> Actor -> Representation = Wireframe. ",
+                "      Try, IsoSurface -> Actor -> Representation = Wireframe. ",
                 blue=True)
             utils.print_(
-                "If you don't see much, it's probably a matter of adjusting "+\
-                "the contours. ", blue=True)
+                "      If you don't see much, it's probably a matter of "+\
+                "adjusting the contours. ", blue=True)
 
             mlab.show()
 
