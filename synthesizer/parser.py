@@ -75,6 +75,9 @@ def synthesizer():
     parser.add_argument('--temperature', action='store_true', default=False, 
         help='Write the dust temperature from the model.')
 
+    parser.add_argument('--show-particles', action='store_true', default=False,  
+        help='Render the SPH particle positions weighted by density')
+
     parser.add_argument('--show-grid-2d', action='store_true', default=False,  
         help='Plot the midplane of the newly created grid')
 
@@ -235,7 +238,7 @@ def synthesizer():
     parser.add_argument('--quiet', action='store_true', default=False,
         help='Disable verbosity. Do not output anything.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.1')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.2')
 
 
 
@@ -260,7 +263,7 @@ def synthesizer():
             bbox=cli.bbox, rout=cli.rout, temperature=cli.temperature, 
             render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
             show_3d=cli.show_grid_3d, vector_field=cli.vector_field, 
-            tau=cli.tau,
+            tau=cli.tau, show_particles=cli.show_particles,
         )
 
     # Generate the dust opacity tables

@@ -100,7 +100,7 @@ class Pipeline:
     def create_grid(self, model=None, sphfile=None, amrfile=None, 
             source='sphng', bbox=None, rout=None, ncells=None, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
-            render=False, g2d=100, temperature=True):
+            render=False, g2d=100, temperature=True, show_particles=False):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
         self.model = model
@@ -157,6 +157,10 @@ class Pipeline:
             # Set a bounding box or radius to trim particles outside of it
             if self.bbox is not None or self.rout is not None:
                 self.grid.trim_box()
+
+            # Render SPH particles in 3D space before interpolation
+            if show_particles:
+                self.grid.plot_particles()
     
             # Interpolate the SPH points onto a regular cartesian grid
             self.grid.interpolate_points('dens', 'linear', fill='min')

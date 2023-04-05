@@ -418,7 +418,7 @@ class AnalyticalModel():
 
                 if tau1.max() < 1:
                     utils.print_(
-                        'The highest optical depth is tau = {tau1.max()}. ' +
+                        f'The highest optical depth is tau = {tau1.max()}. ' +
                         'No tau = 1 surface will be displayed.')
                 else:
                     tausurf = mlab.contour3d(

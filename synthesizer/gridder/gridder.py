@@ -192,6 +192,19 @@ class CartesianGrid():
         utils.print_(f'Particles included: {self.x.size} | ' +
             f'Particles excluded: {self.npoints - self.x.size} ')
 
+    def plot_particles(self):
+        """ Render the locations of the 3D points weighted by the normalized density """
+
+        from mayavi import mlab
+
+        utils.print_('Rendering particles in 3D weighted by density')
+
+        fig = mlab.figure(
+            size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2)
+        )
+        mlab.points3d(self.x, self.y, self.z)#, self.dens)
+        mlab.show()
+
     def find_resolution(self):
         """
         Find the minimum distance between points. 
@@ -561,7 +574,7 @@ class CartesianGrid():
 
                 if tau1.max() < 1:
                     utils.print_(
-                        'The highest optical depth is tau = {tau1.max()}. ' +
+                        f'The highest optical depth is tau = {tau1.max()}. ' +
                         'No tau = 1 surface will be displayed.')
                 else:
                     tausurf = mlab.contour3d(
