@@ -12,7 +12,7 @@ from synthesizer import utils
 
 class CartesianGrid():
     def __init__(self, ncells, bbox=None, rout=None, nspec=1, csubl=0, 
-            sootline=300, g2d=100, temp=False):
+            sootline=300, g2d=100, temp=False, vfield=None):
         """ 
         Create a cartesian grid from a set of 3D points.
 
@@ -36,9 +36,15 @@ class CartesianGrid():
         self.fz = 1
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
+        self.vx = np.zeros((ncells, ncells, ncells))
+        self.vy = np.zeros((ncells, ncells, ncells))
+        self.vz = np.zeros((ncells, ncells, ncells))
         self.interp_dens = None
         self.interp_temp = None
-        self.vfield = None
+        self.interp_vx = None
+        self.interp_vy = None
+        self.interp_vz = None
+        self.vfield = vfield
         self.add_temp = temp
         self.ncells = ncells
         self.bbox = bbox
@@ -65,23 +71,23 @@ class CartesianGrid():
                 f'Input SPH file does not exist{utils.color.none}')
 
         if source.lower() == 'sphng':
-            self.sph = SPHng(filename, temp=self.add_temp)
+            self.sph = SPHng(filename, self.add_temp, self.vfield)
 
         elif source.lower() == 'gizmo':
-            self.sph = Gizmo(filename, temp=self.add_temp)
+            self.sph = Gizmo(filename, self.add_temp, self.vfield)
 
         elif source.lower() == 'gadget':
-            self.sph = Gadget(filename, temp=self.add_temp)
+            self.sph = Gadget(filename, self.add_temp, self.vfield)
 
         elif source.lower() == 'arepo':
-            self.sph = Arepo(filename, temp=self.add_temp)
+            self.sph = Arepo(filename, self.add_temp, self.vfield)
 
         elif source.lower() == 'phantom':
             utils.not_implemented()
-            self.sph = Phantom(filename, temp=self.add_temp)
+            self.sph = Phantom(filename, self.add_temp, self.vfield)
 
         elif source.lower() == 'nbody6':
-            self.sph = Nbody6(filename, temp=self.add_temp)
+            self.sph = Nbody6(filename, self.add_temp, self.vfield)
 
         else:
             print('')
@@ -98,6 +104,11 @@ class CartesianGrid():
             self.temp = self.sph.temp
         else:
             self.temp = np.zeros(self.dens.shape)
+        
+        if self.vfield:
+            self.vx = self.sph.vx
+            self.vy = self.sph.vy
+            self.vz = self.sph.vz
 
     def read_amr(self, filename, sourle='athena++'):
         """ Read AMR data """
@@ -189,11 +200,27 @@ class CartesianGrid():
         self.z = np.delete(self.z, to_remove)
         self.dens = np.delete(self.dens, to_remove)
         self.temp = np.delete(self.temp, to_remove)
+
+        if self.vfield:
+            self.vx = np.delete(self.vx, to_remove)
+            self.vy = np.delete(self.vy, to_remove)
+            self.vz = np.delete(self.vz, to_remove)
+
         utils.print_(f'Particles included: {self.x.size} | ' +
             f'Particles excluded: {self.npoints - self.x.size} ')
 
+        if self.x.size == 0:
+            raise ValueError(
+                utils.color.red +
+                'All particles were removed. Try increasing --bbox or --rout' +
+                utils.color.none
+            )
+
     def plot_particles(self):
-        """ Render the locations of the 3D points weighted by the normalized density """
+        """ 
+            Render the locations of the 3D points weighted by the 
+            normalized density 
+        """
 
         from mayavi import mlab
 
@@ -202,7 +229,7 @@ class CartesianGrid():
         fig = mlab.figure(
             size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2)
         )
-        mlab.points3d(self.x, self.y, self.z)#, self.dens)
+        mlab.points3d(self.x, self.y, self.z, self.dens)
         mlab.show()
 
     def find_resolution(self):
@@ -237,7 +264,7 @@ class CartesianGrid():
 
         return dmin
 
-    def interpolate_points(self, field, method='linear', fill='min'):
+    def interpolate(self, field, method='linear', fill='min'):
         """
             Interpolate a set of points in cartesian coordinates along with their
             values into a rectangular grid.
@@ -255,18 +282,43 @@ class CartesianGrid():
         self.zc = np.linspace(rmin, rmax, self.ncells)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
 
-        utils.print_(f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +\
-            f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells per side.')
+        if field == 'dens':
+            utils.print_(
+                f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +
+                f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells ' +
+                f'per side.'
+            )
 
         # Determine which quantity is to be interpolated
         if field == 'dens':
-            utils.print_(f'Interpolating density values onto the grid')
+            utils.print_(
+                f'Interpolating density values onto the grid')
             values = self.dens
         elif field == 'temp':
-            utils.print_(f'Interpolating temperature values onto the grid')
+            utils.print_(
+                f'Interpolating temperature values onto the grid')
             values = self.temp
+        elif field == 'vx':
+            utils.print_(
+                f'Interpolating X vector field components onto the grid')
+            values = self.vx
+        elif field == 'vy':
+            utils.print_(
+                f'Interpolating Y vector field components onto the grid')
+            values = self.vy
+        elif field == 'vz':
+            utils.print_(
+                f'Interpolating Z vector field components onto the grid')
+            values = self.vz
         else:
-            raise ValueError('field must be "dens" or "temp".')
+            raise ValueError('field must be "dens", "temp", "vx", "vy" or "vz"')
+
+        # Set a number or key to fill the values outside the interpol. range
+        fill = {
+            'min': np.min(values), 
+            'max': np.max(values), 
+            'mean': np.mean(values), 
+        }.get(fill, fill)
 
         # Interpolate the point values at the grid points
         interp = griddata(
@@ -274,7 +326,7 @@ class CartesianGrid():
             values=values, 
             xi=(self.X, self.Y, self.Z), 
             method=method, 
-            fill_value=np.min(values) if fill == 'min' else fill,
+            fill_value=fill,
         )
  
         # Store the interpolated field
@@ -282,6 +334,12 @@ class CartesianGrid():
             self.interp_dens = interp
         elif field == 'temp':
             self.interp_temp = interp
+        elif field == 'vx':
+            self.interp_vx = interp
+        elif field == 'vy':
+            self.interp_vy = interp
+        elif field == 'vz':
+            self.interp_vz = interp
 
 
     def write_grid_file(self):
@@ -375,8 +433,11 @@ class CartesianGrid():
  
         utils.print_('Writing grain alignment direction file')
  
-        if self.vfield is None:
+        if self.vfield:
             self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
+            self.vfield.vx = self.interp_vx 
+            self.vfield.vy = self.interp_vy 
+            self.vfield.vz = self.interp_vz 
  
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
@@ -617,6 +678,10 @@ class CartesianGrid():
 
     def render(self, state=None, dust_density=False, dust_temperature=True):
         """ Render the new grid in 3D using ParaView """
+    
+        # Make sure ParaView is installed and callable
+        utils.which('paraview')
+    
         if isinstance(state, str):
             subprocess.run(f'paraview --state {state} 2>/dev/null'.split())
         else:

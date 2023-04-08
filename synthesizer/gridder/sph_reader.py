@@ -31,11 +31,34 @@ class SPHCode(ABC):
 
         self._temp = temp
 
+    @property
+    def vx(self):
+        return self._vx
+    
+    @property
+    def vy(self):
+        return self._vy
+
+    @property
+    def vz(self):
+        return self._vz
+
+    @vx.setter
+    def vx(self, vx):
+        self._vx = vx
+
+    @vy.setter
+    def vy(self, vy):
+        self._vy = vy
+
+    @vz.setter
+    def vz(self, vz):
+        self._vz = vz
 
 
 class SPHng(SPHCode):
     """ Handle binary snapshots from the SPHng code. """
-    def __init__(self, filename, temp=False, remove_sink=True):
+    def __init__(self, filename, temp=False, vfield=False, remove_sink=True):
         """
             Notes:
 
@@ -59,6 +82,7 @@ class SPHng(SPHCode):
         """
         
         self.add_temp = temp
+        self.vfield = vfield
 
         # Read file in binary format
         try:
@@ -92,18 +116,28 @@ class SPHng(SPHCode):
         self.z = self.data[:, 4]
 
     @property
-    def rho_g(self):
-        return self.data[:, 10]
+    def rho_g(self): return self.data[:, 10]
 
     @property
     def temp(self):
-        if self.add_temp:
-            return self.data[:, 11]
+        if self.add_temp: return self.data[:, 11]
+
+    @property
+    def vx(self):
+        if self.vfield: return self.data[:, 5]
+
+    @property
+    def vy(self):
+        if self.vfield: return self.data[:, 6]
+
+    @property
+    def vz(self):
+        if self.vfield: return self.data[:, 7]
 
 
 class Gizmo(SPHCode):
     """ Handle HDF5 snapshots from the GIZMO code. """
-    def __init__(self, filename):
+    def __init__(self, filename, temp=False, vfield=False):
 
         # Read in particle coordinates and density
         self.data = h5py.File(filename, 'r')['PartType0']
@@ -117,6 +151,9 @@ class Gizmo(SPHCode):
         self.y -= np.average(self.y, weights=self.rho_g)
         self.z -= np.average(self.z, weights=self.rho_g)
 
+        self.add_temp = temp
+        self.vfield = vfield
+
     @property
     def rho_g(self):
         return np.array(self.data['Density']) * 1.3816327e-23
@@ -126,22 +163,38 @@ class Gizmo(SPHCode):
         # Read in temperature if available
         if 'Temperature' in self.data:
             return np.array(self.data['Temperature'])
+
         # Or maybe the krome temperature, when coupled with KROME
         elif 'KromeTemperature' in self.data:
             return np.array(self.data['KromeTemperature'])
         
         # Or derive from a barotropic equation of state
-        elif 'InternalEnergy' in self.data.keys() and 'Pressure' in self.data.keys():
+        elif 'InternalEnergy' in self.data.keys() and \
+            'Pressure' in self.data.keys():
             return self.data['InternalEnergy'] / np.array(self.data['Pressure'])
 
         else:
             return np.zeros(self.rho_g.shape)
 
+    @property
+    def vx(self):
+        if self.vfield: return self.data['MagneticField'][:, 0]
+
+    @property
+    def vy(self):
+        if self.vfield: return self.data['MagneticField'][:, 1]
+
+    @property
+    def vz(self):
+        if self.vfield: return self.data['MagneticField'][:, 2]
+
+
 class Gadget(SPHCode):
     """ Handle snapshots from the Gadget code. """
-    def __init__(self, filename, temp=False):
+    def __init__(self, filename, temp=False, vfield=False):
     
         self.add_temp = temp
+        self.vfield = vfield 
 
         # Read in particle coordinates and density
         self.data = h5py.File(filename, 'r')['PartType0']
@@ -176,11 +229,25 @@ class Gadget(SPHCode):
             else:
                 return np.zeros(self.rho_g.shape)
 
+    @property
+    def vx(self):
+        if self.vfield: return self.data['MagneticField'][:, 0]
+
+    @property
+    def vy(self):
+        if self.vfield: return self.data['MagneticField'][:, 1]
+
+    @property
+    def vz(self):
+        if self.vfield: return self.data['MagneticField'][:, 2]
+
+
 class Arepo(SPHCode):
     """ Handle snapshots from the AREPO code. """
-    def __init__(self, filename, temp=False):
+    def __init__(self, filename, temp=False, vfield=False):
 
         self.add_temp = temp
+        self.vfield = vfield
 
         # Read in particle coordinates and density
         self.data = h5py.File(filename, 'r')['PartType0']
@@ -240,17 +307,35 @@ class Arepo(SPHCode):
             else:
                 return np.zeros(self.rho_g.shape)
 
+    @property
+    def vx(self):
+        if self.vfield: return self.data['MagneticField'][:, 0]
+
+    @property
+    def vy(self):
+        if self.vfield: return self.data['MagneticField'][:, 1]
+
+    @property
+    def vz(self):
+        if self.vfield: return self.data['MagneticField'][:, 2]
+
+
 class Phantom(SPHCode):
     """ Handle snapshots from the PHANTOM code. """
-    def __init__(self, filename, temp=False):
+    def __init__(self, filename, temp=False, vfield=False):
+
+        utils.not_implemented('PHANTOM Interface')
         
         # Read in particle coordinates and density
         self.data = h5py.File(filename, 'r')['particles']
         coords = self.data['xyz'].value
+
         # Derive density from the particle mass / h**3
         # src: https://github.com/dmentipl/plonk/blob/main/src/plonk/snap/readers/phantom.py
     
         self.add_temp = temp
+        self.vfield = vfield
+
         self.x = coords[:, 0] * u.au.to(u.cm)
         self.y = coords[:, 1] * u.au.to(u.cm)
         self.z = coords[:, 2] * u.au.to(u.cm)
@@ -264,11 +349,25 @@ class Phantom(SPHCode):
     def temp(self):
         return np.zeros(self.rho_g.shape)
 
+    @property
+    def vx(self):
+        if self.vfield: return self.data['bfield'][:, 0]
+
+    @property
+    def vy(self):
+        if self.vfield: return self.data['bfield'][:, 1]
+
+    @property
+    def vz(self):
+        if self.vfield: return self.data['bfield'][:, 2]
+
+
 class Nbody6(SPHCode):
     """ Handle snapshots from the Nbody6 code. """
-    def __init__(self, filename, temp=False):
+    def __init__(self, filename, temp=False, vfield=False):
 
         self.add_temp = temp
+        self.vfield = vfield
         
         # Read in data from HDF5 file
         if filename.endswith(('h5', 'hdf5')):
@@ -283,9 +382,6 @@ class Nbody6(SPHCode):
             self.x = self.data[:, 3] * u.pc.to(u.cm)
             self.y = self.data[:, 4] * u.pc.to(u.cm)
             self.z = self.data[:, 5] * u.pc.to(u.cm)
-            self.vx = self.data[:, 6] * (u.km/u.s).to(u.cm/u.s)
-            self.vy = self.data[:, 7] * (u.km/u.s).to(u.cm/u.s)
-            self.vz = self.data[:, 8] * (u.km/u.s).to(u.cm/u.s)
             self.id = self.data[:, 10]
 
     @property
@@ -295,3 +391,16 @@ class Nbody6(SPHCode):
     @property
     def temp(self):
         return self.data[:, 9] 
+
+    @property
+    def vx(self):
+        if self.vfield: return self.data[:, 6] * (u.km/u.s).to(u.cm/u.s)
+
+    @property
+    def vy(self):
+        if self.vfield: return self.data[:, 7] * (u.km/u.s).to(u.cm/u.s)
+
+    @property
+    def vz(self):
+        if self.vfield: return self.data[:, 8] * (u.km/u.s).to(u.cm/u.s)
+

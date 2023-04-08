@@ -97,10 +97,13 @@ class Pipeline:
         self.verbose = verbose
 
     @utils.elapsed_time
-    def create_grid(self, model=None, sphfile=None, amrfile=None, 
+    def create_grid(
+            self, model=None, sphfile=None, amrfile=None, 
             source='sphng', bbox=None, rout=None, ncells=None, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
-            render=False, g2d=100, temperature=True, show_particles=False):
+            render=False, g2d=100, temperature=True, show_particles=False, 
+            alignment=False,
+        ):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
         self.model = model
@@ -149,6 +152,7 @@ class Pipeline:
                 sootline=self.sootline, 
                 g2d=self.g2d, 
                 temp=temperature,
+                vfield=alignment,
             )
 
             # Read the SPH data
@@ -163,10 +167,15 @@ class Pipeline:
                 self.grid.plot_particles()
     
             # Interpolate the SPH points onto a regular cartesian grid
-            self.grid.interpolate_points('dens', 'linear', fill='min')
+            self.grid.interpolate('dens', 'linear', fill='min')
 
             if temperature:
-                self.grid.interpolate_points('temp', 'linear', fill='min')
+                self.grid.interpolate('temp', 'linear', fill='min')
+
+            if alignment:
+                self.grid.interpolate('vx', 'linear', fill=0)
+                self.grid.interpolate('vy', 'linear', fill=0)
+                self.grid.interpolate('vz', 'linear', fill=0)
 
         # Create a grid from an AMR grid
         elif amrfile is not None:
@@ -185,8 +194,10 @@ class Pipeline:
             self.grid.read_amr(self.amrfile, source=source)
         
         else:
-            raise ValueError(f'{utils.color.red}When --grid is set, either --'+\
-                f'model, --sphfile or --amrfile must be given{utils.color.none}')
+            raise ValueError(
+                f'{utils.color.red}When --grid is set, either --model, ' +\
+                f'--sphfile or --amrfile must be given{utils.color.none}'
+            )
 
         self.bbox = self.grid.bbox
 
@@ -199,7 +210,7 @@ class Pipeline:
         if temperature:
             self.grid.write_temperature_file()
 
-        if vector_field is not None:
+        if vector_field is not None or alignment:
             self.grid.write_vector_field(morphology=vector_field)
 
         # Plot the density midplane

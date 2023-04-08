@@ -263,7 +263,8 @@ def synthesizer():
             bbox=cli.bbox, rout=cli.rout, temperature=cli.temperature, 
             render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
             show_3d=cli.show_grid_3d, vector_field=cli.vector_field, 
-            tau=cli.tau, show_particles=cli.show_particles,
+            tau=cli.tau, show_particles=cli.show_particles, 
+            alignment=cli.alignment,
         )
 
     # Generate the dust opacity tables

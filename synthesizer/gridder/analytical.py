@@ -461,6 +461,10 @@ class AnalyticalModel():
 
     def render(self, state=None, dust_density=False, dust_temperature=True):
         """ Render the new grid in 3D using ParaView """
+
+        # Make sure ParaView is installed and callable
+        utils.which('paraview')
+    
         if isinstance(state, str):
             subprocess.run(f'paraview --state {state} 2>/dev/null'.split())
         else:
