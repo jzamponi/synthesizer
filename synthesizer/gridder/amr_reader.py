@@ -1,40 +1,58 @@
 import h5py
 import numpy as np
+import astropy.units as u
+import astropy.constants as c
 
 from synthesizer import utils
 
 class Athena:
-    """ Object designed to read in spatial and physical quantities from 
+    """ 
+        Object designed to read in spatial and physical quantities from 
         Athena++ snapshots.
     """
     def __init__(self):
         utils.not_implemented()
 
 class Flash:
-    """ Object designed to read in spatial and physical quantities from 
+    """ 
+        Object designed to read in spatial and physical quantities from 
         FLASH snapshots.
     """
     def __init__(self):
         utils.not_implemented()
 
 class Enzo:
-    """ Object designed to read in spatial and physical quantities from 
+    """ 
+        Object designed to read in spatial and physical quantities from 
         ENZO snapshots.
     """
     def __init__(self):
         utils.not_implemented()
 
 class Ramses:
-    """ Object designed to read in spatial and physical quantities from 
+    """ 
+        Object designed to read in spatial and physical quantities from 
         RAMSES snapshots.
     """
     def __init__(self):
         utils.not_implemented()
 
 class ZeusTW:
-    """ This object is an adapted copy of Zeus2Polaris._read_data()
+    """ 
+        This object is an adapted copy of Zeus2Polaris._read_data()
         src: https://github.com/jzamponi/zeus2polaris
     """ 
+    def __init__(self):
+        self.rho = None
+        self.rho = None
+        self.Br  = None
+        self.Bth = None
+        self.Bph = None
+        self.Vr  = None
+        self.Vth = None
+        self.Vph = None
+        self.cordsystem = 150
+
     def read(self, filename, coord=False):
         """ Read the binary files from zeusTW.
             Reshape to 3D only if it is a physical quantity and not a coordinate
@@ -53,6 +71,9 @@ class ZeusTW:
         self.r = self.read(r, coord=True)
         self.th = self.read(th, coord=True)
         self.ph = self.read(ph, coord=True)
+        self.x = self.r
+        self.y = self.th
+        self.z = self.ph
 
     def trim_ghost_cells(self, field_type, ng=3):
         if field_type == 'coords':
@@ -60,6 +81,9 @@ class ZeusTW:
             self.r = self.r[ng:-ng]
             self.th = self.th[ng:-ng]
             self.ph = self.ph[ng:-ng]
+            self.x = self.x[ng:-ng]
+            self.y = self.y[ng:-ng]
+            self.z = self.z[ng:-ng]
 
         elif field_type == 'scalar':
             # Trim ghost cells for scalar fields
@@ -100,7 +124,10 @@ class ZeusTW:
         self.Bph *= np.sqrt(4 * np.pi)
     
     def generate_cartesian(self):
-        """ Convert spherical coordinates and vector components to cartesian. """
+        """ Convert spherical coordinates and vector components to cartesian """
+
+        self.cordsystem = 1 
+
         # Create a coordinate grid.
         r, th, ph = np.meshgrid(self.r, self.th, self.ph, indexing='ij')
 

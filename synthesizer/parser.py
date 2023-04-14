@@ -152,6 +152,9 @@ def synthesizer():
     parser.add_argument('--incl', action='store', type=float, default=0,
         help='Inclination angle of the grid in degrees')
 
+    parser.add_argument('--phi', action='store', type=float, default=0,
+        help='Inclination angle over a second axis in degrees')
+
     parser.add_argument('--sizeau', action='store', type=int, default=None,
         help='Physical size of the image in AU')
 
@@ -280,7 +283,7 @@ def synthesizer():
     # Run a ray-tracing on the new grid and generate an image
     if cli.raytrace:
         pipeline.raytrace(
-            incl=cli.incl, npix=cli.npix, distance=cli.distance,
+            incl=cli.incl, phi=cli.phi, npix=cli.npix, distance=cli.distance,
             sizeau=cli.sizeau, show=cli.show_rt, noscat=cli.noscat, tau=cli.tau,
             tau_surf=cli.tau_surf, show_tau_surf=cli.show_tau_surf, 
             radmc3d_cmds=cli.radmc3d

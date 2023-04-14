@@ -60,6 +60,8 @@ class BaseModel(ABC):
                 f'vfield must be a VectorField object, not a {type(vfield)}.')
     
 
+# General physical models
+
 class Constant(BaseModel):
     """ Box with a constant density """
 
@@ -222,7 +224,6 @@ class GIdisk(BaseModel):
 
     @property
     def dens(self):
-        utils.not_implemented(f'Model: GIdisk')
         pass
 
     @property
@@ -237,7 +238,6 @@ class SpiralDisk(BaseModel):
 
     @property
     def dens(self):
-        utils.not_implemented(f'Model: SpiralDisk')
         x = self.x
         y = self.y
         z = self.z
@@ -259,7 +259,6 @@ class Filament(BaseModel):
 
     @property
     def dens(self):
-        utils.not_implemented(f'Model: Filament')
         x = self.x
         y = self.y
         z = self.z
@@ -272,3 +271,287 @@ class Filament(BaseModel):
     @property
     def temp(self):
         return 15 * np.ones(self.temp.shape)
+
+
+# Tailored models for specific sources
+
+class HLTau(BaseModel):
+    """
+    Physical model for the protoplanetary disk HL Tay
+    Kataoka et al (2016)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.x
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+    
+class TWHya(BaseModel):
+    """
+    Physical model for the protoplanetary disk TW Hydrae
+    Ueda et al (2020)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.x
+        y = self.y
+        z = self.z
+
+        r = np.sqrt(x*x + y*y)
+        sigma_10 = 100
+        sigma = sigma_10 * (r * u.cm.to(u.au) / 10)**(-0.5)
+        h_d = 0.63 * (r * u.cm.to(u.au) / 10)**(1.1) 
+        rho_g = 100 * sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z**2 / 2 / h_d**2) 
+        rho_g[r < 1 * u.au.to(u.cm)] = 0
+        rho_g[r > 50 * u.au.to(u.cm)] = 0
+        return rho_g
+
+    @property
+    def temp(self):
+        T_10 = 100
+        q = 0.4
+        r = np.sqrt(self.x**2 + self.y**2)
+        T_r = T_10 * (r*u.cm.to(u.au))**-q
+        T_r[r < 1 * u.au.to(u.cm)] = 0
+        T_r[r > 50 * u.au.to(u.cm)] = 0
+        return T_r
+    
+class HD163296(BaseModel):
+    """
+    Physical model for the protoplanetary disk HD 163296
+    Dullemond et al (2018) (DSHARP)
+    Lin et al (2020b)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.x
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class IMLup(BaseModel):
+    """
+    Physical model for the protoplanetary disk IM Lup
+    Huang et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.x
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class WaOph6(BaseModel):
+    """
+    Physical model for the protoplanetary disk WaOph6
+    Huang et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class Elias27(BaseModel):
+    """
+    Physical model for the protoplanetary disk WaOph6
+    Huang et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class AS209(BaseModel):
+    """
+    Physical model for the protoplanetary disk AS209
+    Dullemond et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        # Equation 5
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class GWLup(BaseModel):
+    """
+    Physical model for the protoplanetary disk GW Lup
+    Dullemond et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        # Equation 5
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class HD143006(BaseModel):
+    """
+    Physical model for the protoplanetary disk HD 143006
+    Dullemond et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        # Equation 5
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class HTLup(BaseModel):
+    """
+    Physical model for the protoplanetary disk HT Lup
+    Kurtovic et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        # Equation 5
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class AS205(BaseModel):
+    """
+    Physical model for the protoplanetary disk AS 205
+    Kurtovic et al (2018) (DSHARP)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        # Equation 5
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q
+
+class HH212(BaseModel):
+    """
+    Physical model for the Class 0 protostellar disk HH 212
+    Lin et al (2021a)
+    """
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+        x = self.X
+        y = self.y
+        z = self.z
+
+        return sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z*z/2/h_d/h_d)
+
+    @property
+    def temp(self):
+        T_0 = 250
+        q = 0.5
+        return T_0 * (r*u.cm.to(u.au))**-q

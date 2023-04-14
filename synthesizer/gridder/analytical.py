@@ -108,7 +108,72 @@ class AnalyticalModel():
         elif self.model == 'filament':
             utils.not_implemented(f'Model: {self.model}')
             model = models.Filament(x, y, z, field)
+
+        # PPDisk: HL Tau
+        elif self.model == 'hltau':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.HLTau(x, y, z, field)
     
+        # PPDisk: TW Hya
+        elif self.model == 'twhya':
+            #utils.not_implemented(f'Model: {self.model}')
+            model = models.TWHya(x, y, z, field)
+    
+        # PPDisk: HD 163296
+        elif self.model == 'hd16293':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.HD16293(x, y, z, field)
+
+        # PPDisk: IM Lup
+        elif self.model == 'imlup':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.IMLup(x, y, z, field)
+
+        # PPDisk: WaOph 6
+        elif self.model == 'waoph6':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.WaOph6(x, y, z, field)
+
+        # PPDisk: Elias 27
+        elif self.model == 'elias27':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.Elias27(x, y, z, field)
+
+        # PPDisk: Elias 26
+        elif self.model == 'elias26':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.Elias26(x, y, z, field)
+
+        # PPDisk: AS 209
+        elif self.model == 'as209':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.AS209(x, y, z, field)
+
+        # PPDisk: GW Lup
+        elif self.model == 'gwlup':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.GWLup(x, y, z, field)
+
+        # PPDisk: HD 143006
+        elif self.model == 'hd143006':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.HD143006(x, y, z, field)
+
+        # PPDisk: HT Lup
+        elif self.model == 'htlup':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.htlup(x, y, z, field)
+
+        # PPDisk: AS 205
+        elif self.model == 'as205':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.AS205(x, y, z, field)
+
+        # PPDisk: HH 212
+        elif self.model == 'hh212':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.HH212(x, y, z, field)
+
         else:
             raise ValueError(
                 f'{utils.color.red}' +\
@@ -123,13 +188,13 @@ class AnalyticalModel():
         if model.plotmax is not None: self.plotmax = model.plotmax
 
 
-    def write_grid_file(self):
+    def write_grid_file(self, regular=True):
         """ Write the regular cartesian grid file """
         with open('amr_grid.inp','w+') as f:
             # iformat
             f.write('1\n')
             # Regular grid
-            f.write('0\n')
+            f.write('0\n' if regular else '1\n')
             # Coordinate system: cartesian
             f.write('1\n')
             # Gridinfo

@@ -51,6 +51,7 @@ class Pipeline:
         self.nthreads = int(nthreads)
         self.npix = None
         self.incl = None
+        self.phi = None
         self.sizeau = None
         self.polarization = polarization
         self.alignment = alignment
@@ -129,6 +130,8 @@ class Pipeline:
     
         # Create a grid using an analytical model
         if model is not None:
+            regular = True
+
             self.grid = gridder.AnalyticalModel(
                 model=self.model,
                 bbox=self.bbox, 
@@ -143,6 +146,8 @@ class Pipeline:
 
         # Create a grid from SPH particles
         elif sphfile is not None:
+            regular = True
+
             self.grid = gridder.CartesianGrid(
                 ncells=self.ncells, 
                 bbox=self.bbox, 
@@ -179,6 +184,8 @@ class Pipeline:
 
         # Create a grid from an AMR grid
         elif amrfile is not None:
+            regular = False    
+
             self.grid = gridder.CartesianGrid(
                 ncells=self.ncells, 
                 bbox=self.bbox, 
@@ -202,7 +209,7 @@ class Pipeline:
         self.bbox = self.grid.bbox
 
         # Write the new cartesian grid to radmc3d file format
-        self.grid.write_grid_file()
+        self.grid.write_grid_file(regular=regular)
 
         # Write the dust density distribution to radmc3d file format
         self.grid.write_density_file()
@@ -564,9 +571,9 @@ class Pipeline:
         self.steps.append('monte_carlo')
 
     @utils.elapsed_time
-    def raytrace(self, lam=None, incl=None, npix=None, sizeau=None, show=True, 
+    def raytrace(self, lam=None, incl=None, phi=None, npix=None, sizeau=None, 
             distance=141, tau=False, tau_surf=None, show_tau_surf=False, 
-            noscat=False, radmc3d_cmds=''):
+            noscat=False, radmc3d_cmds='', show=True):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
@@ -646,6 +653,8 @@ class Pipeline:
             self.npix = npix
         if incl is not None:
             self.incl = incl
+        if phi is not None:
+            self.phi = phi
         if sizeau is not None:
             self.sizeau = sizeau 
         else:
@@ -669,6 +678,7 @@ class Pipeline:
         cmd += f'noscat ' if noscat else ' '
         cmd += f'stokes ' if self.polarization else ' '
         cmd += f'incl {self.incl} ' if self.incl is not None else ' '
+        cmd += f'phi {self.phi} ' if self.phi is not None else ' '
         cmd += f'npix {self.npix} ' if self.npix is not None else ' '
         cmd += f'{" ".join(radmc3d_cmds)} '
         
@@ -702,6 +712,7 @@ class Pipeline:
             utils.edit_header(stfile, 'OPACITY', self.kappa)
             utils.edit_header(stfile, 'MATERIAL', self.material)
             utils.edit_header(stfile, 'INCL', self.incl)
+            utils.edit_header(stfile, 'PHI', self.phi)
             utils.edit_header(stfile, 'CSUBL', self.csubl)
             utils.edit_header(stfile, 'NSPEC', self.nspec)
 
@@ -1151,13 +1162,14 @@ class Pipeline:
             return self.bbox
         else:
             gridid = int(np.loadtxt('amr_grid.inp', skiprows=1, max_rows=1))
-            ncells = int(np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)[0])
+            ncells = int(np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1))
+            nx, ny, nz = ncells[0], ncells[1], ncells[2]
 
             # Number of lines to skip from grid style (0: reg, 1: oct, 10: amr)
             skip = {0: 6, 1: 7, 10: 7}[gridid]
 
             # Number of lines to read
-            nlines = ncells * 3 + 3 
+            nlines = nx * ny * nz + 3 
 
             # Read in the grid
             g = np.loadtxt('amr_grid.inp', skiprows=skip, max_rows=nlines)

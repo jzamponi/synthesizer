@@ -34,19 +34,22 @@ class CartesianGrid():
         self.fx = 1
         self.fy = 1
         self.fz = 1
-        self.dens = np.zeros((ncells, ncells, ncells))
-        self.temp = np.zeros((ncells, ncells, ncells))
-        self.vx = np.zeros((ncells, ncells, ncells))
-        self.vy = np.zeros((ncells, ncells, ncells))
-        self.vz = np.zeros((ncells, ncells, ncells))
-        self.interp_dens = None
-        self.interp_temp = None
-        self.interp_vx = None
-        self.interp_vy = None
-        self.interp_vz = None
+        self.nx = ncells
+        self.ny = ncells
+        self.nz = ncells
+        self.ncells = ncells
+        self.dens = np.zeros((self.nx, self.ny, self.nz))
+        self.temp = np.zeros((self.nx, self.ny, self.nz))
+        self.vx = np.zeros((self.nx, self.ny, self.nz))
+        self.vy = np.zeros((self.nx, self.ny, self.nz))
+        self.vz = np.zeros((self.nx, self.ny, self.nz))
+        self.grid_dens = None
+        self.grid_temp = None
+        self.grid_vx = None
+        self.grid_vy = None
+        self.grid_vz = None
         self.vfield = vfield
         self.add_temp = temp
-        self.ncells = ncells
         self.bbox = bbox
         self.rout = rout
         self.g2d = g2d
@@ -110,47 +113,62 @@ class CartesianGrid():
             self.vy = self.sph.vy
             self.vz = self.sph.vz
 
-    def read_amr(self, filename, sourle='athena++'):
+    def read_amr(self, filename, source='athena++'):
         """ Read AMR data """
+
+        source = source.lower()
 
         utils.print_(f'Reading data from: {filename} | Format: {source}')
         if not os.path.exists(filename): 
-            raise FileNotFoundError('Input AMR file does not exist')
+            if source != 'zeustw':
+                utils.file_exists(filename,
+                    msg='Input AMR file does not exist')
 
-        if source.lower() == 'athena++':
+        if source == 'athena++':
             utils.not_implemented()
 
-        elif source.lower() == 'zeustw':
-            utils.not_implemented()
-
+        elif source == 'zeustw':
             # Generate a Data instance
             data = ZeusTW()
+
+            # Set the coordinate system
+            self.cordsystem = data.cordsystem
 
             # Read coordinates: x?a are cell edges and x?b are cell centers
             data.generate_coords(r="z_x1ap", th="z_x2ap", ph="z_x3ap")
 
             frame = str(filename).zfill(5)
             data.rho = data.read(f"o_d__{frame}")
-            data.trim_ghost_cells(field_type='coords')
-            data.trim_ghost_cells(field_type='scalar')
-            data.trim_ghost_cells(field_type='vector')
+            data.Br = data.read(f"o_b1_{frame}")
+            data.Bth = data.read(f"o_b2_{frame}")
+            data.Bph = data.read(f"o_b3_{frame}")
+            data.Vr = data.read(f"o_v1_{frame}")
+            data.Vth = data.read(f"o_v2_{frame}")
+            data.Vph = data.read(f"o_v3_{frame}")
+
+            data.trim_ghost_cells(field_type='coords', ng=3)
+            data.trim_ghost_cells(field_type='scalar', ng=3)
+            data.trim_ghost_cells(field_type='vector', ng=3)
             data.LH_to_Gaussian()
             data.generate_temperature()
-            data.generate_cartesian()
+            #data.generate_cartesian()
 
-            self.xw = data.x
-            self.yw = data.y
-            self.zw = data.z
-            self.dens = data.rho
-            self.temp = data.temp
+            self.xc = data.x
+            self.yc = data.y
+            self.zc = data.z
+            self.nx = data.x.size
+            self.ny = data.y.size
+            self.nz = data.z.size
+            self.grid_dens = data.rho * self.g2d
+            self.grid_temp = data.temp
 
-        elif source.lower() == 'flash':
+        elif source == 'flash':
             utils.not_implemented()
 
-        elif source.lower() == 'enzo':
+        elif source == 'enzo':
             utils.not_implemented()
             
-        elif source.lower() == 'ramses':
+        elif source == 'ramses':
             utils.not_implemented()
             
         else:
@@ -275,11 +293,11 @@ class CartesianGrid():
         rmax = np.max([self.x.max(), self.y.max(), self.z.max()])
         self.bbox = (rmax - rmin) / 2
         self.cellsize = self.bbox / self.ncells
-        #self.resolution = self.find_resolution()
+        # self.resolution = self.find_resolution()
 
-        self.xc = np.linspace(rmin, rmax, self.ncells)
-        self.yc = np.linspace(rmin, rmax, self.ncells)
-        self.zc = np.linspace(rmin, rmax, self.ncells)
+        self.xc = np.linspace(rmin, rmax, self.nx)
+        self.yc = np.linspace(rmin, rmax, self.ny)
+        self.zc = np.linspace(rmin, rmax, self.nz)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
 
         if field == 'dens':
@@ -331,18 +349,18 @@ class CartesianGrid():
  
         # Store the interpolated field
         if field == 'dens':
-            self.interp_dens = interp
+            self.grid_dens = interp
         elif field == 'temp':
-            self.interp_temp = interp
+            self.grid_temp = interp
         elif field == 'vx':
-            self.interp_vx = interp
+            self.grid_vx = interp
         elif field == 'vy':
-            self.interp_vy = interp
+            self.grid_vy = interp
         elif field == 'vz':
-            self.interp_vz = interp
+            self.grid_vz = interp
 
 
-    def write_grid_file(self):
+    def write_grid_file(self, regular=True):
         """ Write the regular cartesian grid file """
         with open('amr_grid.inp','w+') as f:
             # iformat
@@ -356,20 +374,25 @@ class CartesianGrid():
             # Number of cells
             f.write('1 1 1\n')                   
             # Size of the grid
-            f.write(f'{self.ncells:d} {self.ncells:d} {self.ncells:d}\n')
+            f.write(f'{self.nx:d} {self.ny:d} {self.nz:d}\n')
 
             # Shift the cell centers right to set the cell walls
-            dx = np.diff(self.xc)[0]
-            dy = np.diff(self.yc)[0]
-            dz = np.diff(self.zc)[0]
-            self.xw = self.xc + dx
-            self.yw = self.yc + dy
-            self.zw = self.zc + dz
+            if regular:
+                dx = np.diff(self.xc)[0]
+                dy = np.diff(self.yc)[0]
+                dz = np.diff(self.zc)[0]
+                self.xw = self.xc + dx
+                self.yw = self.yc + dy
+                self.zw = self.zc + dz
 
-            # Add the missing wall at the beginning of each axis
-            self.xw = np.insert(self.xw, 0, self.xc[0])
-            self.yw = np.insert(self.yw, 0, self.yc[0])
-            self.zw = np.insert(self.zw, 0, self.zc[0])
+                # Add the missing wall at the beginning of each axis
+                self.xw = np.insert(self.xw, 0, self.xc[0])
+                self.yw = np.insert(self.yw, 0, self.yc[0])
+                self.zw = np.insert(self.zw, 0, self.zc[0])
+            else:
+                self.xw = self.xc
+                self.yw = self.yc
+                self.zw = self.zc
 
             # Write the cell walls
             for i in self.xw:
@@ -385,7 +408,7 @@ class CartesianGrid():
         utils.print_('Writing dust density file')
 
         # Flatten the array into a 1D fortran-style indexing
-        density = self.interp_dens.ravel(order='F')
+        density = self.grid_dens.ravel(order='F')
         with open('dust_density.inp','w+') as f:
             f.write('1\n')                      
             f.write(f'{density.size:d}\n')
@@ -399,7 +422,7 @@ class CartesianGrid():
                 utils.print_(f'Writing two density species ...')
                 # Write two densities: 
                 # one with original value outside the sootline and zero within 
-                temp1d = self.interp_temp.ravel(order='F')
+                temp1d = self.grid_temp.ravel(order='F')
                 for i, d in enumerate(density):
                     if temp1d[i] < self.sootline:
                         f.write(f'{d:13.6e}\n')
@@ -417,7 +440,7 @@ class CartesianGrid():
         """ Write the temperature file """
         utils.print_('Writing dust temperature file')
         
-        temperature = self.interp_temp.ravel(order='F')
+        temperature = self.grid_temp.ravel(order='F')
         with open('dust_temperature.dat','w+') as f:
             f.write('1\n')                      
             f.write(f'{temperature.size:d}\n')
@@ -435,16 +458,16 @@ class CartesianGrid():
  
         if self.vfield:
             self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
-            self.vfield.vx = self.interp_vx 
-            self.vfield.vy = self.interp_vy 
-            self.vfield.vz = self.interp_vz 
+            self.vfield.vx = self.grid_vx 
+            self.vfield.vy = self.grid_vy 
+            self.vfield.vz = self.grid_vz 
  
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
-            f.write(f'{int(self.ncells**3)}\n')
-            for iz in range(self.ncells):
-                for iy in range(self.ncells):
-                    for ix in range(self.ncells):
+            f.write(f'{int(self.nx * self.ny * self.nz)}\n')
+            for iz in range(self.nx):
+                for iy in range(self.ny):
+                    for ix in range(self.nz):
                         f.write(f'{self.vfield.vx[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
@@ -465,8 +488,8 @@ class CartesianGrid():
             # Detect what field to use
             if data is None:
                 data = {
-                    'density': self.interp_dens, 
-                    'temperature': self.interp_temp
+                    'density': self.grid_dens, 
+                    'temperature': self.grid_temp
                 }[field]
             else:
                 data = data.T
@@ -522,7 +545,7 @@ class CartesianGrid():
             p[1].set_xticklabels([])
 
             try:
-                if self.vfield is not None and field == 'density':
+                if self.vfield and field == 'density':
                     p[0].streamplot(
                         np.linspace(-bbox, bbox, self.ncells), 
                         np.linspace(-bbox, bbox, self.ncells), 
@@ -565,8 +588,8 @@ class CartesianGrid():
 
             if data is None:
                 data = {
-                    'density': self.interp_dens, 
-                    'temperature': self.interp_temp
+                    'density': self.grid_dens, 
+                    'temperature': self.grid_temp
                 }[field]
             
             title = {
@@ -591,7 +614,7 @@ class CartesianGrid():
             bbox = int(np.round(self.bbox * u.cm.to(u.au), 1))
             mlab.outline(
                 figure=fig, 
-                extent=[0, self.ncells] * 3, 
+                extent=[0, self.nx, 0, self.ny, 0, self.nz], 
             )
             mlab.axes(
                 ranges=[-bbox, bbox] * 3,
