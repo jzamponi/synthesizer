@@ -300,6 +300,8 @@ class HLTau(BaseModel):
 class TWHya(BaseModel):
     """
     Physical model for the protoplanetary disk TW Hydrae
+    Andrews et al (2012, 2016)
+    Hogerheijde et al (2016)
     Ueda et al (2020)
     """
     def __init__(self, x, y, z, field):
@@ -312,7 +314,7 @@ class TWHya(BaseModel):
         z = self.z
 
         r = np.sqrt(x*x + y*y)
-        sigma_10 = 100
+        sigma_10 = 10
         sigma = sigma_10 * (r * u.cm.to(u.au) / 10)**(-0.5)
         h_d = 0.63 * (r * u.cm.to(u.au) / 10)**(1.1) 
         rho_g = 100 * sigma / (np.sqrt(2*np.pi)*h_d) * np.exp(-z**2 / 2 / h_d**2) 
@@ -322,7 +324,7 @@ class TWHya(BaseModel):
 
     @property
     def temp(self):
-        T_10 = 100
+        T_10 = 30
         q = 0.4
         r = np.sqrt(self.x**2 + self.y**2)
         T_r = T_10 * (r*u.cm.to(u.au))**-q

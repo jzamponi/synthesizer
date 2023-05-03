@@ -238,12 +238,17 @@ class Pipeline:
         
         # Call RADMC3D to read the grid file and generate a VTK representation
         if vtk:
-            self.grid.create_vtk(
-                dust_density=False, dust_temperature=True, rename=True)
+            self.grid.create_vtk(dust_density=True, rename=True)
+
+            if temperature:
+                self.grid.create_vtk(dust_temperature=True, rename=True)
         
         # Visualize the VTK grid file using ParaView
         if render:
-            self.grid.render()
+            self.grid.render(dust_density=True)
+
+            if temperature:
+                self.grid.render(dust_temperature=True)
 
         # Register the pipeline step 
         self.steps.append('create_grid')
@@ -1162,8 +1167,8 @@ class Pipeline:
             return self.bbox
         else:
             gridid = int(np.loadtxt('amr_grid.inp', skiprows=1, max_rows=1))
-            ncells = int(np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1))
-            nx, ny, nz = ncells[0], ncells[1], ncells[2]
+            ncells = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+            nx, ny, nz = int(ncells[0]), int(ncells[1]), int(ncells[2])
 
             # Number of lines to skip from grid style (0: reg, 1: oct, 10: amr)
             skip = {0: 6, 1: 7, 10: 7}[gridid]

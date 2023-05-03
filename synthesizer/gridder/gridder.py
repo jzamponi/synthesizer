@@ -10,7 +10,14 @@ from synthesizer.gridder.sph_reader  import *
 from synthesizer.gridder.amr_reader  import *
 from synthesizer import utils
 
-class CartesianGrid():
+
+class Grid():
+    """ 
+        Base class for different grid geometries.
+    """
+    pass
+
+class CartesianGrid(Grid):
     def __init__(self, ncells, bbox=None, rout=None, nspec=1, csubl=0, 
             sootline=300, g2d=100, temp=False, vfield=None):
         """ 
@@ -680,9 +687,8 @@ class CartesianGrid():
             utils.print_(e, bold=True)
 
 
-    def create_vtk(self, dust_density=False, dust_temperature=True, rename=False):
+    def create_vtk(self, dust_density=False, dust_temperature=False, rename=False):
         """ Call radmc3d to create a VTK file of the grid """
-        self.radmc3d_banner()
 
         if dust_density:
             subprocess.run('radmc3d vtk_dust_density 1'.split())
@@ -697,30 +703,26 @@ class CartesianGrid():
         if not dust_density and not dust_temperature:
             subprocess.run('radmc3d vtk_grid'.split())
 
-        self.radmc3d_banner()
 
-    def render(self, state=None, dust_density=False, dust_temperature=True):
+    def render(self, dust_density=False, dust_temperature=False):
         """ Render the new grid in 3D using ParaView """
     
         # Make sure ParaView is installed and callable
         utils.which('paraview')
     
-        if isinstance(state, str):
-            subprocess.run(f'paraview --state {state} 2>/dev/null'.split())
-        else:
-            try:
-                if dust_density:
-                    subprocess.run(
-                    f'paraview model_dust_density.vtk 2>/dev/null'.split())
-                elif dust_temperature:
-                    subprocess.run(
-                    f'paraview model_dust_temperature.vtk 2>/dev/null'.split())
-            except Exception as e:
-                utils.print_('Unable to render using ParaView.',  red=True)
-                utils.print_(e, bold=True)
+        try:
+            if dust_density:
+                subprocess.run(
+                f'paraview model_dust_density.vtk 2>/dev/null'.split())
+            elif dust_temperature:
+                subprocess.run(
+                f'paraview model_dust_temperature.vtk 2>/dev/null'.split())
+        except Exception as e:
+            utils.print_('Unable to render using ParaView.',  red=True)
+            utils.print_(e, bold=True)
 
 
-class SphericalGrid():
+class SphericalGrid(Grid):
     def __init__(self):
         """ This is yet to be implemented.
             It will be translated from old scripts and from the very own
