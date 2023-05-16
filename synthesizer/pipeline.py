@@ -255,7 +255,13 @@ class Pipeline:
 
 
     @utils.elapsed_time
-    def dustmixer(self, show_nk=False, pb=True, show_opac=False, savefig=None):
+    def dustmixer(self, 
+            show_nk=False, 
+            show_dust_eff=False, 
+            show_opac=False, 
+            pb=True, 
+            savefig=None
+        ):
         """
             Call dustmixer to generate dust opacity tables. 
             New dust materials can be manually defined here if desired.
@@ -383,6 +389,9 @@ class Pipeline:
 
         if show_opac or savefig is not None:
             mix.plot_opacities(show=show_opac, savefig=savefig)
+
+        if show_dust_eff:
+            mix.plot_efficiencies()
 
         mix.write_opacity_file(name=self._get_opac_name(self.csubl))
 

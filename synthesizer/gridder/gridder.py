@@ -14,6 +14,9 @@ from synthesizer import utils
 class Grid():
     """ 
         Base class for different grid geometries.
+
+        To Do: Abstract tecartesian and spherical grid object methods 
+               using this base class
     """
     pass
 

@@ -114,6 +114,9 @@ def synthesizer():
     parser.add_argument('--show-opacity', action='store_true', default=False, 
         help='Plot the resulting dust opacities.')
 
+    parser.add_argument('--show-dust-eff', action='store_true', default=False, 
+        help='Plot the resulting dust efficiencies for a single grain size.')
+
     parser.add_argument('--show-nk', action='store_true', default=False, 
         help='Plot the input dust optical constants.')
 
@@ -241,7 +244,7 @@ def synthesizer():
     parser.add_argument('--quiet', action='store_true', default=False,
         help='Disable verbosity. Do not output anything.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.2')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.3')
 
 
 
@@ -273,7 +276,10 @@ def synthesizer():
     # Generate the dust opacity tables
     if cli.opacity:
         pipeline.dustmixer(
-            show_nk=cli.show_nk, show_opac=cli.show_opacity, pb=not cli.nopb
+            show_nk=cli.show_nk, 
+            show_dust_eff=cli.show_dust_eff, 
+            show_opac=cli.show_opacity, 
+            pb=not cli.nopb
         )
 
     # Run a thermal Monte-Carlo
