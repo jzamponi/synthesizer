@@ -222,11 +222,11 @@ class Pipeline:
 
         # Plot the density midplane
         if show_2d:
-            self.grid.plot_midplane('density')
+            self.grid.plot_2d('density')
 
         # Plot the temperature midplane
         if show_2d and temperature:
-            self.grid.plot_midplane('temperature')
+            self.grid.plot_2d('temperature')
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
@@ -678,7 +678,8 @@ class Pipeline:
         # Only for the current model. This line should be later removed.
         self.incl = 180 - int(self.incl)
 
-        # To do: What's the diff. between passing noscat and setting scatmode=0
+        # To do: Double check that this is correct. noscat does include 
+        # k_sca in the extincion opacity but maybe scatmode=0 doesn't 
         if noscat: self.scatmode = 0
 
         # Generate a 2D optical depth map
@@ -982,6 +983,8 @@ class Pipeline:
         rho = rho.reshape((nx, nx, nx))
         tau2d = np.sum(rho * self._get_opacity() * dl, axis=0).T
 
+        # To do: implement this for cases with two or more dust populations
+
         if show:
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
@@ -1006,12 +1009,19 @@ class Pipeline:
         """
         utils.file_exists('dust_density.inp')
         utils.print_('Reading density from dust_density.inp')
-        dens = np.loadtxt('dust_density.inp', skiprows=3).T
+        dens = np.loadtxt('dust_density.inp').T
+        ncells = int(dens[1])
+        nspec = int(dens[2])
+        if nspec == 1:
+            dens = dens[3:]
+        else: 
+            utils.print_('Found two dust species, I plot only the first one')
+            dens = dens[3: ncells+3]
         nx = int(np.cbrt(dens.size))
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
         grid = gridder.CartesianGrid(nx, bbox)
-        grid.plot_midplane('density', data=dens)
+        grid.plot_2d('density', data=dens)
 
         if temp: 
             utils.file_exists('dust_temperature.dat')
@@ -1019,7 +1029,7 @@ class Pipeline:
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
             temp = temp.reshape((nx, nx, nx))
             grid = gridder.CartesianGrid(nx, bbox)
-            grid.plot_midplane('temperature', data=temp)
+            grid.plot_2d('temperature', data=temp)
         
     @utils.elapsed_time
     def plot_grid_3d(self, temp=False):
@@ -1028,7 +1038,14 @@ class Pipeline:
         """
         utils.file_exists('dust_density.inp')
         utils.print_('Reading density from dust_density.inp')
-        dens = np.loadtxt('dust_density.inp', skiprows=3).T
+        dens = np.loadtxt('dust_density.inp').T
+        ncells = int(dens[1])
+        nspec = int(dens[2])
+        if nspec == 1:
+            dens = dens[3:]
+        else: 
+            utils.print_('Found two dust species, I plot only the first one')
+            dens = dens[3: ncells+3]
         nx = int(np.cbrt(dens.size))
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()

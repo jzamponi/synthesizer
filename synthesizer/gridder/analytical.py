@@ -279,7 +279,7 @@ class AnalyticalModel():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
-    def plot_midplane(self, field, data=None):
+    def plot_2d(self, field, data=None):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
