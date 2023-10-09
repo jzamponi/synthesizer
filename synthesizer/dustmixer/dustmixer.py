@@ -816,7 +816,6 @@ class Dust():
         p.set_xlabel('Wavelength (microns)')
         p.set_ylabel(r'Dust opacity $k$ (cm$^2$ g$^{-1}$)')
         p.set_ylim(1e-2, 1e4)
-        #p.set_xlim(1e-1, 3e4)
         plt.tight_layout()
 
         return utils.plot_checkout(fig, show, savefig)
@@ -827,6 +826,31 @@ class Dust():
         return float(self.interpolate(
             self.l, self.kext, at=lam*u.micron.to(u.cm)))
 
+    def plot_z12z11(self, lam, a, nang, show=True, savefig=None):
+        """ Plot the ratio -Z12/Z11 as a function of the scat. angle """
+
+        angs = np.linspace(0, 180, nang)
+        z12 = np.zeros(angs.shape)
+        z11 = np.zeros(angs.shape)
+
+        for i, ang in enumerate(angs):
+            z12[i] = self.interpolate(
+                self.l, self.z12[:, i], at=lam*u.micron.to(u.cm))
+            z11[i] = self.interpolate(
+                self.l, self.z11[:, i], at=lam*u.micron.to(u.cm))
+
+        plt.close()
+        fig, p = plt.subplots(nrows=1, ncols=1, figsize=(8,6))
+        utils.print_(f'Plotting degree of pol. per scattering angle')
+
+        p.plot(angs, -z12 / z11, color='black')
+        p.set_xlabel('Scattering angle [degrees]')
+        p.set_ylabel(r'$-Z_{12}/Z_{21}$')
+        p.set_ylim(-1, 1)
+        p.set_xlim(0, 180)
+        plt.tight_layout()
+
+        return utils.plot_checkout(fig, show, savefig)
 
 
 if __name__ == "__main__":

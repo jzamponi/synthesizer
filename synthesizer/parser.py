@@ -120,6 +120,9 @@ def synthesizer():
     parser.add_argument('--show-nk', action='store_true', default=False, 
         help='Plot the input dust optical constants.')
 
+    parser.add_argument('--show-z12z11', action='store_true', default=False, 
+        help='Plot the input dust degree of polarization per scattering angle.')
+
     parser.add_argument('--nopb', action='store_true', default=False, 
         help='Disable printing of an opacity progressbar. ' +\
             'Useful when logging to file. ')
@@ -244,7 +247,7 @@ def synthesizer():
     parser.add_argument('--quiet', action='store_true', default=False,
         help='Disable verbosity. Do not output anything.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.3')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.5')
 
 
 
@@ -277,6 +280,7 @@ def synthesizer():
     if cli.opacity:
         pipeline.dustmixer(
             show_nk=cli.show_nk, 
+            show_z12z11=cli.show_z12z11,
             show_dust_eff=cli.show_dust_eff, 
             show_opac=cli.show_opacity, 
             pb=not cli.nopb
@@ -335,6 +339,7 @@ def synthesizer():
         cli.grid, cli.opacity, cli.monte_carlo, cli.raytrace, 
         cli.synobs, cli.quiet, cli.show_grid_2d, cli.show_grid_3d,
         cli.show_rt, cli.show_synobs, cli.show_opacity, cli.show_nk,
+        cli.show_z12z11
     ]):
 
         utils.print_('Nothing to do. Main options are:' +\

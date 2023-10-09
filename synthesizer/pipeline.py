@@ -257,6 +257,7 @@ class Pipeline:
     @utils.elapsed_time
     def dustmixer(self, 
             show_nk=False, 
+            show_z12z11=False,
             show_dust_eff=False, 
             show_opac=False, 
             pb=True, 
@@ -359,6 +360,7 @@ class Pipeline:
 
             mf_sil = 0.625
             mf_gra = 0.375
+
             if self.csubl > 0:
                 # Carbon sublimation: 
                 # Replace a percentage of graphite "csubl" by refractory organics
@@ -386,6 +388,9 @@ class Pipeline:
             except Exception as e:
                 utils.print_(e, red=True)
                 raise ValueError(f'Material = {self.material} not found.')
+
+        if show_z12z11:
+            mix.plot_z12z11(self.lam, self.a_dist, self.nang)
 
         if show_opac or savefig is not None:
             mix.plot_opacities(show=show_opac, savefig=savefig)

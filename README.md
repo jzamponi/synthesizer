@@ -1,4 +1,8 @@
-# Synthesizer
+<p align="center">
+<img src="https://github.com/jzamponi/synthesizer/tree/main/synthesizer/img/logo_nobg.png?raw=true" />
+<h2 style="text-align: center; font-family: Times"> The Synthesizer </h2>
+</p>
+
 ## Generate synthetic observations from 3D numerical simulations
 
 Synthesizer is a program to calculate synthetic ALMA/JVLA images from an SPH model directly from the command-line. 
