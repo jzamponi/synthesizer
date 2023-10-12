@@ -1,6 +1,5 @@
 <p align="center">
-<img src="https://raw.githubusercontent.com/jzamponi/synthesizer/main/synthesizer/img/logo_and_title_white.jpg" />
-<!-- <h2 style="text-align: center; font-family: Times"> The Synthesizer </h2> -->
+<img style="max-width: 40%;" src="https://raw.githubusercontent.com/jzamponi/synthesizer/main/synthesizer/img/logo_and_title_white.jpg" />
 </p>
 
 ## Generate synthetic observations from 3D numerical simulations
