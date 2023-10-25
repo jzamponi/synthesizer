@@ -137,6 +137,70 @@ class L1544(BaseModel):
         return 15 * np.ones(self.dens.shape)
 
 class PPdisk(BaseModel):
+    """ 
+        Protoplanetary disk 
+        Lynden-Bell & Pringle (1974) and Hartmann et al. (1998)
+    """
+
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
+    @property
+    def dens(self):
+
+        x = self.x
+        y = self.y
+        z = self.z
+        r = np.sqrt(x**2 + y**2)
+        r3d = np.sqrt(x**2 + y**2 + z**2)
+
+        # Protoplanetary disk model parameters
+        rin = 1 * u.au.to(u.cm)
+        rout = 200 * u.au.to(u.cm)
+        self.r_c = 140 * u.au.to(u.cm)
+        rho_slope = 1
+        flaring = 0 
+        
+        Mdisk = 0.001 * u.Msun.to(u.g)
+        Mstar = 0 * u.Msun.to(u.g)
+        h_0 = 5 * u.au.to(u.cm)
+        r_0 = 30 * u.au.to(u.cm)
+        rho_bg = 1e-30
+        self.plotmin = rho_bg
+
+        # Temperature profile
+        T_0 = 30
+        T_slope = 3 / 7
+        self.T_r = T_0 * (r3d/self.r_c)**-T_slope
+
+        # Surface density
+        sigma_0 = (2 - rho_slope) * (Mdisk / 2 / np.pi / self.r_c**2)
+        sigma_g = sigma_0 * (r/self.r_c)**-rho_slope * \
+            np.exp(-(r/self.r_c)**(2-rho_slope))
+
+        # If Mstar is set, set scale height from s. speed and kep. vel.
+        if Mstar > 0:
+            c_s = np.sqrt(kB * self.T_r / m_H2)
+            v_K = np.sqrt(G * Mstar / r**3)
+            h_0 = c_s / v_K 
+
+        # Flaring 
+        h = h_0 * (r/r_0)**flaring
+
+        # Vertical density profile from hydrostatic equilibrium
+        rho_g = sigma_g / np.sqrt(2*np.pi) / h * np.exp(-z*z / (2*h*h))
+        rho_g = rho_g + rho_bg
+        rho_g[r3d > rout] = 0
+
+        return rho_g
+
+    @property
+    def temp(self):
+        # Radial temperature profile
+        return self.T_r
+
+
+class PPdiskGapRim(BaseModel):
     """ Protoplanetary disk with a gap and soft inner rim """
 
     def __init__(self, x, y, z, field):

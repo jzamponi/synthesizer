@@ -36,6 +36,7 @@ class AnalyticalModel():
                 'plaw': 8500 * u.au.to(u.cm),    
                 'pcore': 0.1 * u.pc.to(u.cm), 
                 'ppdisk': 300 * u.au.to(u.cm),
+                'ppdisk-gap-rim': 300 * u.au.to(u.cm),
                 'l1544': 5000 * u.au.to(u.cm),
                 'filament': 1 * u.pc.to(u.cm), 
                 'user': 100 * u.au.to(u.cm), 
@@ -93,6 +94,10 @@ class AnalyticalModel():
         # Protoplanetary Disk
         elif self.model == 'ppdisk':
             model = models.PPdisk(x, y, z, field)
+
+        # Protoplanetary Disk with a gap and inner rim
+        elif self.model == 'ppdisk-gap-rim':
+            model = models.PPdiskGapRim(x, y, z, field)
 
         # Gravitationally unstable disk
         elif self.model == 'gidisk':
@@ -279,7 +284,7 @@ class AnalyticalModel():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
-    def plot_2d(self, field, data=None):
+    def plot_2d(self, field, data=None, cmap=None):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
@@ -341,16 +346,20 @@ class AnalyticalModel():
 
             fig, p = plt.subplots(nrows=1, ncols=2, figsize=(10, 5.5))
 
+            # Set the colormap in case it was not given
+            if cmap is None:
+                cmap = 'BuPu' if field == 'density' else 'inferno'
+
             pxy = p[0].imshow(
                 data_xy, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
-                cmap='BuPu' if field == 'density' else 'inferno',
+                cmap=cmap,
                 extent=extent,
             )
             pxz = p[1].imshow(
                 data_xz, 
                 norm=LogNorm(vmin=vmin, vmax=vmax), 
-                cmap='BuPu' if field == 'density' else 'inferno',
+                cmap=cmap,
                 extent=extent,
             )
             cxy = fig.colorbar(pxy, ax=p[0], pad=0.01, orientation='horizontal')
@@ -397,7 +406,7 @@ class AnalyticalModel():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-    def plot_3d(self, field, data=None, tau=False): 
+    def plot_3d(self, field, data=None, tau=False, cmap=None): 
         """ Render the interpolated 3D field using Mayavi """
         try:
             from mayavi import mlab
@@ -428,9 +437,13 @@ class AnalyticalModel():
             fig = mlab.figure(
                 size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2))
 
+            # Set the colormap in case it was given
+            if cmap is None: cmap = 'inferno'
+
+
             # Render data
             plot = mlab.contour3d(
-                data, contours=100, opacity=0.2, colormap='inferno')
+                data, contours=100, opacity=0.2, colormap=cmap)
 
             # Add a colorbar
             cbar = mlab.colorbar(plot, orientation='vertical', title=title)

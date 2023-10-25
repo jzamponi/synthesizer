@@ -55,6 +55,10 @@ class Pipeline:
         self.sizeau = None
         self.polarization = polarization
         self.alignment = alignment
+        self.distance = 140
+        self.cmap = 'magma'
+        self.stretch = 'linear'
+
         if polarization:
             self.scatmode = 5
             self.inputstyle = 10
@@ -83,7 +87,7 @@ class Pipeline:
             self.ystar = 0
             self.zstar = 0
             self.rstar = 2e11
-            self.mstar = 3e22
+            self.mstar = 2e33
             self.tstar = 4000        
         else:
             self.xstar = star[0]
@@ -103,7 +107,7 @@ class Pipeline:
             source='sphng', bbox=None, rout=None, ncells=None, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=True, show_particles=False, 
-            alignment=False,
+            alignment=False, cmap=None,
         ):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
@@ -222,15 +226,15 @@ class Pipeline:
 
         # Plot the density midplane
         if show_2d:
-            self.grid.plot_2d('density')
+            self.grid.plot_2d('density', cmap=cmap)
 
         # Plot the temperature midplane
         if show_2d and temperature:
-            self.grid.plot_2d('temperature')
+            self.grid.plot_2d('temperature', cmap=cmap)
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
-            self.grid.plot_3d('density', tau=tau)
+            self.grid.plot_3d('density', tau=tau, cmap=cmap)
 
         # Render the temperature volume in 3D using Mayavi
         if show_3d and temperature:
@@ -511,10 +515,6 @@ class Pipeline:
 
 
         if dustkapalignfact:
-            # To do: convert the graphite_oblate.dat and silicate_oblate.dat 
-            # from the polaris repo, into a radmc3d format. Then upload the
-            # radmc3d table to my github repo and download it from here
-            
             raise ImportError(f'{utils.color.red}There is no ' +\
                 f'dustkapalignfact_*.inp file. Run synthesizer again with ' +\
                 f'the option --opacity --alignment.{utils.color.none}')
@@ -591,8 +591,8 @@ class Pipeline:
 
     @utils.elapsed_time
     def raytrace(self, lam=None, incl=None, phi=None, npix=None, sizeau=None, 
-            distance=141, tau=False, tau_surf=None, show_tau_surf=False, 
-            noscat=False, radmc3d_cmds='', show=True):
+            distance=None, tau=False, tau_surf=None, show_tau_surf=False, 
+            noscat=False, radmc3d_cmds='', cmap=None, stretch=None, show=True):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
@@ -679,10 +679,6 @@ class Pipeline:
         else:
             self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au))
 
-        # Explicitly the model rotate by 180.
-        # Only for the current model. This line should be later removed.
-        self.incl = 180 - int(self.incl)
-
         # To do: Double check that this is correct. noscat does include 
         # k_sca in the extincion opacity but maybe scatmode=0 doesn't 
         if noscat: self.scatmode = 0
@@ -708,12 +704,11 @@ class Pipeline:
             utils.print_(f'Executing command: {cmd}')
             self._radmc3d_banner()
             os.system(f'{cmd} 2>&1 | tee -a radmc3d.out')
+            self._radmc3d_banner()
 
         except KeyboardInterrupt:
             raise Exception('Received SIGKILL. Execution halted by user.')
 
-        self._radmc3d_banner()
-        
         self._catch_radmc3d_error()
 
         utils.print_(
@@ -722,12 +717,12 @@ class Pipeline:
 
         # Generate FITS files from the image.out
         fitsfile = 'radmc3d_I.fits'
-        utils.radmc3d_casafits(fitsfile, stokes='I', dpc=distance)
+        utils.radmc3d_casafits(fitsfile, stokes='I', dpc=self.distance)
 
         # Write pipeline's info to the FITS headers
         for st in ['I', 'Q', 'U'] if self.polarization else ['I']:
             stfile = fitsfile.replace('I', st)
-            utils.radmc3d_casafits(stfile, stokes=st, dpc=distance)
+            utils.radmc3d_casafits(stfile, stokes=st, dpc=self.distance)
             utils.edit_header(stfile, 'NPHOT', f'{self.nphot:e}')
             utils.edit_header(stfile, 'OPACITY', self.kappa)
             utils.edit_header(stfile, 'MATERIAL', self.material)
@@ -768,6 +763,7 @@ class Pipeline:
             script=None, simobserve=True, clean=True, exportfits=True, 
             obstime=1, resolution=None, obsmode='int', graphic=True, 
             use_template=False, telescope=None, verbose=False, 
+            cmap=None, stretch=None,
             ):
         """ 
             Prepare the input for the CASA simulator from the RADMC3D output,
@@ -897,8 +893,16 @@ class Pipeline:
 
 
     @utils.elapsed_time
-    def plot_rt(self):
+    def plot_rt(self, distance=None, cmap=None, stretch=None):
         utils.print_('Plotting radmc3d_I.fits')
+
+        # Override instance values in case it is called from parser.py
+        if distance is not None:
+            self.distance = distance 
+        if cmap is not None:
+            self.cmap = cmap 
+        if stretch is not None:
+            self.stretch = stretch 
 
         try:
             utils.file_exists('radmc3d_I.fits')
@@ -919,13 +923,19 @@ class Pipeline:
                     vector_width=1, 
                     verbose=False,
                     block=True, 
+                    distance=self.distance, 
+                    cmap=self.cmap,
+                    stretch=self.stretch,
                 )
             else:
                 fig = utils.plot_map(
                     filename='radmc3d_I.fits', 
                     scalebar=50*u.au, 
+                    distance=self.distance, 
                     bright_temp=False,
                     verbose=False,
+                    stretch=self.stretch,
+                    cmap=self.cmap,
                 )
             fig.axis_labels.hide()
             fig.tick_labels.hide()
@@ -934,8 +944,16 @@ class Pipeline:
                 f'Unable to plot: {e}', bold=True)
     
     @utils.elapsed_time
-    def plot_synobs(self):
+    def plot_synobs(self, distance=None, cmap=None, stretch=None):
         utils.print_(f'Plotting the new synthetic image')
+
+        # Override instance values in case it is called from parser.py
+        if distance is not None:
+            self.distance = distance 
+        if cmap is not None:
+            self.cmap = cmap 
+        if stretch is not None:
+            self.stretch = stretch 
 
         try:
             utils.file_exists('synobs_I.fits')
@@ -962,6 +980,9 @@ class Pipeline:
                     vector_color='white',
                     vector_width=1, 
                     verbose=True,
+                    distance=self.distance,
+                    cmap=self.cmap,
+                    stretch=self.stretch,
                 )
             else:
                 fig = utils.plot_map(
@@ -969,6 +990,9 @@ class Pipeline:
                     scalebar=50*u.au,
                     bright_temp=False,
                     verbose=False,
+                    distance=self.distance,
+                    cmap=self.cmap,
+                    stretch=self.stretch,
                 )
         except Exception as e:
             utils.print_(
@@ -1008,10 +1032,14 @@ class Pipeline:
         utils.write_fits('tau.fits', data=tau2d, overwrite=True)
 
     @utils.elapsed_time
-    def plot_grid_2d(self, temp=False):
-        """ Plot the grid's density and temperature midplanes from files,
+    def plot_grid_2d(self, temp=False, cmap=None):
+        """ 
+            Plot the grid's density and temperature midplanes from files,
             in case they are not currently available from pipeline.grid
         """
+
+        self.cmap = cmap if cmap is not None else 'BuPu'
+
         utils.file_exists('dust_density.inp')
         utils.print_('Reading density from dust_density.inp')
         dens = np.loadtxt('dust_density.inp').T
@@ -1026,7 +1054,7 @@ class Pipeline:
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
         grid = gridder.CartesianGrid(nx, bbox)
-        grid.plot_2d('density', data=dens)
+        grid.plot_2d('density', data=dens, cmap=self.cmap)
 
         if temp: 
             utils.file_exists('dust_temperature.dat')
@@ -1034,13 +1062,17 @@ class Pipeline:
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
             temp = temp.reshape((nx, nx, nx))
             grid = gridder.CartesianGrid(nx, bbox)
-            grid.plot_2d('temperature', data=temp)
+            grid.plot_2d('temperature', data=temp, cmap=self.cmap)
         
     @utils.elapsed_time
-    def plot_grid_3d(self, temp=False):
-        """ Render the grid's density and temperature in 3D from files,
+    def plot_grid_3d(self, temp=False, cmap=None):
+        """ 
+            Render the grid's density and temperature in 3D from files,
             in case they are not currently available from pipeline.grid
         """
+
+        self.cmap = cmap if cmap is not None else 'inferno'
+
         utils.file_exists('dust_density.inp')
         utils.print_('Reading density from dust_density.inp')
         dens = np.loadtxt('dust_density.inp').T
@@ -1054,9 +1086,9 @@ class Pipeline:
         nx = int(np.cbrt(dens.size))
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
-        utils.print_(r'Rendering a box of {nx}^3 pixels')
+        utils.print_(f'Rendering a box of {nx}^3 pixels')
         grid = gridder.CartesianGrid(nx, bbox)
-        grid.plot_3d('density', data=dens)
+        grid.plot_3d('density', data=dens, cmap=self.cmap)
 
         if temp: 
             utils.file_exists('dust_temperature.dat')
@@ -1064,7 +1096,7 @@ class Pipeline:
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
             temp = temp.reshape((nx, nx, nx))
             grid = gridder.CartesianGrid(nx, bbox)
-            grid.plot_3d('temperature', data=temp)
+            grid.plot_3d('temperature', data=temp, cmap=self.cmap)
 
     @utils.elapsed_time
     def plot_nk(self):

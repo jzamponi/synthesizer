@@ -218,7 +218,7 @@ def plot_checkout(fig, show, savefig, path="", block=True):
 
 
 def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
-        stokes='I', dpc=141, verbose=False):
+        stokes='I', dpc=140, verbose=False):
     """ Read in an image.out file created by RADMC3D and generate a
         FITS file with a CASA-compatible header, ready for a 
         synthetic observation.
@@ -438,6 +438,7 @@ def plot_map(
     savefig=None, 
     checkout=True, 
     block=True, 
+    distance=140*u.pc,
     *args,
     **kwargs,
 ):
@@ -574,10 +575,13 @@ def plot_map(
     if scalebar is not None:
         if scalebar.unit in ['au', 'pc']:
             try:
-                D = 141 * u.pc
-                print_(f'Physical scalebar created for a distance of: {D}', verbose=False)
-                scalebar_ = (scalebar.to(u.cm) / D.to(u.cm)) * u.rad.to(u.arcsec)
-                fig.add_scalebar(scalebar_ * u.arcsec)
+                D = distance * u.pc
+                print_(
+                    f'Physical scalebar created for a distance of: {D}', 
+                    verbose=False
+                )
+                skaska = (scalebar.to(u.cm) / D.to(u.cm)) * u.rad.to(u.arcsec)
+                fig.add_scalebar(skaska * u.arcsec)
                 unit = f' {scalebar.unit}'
             except Exception as e:
                 print_(f'Not able to add scale bar. Error: {e}', verbose=True, red=True)
@@ -610,6 +614,7 @@ def polarization_map(
     scale=50,
     scalebar=None, 
     mapsize=None, 
+    cmap="magma", 
     vector_color="white",
     vector_width=1, 
     const_pfrac=False,
@@ -795,6 +800,7 @@ def polarization_map(
         scalebar=scalebar, 
         verbose=verbose, 
         block=False,
+        cmap=cmap, 
         *args,
         **kwargs,
     )
