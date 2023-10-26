@@ -161,11 +161,11 @@ class PPdisk(BaseModel):
         rho_slope = 1
         flaring = 0 
         
-        Mdisk = 0.001 * u.Msun.to(u.g)
+        Mdisk = 0.06 * u.Msun.to(u.g)
         Mstar = 0 * u.Msun.to(u.g)
         h_0 = 5 * u.au.to(u.cm)
         r_0 = 30 * u.au.to(u.cm)
-        rho_bg = 1e-30
+        rho_bg = 1e-50
         self.plotmin = rho_bg
 
         # Temperature profile
@@ -174,7 +174,10 @@ class PPdisk(BaseModel):
         self.T_r = T_0 * (r3d/self.r_c)**-T_slope
 
         # Surface density
-        sigma_0 = (2 - rho_slope) * (Mdisk / 2 / np.pi / self.r_c**2)
+        exp_r = np.exp(-(rout/self.r_c)**(2-rho_slope)) - \
+                        np.exp(-(rin/self.r_c)**(2-rho_slope))
+
+        sigma_0 = (rho_slope - 2) * (Mdisk / 2 / np.pi / self.r_c**2) / exp_r
         sigma_g = sigma_0 * (r/self.r_c)**-rho_slope * \
             np.exp(-(r/self.r_c)**(2-rho_slope))
 

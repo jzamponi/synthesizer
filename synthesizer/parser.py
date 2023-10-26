@@ -337,7 +337,7 @@ def synthesizer():
             distance=cli.distance, cmap=cli.cmap, stretch=cli.stretch)
 
         if cli.tau:
-            pipeline.plot_tau(show=True, cmap=cli.cmap)
+            pipeline.plot_tau(show=True, cmap=cli.cmap, stretch=cli.stretch)
 
     if cli.show_synobs and not cli.synobs:
         pipeline.plot_synobs(
