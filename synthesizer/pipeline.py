@@ -104,10 +104,11 @@ class Pipeline:
     @utils.elapsed_time
     def create_grid(
             self, model=None, sphfile=None, amrfile=None, 
-            source='sphng', bbox=None, rout=None, ncells=None, tau=False, 
+            source='sphng', bbox=None, ncells=None, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=True, show_particles=False, 
-            alignment=False, cmap=None,
+            alignment=False, cmap=None, rin=None, rout=None, rc=None, h0=None,
+            flare=None, mdisk=None,
         ):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
@@ -115,9 +116,14 @@ class Pipeline:
         self.sphfile = sphfile
         self.amrfile = amrfile
         self.ncells = ncells
-        self.bbox = bbox * u.au.to(u.cm) if bbox is not None else bbox
-        self.rout = rout * u.au.to(u.cm) if rout is not None else rout
         self.g2d = g2d
+        self.bbox = bbox * u.au.to(u.cm) if bbox is not None else bbox
+        self.rin = rin * u.au.to(u.cm) if rin is not None else rin
+        self.rout = rout * u.au.to(u.cm) if rout is not None else rout
+        self.rc = rc * u.au.to(u.cm) if rc is not None else rc
+        self.h0 = h0 * u.au.to(u.cm) if h0 is not None else h0
+        self.mdisk = mdisk * u.Msun.to(u.g) if mdisk is not None else mdisk
+        self.flare = flare 
 
         # Make sure the model temp is read when c-sublimation is enabled
         if self.csubl > 0 and not temperature:
@@ -126,7 +132,6 @@ class Pipeline:
                 f'temperature and set the sootline at {self.sootline} K.') 
 
             temperature = True
-
 
         # Create a grid instance
         print('')
@@ -143,6 +148,12 @@ class Pipeline:
                 g2d=self.g2d,
                 nspec=self.nspec,
                 temp=temperature, 
+                rin=self.rin, 
+                rout=self.rout,
+                rc=self.rc, 
+                h0=self.h0,
+                flare=self.flare,
+                mdisk=self.mdisk,
             )
             
             # Create a model density grid 

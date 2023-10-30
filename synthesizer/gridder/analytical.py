@@ -10,7 +10,9 @@ from synthesizer import utils
 
 class AnalyticalModel():
     def __init__(self, model, bbox, ncells=100, g2d=100, temp=False, nspec=1, 
-        csubl=0, sootline=300):
+            csubl=0, sootline=300, rin=1, rout=200, rc=100, h0=10, flare=1, 
+            mdisk=0.001
+        ):
         """
         Create an analytical density model indexed by the variable model.
         All quantities should be treated in cgs unless explicitly converted.
@@ -28,6 +30,12 @@ class AnalyticalModel():
         self.sootline = sootline
         self.carbon = 0.375
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
+        self.rin = rin
+        self.rout = rout
+        self.rc = rc
+        self.h0 = h0
+        self.flare = flare
+        self.mdisk = mdisk
 
         if bbox is None:
             # Set default half-box sizes for predefined models
@@ -35,8 +43,8 @@ class AnalyticalModel():
                 'constant': 1 * u.au.to(u.cm), 
                 'plaw': 8500 * u.au.to(u.cm),    
                 'pcore': 0.1 * u.pc.to(u.cm), 
-                'ppdisk': 300 * u.au.to(u.cm),
-                'ppdisk-gap-rim': 300 * u.au.to(u.cm),
+                'ppdisk': 200 * u.au.to(u.cm),
+                'ppdisk-gap-rim': 200 * u.au.to(u.cm),
                 'l1544': 5000 * u.au.to(u.cm),
                 'filament': 1 * u.pc.to(u.cm), 
                 'user': 100 * u.au.to(u.cm), 
@@ -62,7 +70,6 @@ class AnalyticalModel():
         self.Y = y
         self.Z = z
         field = self.vfield
-        r_c = self.bbox
         self.plotmin = None
         self.plotmax = None
 
@@ -85,7 +92,7 @@ class AnalyticalModel():
 
         # Prestellar Core 
         elif self.model == 'pcore':
-            model = models.PrestellarCore(x, y, z, field)
+            model = models.PrestellarCore(x, y, z, field, self.rc)
             
         # L1544 Prestellar Core 
         elif self.model == 'l1544':
@@ -93,11 +100,13 @@ class AnalyticalModel():
 
         # Protoplanetary Disk
         elif self.model == 'ppdisk':
-            model = models.PPdisk(x, y, z, field)
+            model = models.PPdisk(x, y, z, field, self.rin, self.rout, 
+                        self.rc, self.h0, self.flare, self.mdisk)
 
         # Protoplanetary Disk with a gap and inner rim
         elif self.model == 'ppdisk-gap-rim':
-            model = models.PPdiskGapRim(x, y, z, field)
+            model = models.PPdisk(x, y, z, field, self.rin, self.rout, 
+                        self.rout, self.rc, self.h0, self.flare, self.mdisk)
 
         # Gravitationally unstable disk
         elif self.model == 'gidisk':

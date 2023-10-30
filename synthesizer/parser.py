@@ -57,12 +57,27 @@ def synthesizer():
     parser.add_argument('--ncells', action='store', type=int, default=100,
         help='Number of cells in every direction')
 
-    exc_trim = parser.add_mutually_exclusive_group() 
-    exc_trim.add_argument('--bbox', action='store', type=float, default=None, 
-        help='Size of the half-lenght of a bounding box in au.')
+    parser.add_argument('--rin', action='store', type=float, default=None,
+        help='Size of the inner model radial boundary in au (if model is ppdisk)')
 
-    exc_trim.add_argument('--rout', action='store', type=float, default=None, 
-        help='Size of the outer radial boundary in au (i.e., zoom in)')
+    parser.add_argument('--rout', action='store', type=float, default=None, 
+        help='Size of the outer model radial boundary in au. ' +
+            'Replaces bbox when trimming sph particles instead of a model.')
+
+    parser.add_argument('--rc', action='store', type=float, default=None, 
+        help='Size of the model characteristic radius in au')
+
+    parser.add_argument('--h0', action='store', type=float, default=None, 
+        help='Size of the model scale height in au')
+
+    parser.add_argument('--mdisk', action='store', type=float, default=None, 
+        help='Gas disk mass in Msun (if model is ppdisk)')
+
+    parser.add_argument('--flare', action='store', type=float, default=None, 
+        help='Flaring parameter (if model is ppdisk)')
+
+    parser.add_argument('--bbox', action='store', type=float, default=None, 
+        help='Size of the half-lenght of the bounding box in au.')
 
     parser.add_argument('--g2d', action='store', type=float, default=100, 
         help='Set the gas-to-dust mass ratio.')
@@ -254,12 +269,23 @@ def synthesizer():
     parser.add_argument('--quiet', action='store_true', default=False,
         help='Disable verbosity. Do not output anything.')
 
+    parser.add_argument('--dry', action='store_true', default=False, 
+        help='Run the Synthesizer in dry mode: only prints the arguments given.')
+
     parser.add_argument('--version', action='version', version='%(prog)s 0.0.6')
 
-
+    
 
     # Store the command-line given arguments
     cli = parser.parse_args()
+
+    # Run in dry mode: 
+    if cli.dry:
+        print('Running in dry mode. Command received:')
+        print('synthesizer ', end='')
+        [print(f'{i} ', end='') for i in sys.argv[1:]]
+        print('')
+        exit(0)
 
     # Initialize the pipeline
     pipeline = Pipeline(
@@ -275,12 +301,14 @@ def synthesizer():
     if cli.grid:
         pipeline.create_grid(
             sphfile=cli.sphfile, amrfile=cli.amrfile, 
-            source=cli.source, model=cli.model, ncells=cli.ncells, g2d=cli.g2d, 
-            bbox=cli.bbox, rout=cli.rout, temperature=cli.temperature, 
+            source=cli.source, model=cli.model, ncells=cli.ncells, 
+            g2d=cli.g2d, bbox=cli.bbox, temperature=cli.temperature, 
             render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 
             show_3d=cli.show_grid_3d, vector_field=cli.vector_field, 
             tau=cli.tau, show_particles=cli.show_particles, 
             alignment=cli.alignment, cmap=cli.cmap,
+            rin=cli.rin, rout=cli.rout, rc=cli.rc, h0=cli.h0, 
+            flare=cli.flare, mdisk=cli.mdisk,
         )
 
     # Generate the dust opacity tables

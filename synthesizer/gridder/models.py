@@ -25,7 +25,6 @@ class BaseModel(ABC):
         self.plotmin = None
         self.plotmax = None
         self.vfield = VectorField(x, y, z, morphology=field)
-        self.r_c = x.max()
 
     @property
     @abstractmethod
@@ -91,7 +90,7 @@ class PowerLaw(BaseModel):
         rho_c = 9e-18
         self.r = np.sqrt(x**2 + y**2 + z**2)
         self.plotmin = 1e-19
-        return rho_c * (self.r / self.r_c)**(-slope)
+        return rho_c * (self.r / rc)**(-slope)
 
     @property
     def temp(self):
@@ -100,8 +99,10 @@ class PowerLaw(BaseModel):
 
 class PrestellarCore(BaseModel):
     """ Prestellar Core: Bonnort-Eber sphere """
-    def __init__(self, x, y, z, field):
+    def __init__(self, x, y, z, field, rc):
         super().__init__(x, y, z, field)
+    
+        self.rc = 0.1 * u.pc.to(u.cm) if rc is None else rc
 
     @property
     def dens(self):
@@ -110,7 +111,7 @@ class PrestellarCore(BaseModel):
         z = self.z
         rho_c = 1.07e-15
         r = np.sqrt(x**2 + y**2 + z**2)
-        return rho_c * self.r_c**2 / (r**2 + self.r_c**2)
+        return rho_c * self.rc**2 / (r**2 + self.rc**2)
 
     @property
     def temp(self):
@@ -140,13 +141,29 @@ class PPdisk(BaseModel):
     """ 
         Protoplanetary disk 
         Lynden-Bell & Pringle (1974) and Hartmann et al. (1998)
+        Equations can be found in Ballering et al. (2019) and many others.
     """
 
-    def __init__(self, x, y, z, field):
+    def __init__(self, x, y, z, field, rin, rout, rc, h0, flare, mdisk):
         super().__init__(x, y, z, field)
+
+        # Default model parameters
+        self.rin = 1 * u.au.to(u.cm) if rin is None else rin
+        self.rout = 200 * u.au.to(u.cm) if rout is None else rout
+        self.rc = 140 * u.au.to(u.cm) if rc is None else rc
+        self.h0 = 5 * u.au.to(u.cm) if h0 is None else h0
+        self.flare = 1 if flare is None else flare
+        self.mdisk = 1e-3 * u.Msun.to(u.g) if mdisk is None else mdisk
 
     @property
     def dens(self):
+        utils.print_('\nModels Params:')
+        utils.print_(f'\t{self.rin = }')
+        utils.print_(f'\t{self.rout = }')
+        utils.print_(f'\t{self.rc = }')
+        utils.print_(f'\t{self.h0 = }')
+        utils.print_(f'\t{self.flare = }')
+        utils.print_(f'\t{self.mdisk = }')
 
         x = self.x
         y = self.y
@@ -154,46 +171,41 @@ class PPdisk(BaseModel):
         r = np.sqrt(x**2 + y**2)
         r3d = np.sqrt(x**2 + y**2 + z**2)
 
-        # Protoplanetary disk model parameters
-        rin = 1 * u.au.to(u.cm)
-        rout = 200 * u.au.to(u.cm)
-        self.r_c = 140 * u.au.to(u.cm)
         rho_slope = 1
-        flaring = 0 
-        
-        Mdisk = 0.06 * u.Msun.to(u.g)
         Mstar = 0 * u.Msun.to(u.g)
-        h_0 = 5 * u.au.to(u.cm)
-        r_0 = 30 * u.au.to(u.cm)
-        rho_bg = 1e-50
+        rho_bg = 1e-30
         self.plotmin = rho_bg
 
         # Temperature profile
         T_0 = 30
         T_slope = 3 / 7
-        self.T_r = T_0 * (r3d/self.r_c)**-T_slope
+        self.T_r = T_0 * (r3d/self.rc)**-T_slope
 
         # Surface density
-        exp_r = np.exp(-(rout/self.r_c)**(2-rho_slope)) - \
-                        np.exp(-(rin/self.r_c)**(2-rho_slope))
+        exp_r = np.exp(-(self.rout/self.rc)**(2-rho_slope)) - \
+                np.exp(-(self.rin/self.rc)**(2-rho_slope))
 
-        sigma_0 = (rho_slope - 2) * (Mdisk / 2 / np.pi / self.r_c**2) / exp_r
-        sigma_g = sigma_0 * (r/self.r_c)**-rho_slope * \
-            np.exp(-(r/self.r_c)**(2-rho_slope))
+        sigma_0 = (rho_slope - 2) * (self.mdisk / 2 / np.pi / self.rc**2) / exp_r
+        sigma_g = sigma_0 * (r/self.rc)**-rho_slope * \
+                np.exp(-(r/self.rc)**(2-rho_slope))
 
         # If Mstar is set, set scale height from s. speed and kep. vel.
         if Mstar > 0:
             c_s = np.sqrt(kB * self.T_r / m_H2)
             v_K = np.sqrt(G * Mstar / r**3)
-            h_0 = c_s / v_K 
+            h0 = c_s / v_K 
 
-        # Flaring 
-        h = h_0 * (r/r_0)**flaring
+        # Scale height & Flaring 
+        r0 = 30 * u.au.to(u.cm)
+        h = self.h0 * (r/r0)**self.flare
 
-        # Vertical density profile from hydrostatic equilibrium
+        # Gas density profile 
         rho_g = sigma_g / np.sqrt(2*np.pi) / h * np.exp(-z*z / (2*h*h))
+
+        # Add a background gas density
         rho_g = rho_g + rho_bg
-        rho_g[r3d > rout] = 0
+        rho_g[r3d < self.rin] = rho_bg
+        rho_g[r3d > self.rout] = rho_bg
 
         return rho_g
 
@@ -204,10 +216,19 @@ class PPdisk(BaseModel):
 
 
 class PPdiskGapRim(BaseModel):
+
     """ Protoplanetary disk with a gap and soft inner rim """
 
-    def __init__(self, x, y, z, field):
+    def __init__(self, x, y, z, field, rin, rout, rc, h0, flare, mdisk):
         super().__init__(x, y, z, field)
+
+        # Default model parameters
+        self.rin = 1 * u.au.to(u.cm) if rin is None else rin
+        self.rout = 200 * u.au.to(u.cm) if rout is None else rout
+        self.rc = 140 * u.au.to(u.cm) if rc is None else rc
+        self.h0 = 5 * u.au.to(u.cm) if h0 is None else h0
+        self.flare = 1 if flare is None else flare
+        self.mdisk = 1e-3 * u.Msun.to(u.g) if mdisk is None else mdisk
 
     @property
     def dens(self):
@@ -215,11 +236,9 @@ class PPdiskGapRim(BaseModel):
         x = self.x
         y = self.y
         z = self.z
-        rin = 1 * u.au.to(u.cm)
-        h_0 = 0.1 
-        rho_slope = 0.9
-        flaring = 0.0
-        Mdisk = 5e-3 * u.Msun.to(u.g)
+        r = np.sqrt(x**2 + y**2)
+        r3d = np.sqrt(x**2 + y**2 + z**2)
+
         Mstar = 1 * u.Msun.to(u.g)
         rho_bg = 1e-30
         self.plotmin = rho_bg
@@ -238,22 +257,19 @@ class PPdiskGapRim(BaseModel):
         densredu_gap = 1e-7
 
         # Surface density
-        r = np.sqrt(x**2 + y**2)
-        r3d = np.sqrt(x**2 + y**2 + z**2)
-        self.T_r = T_0 * (r3d/self.r_c)**-T_slope
         c_s = np.sqrt(kB * self.T_r / m_H2)
         v_K = np.sqrt(G * Mstar / r**3)
-        h = c_s / v_K * (r/self.r_c)**flaring
-        sigma_0 = (2 - rho_slope) * (Mdisk / 2 / np.pi / self.r_c**2)
-        sigma_g = sigma_0 * (r/self.r_c)**-rho_slope * \
-            np.exp(-(r/self.r_c)**(2-rho_slope))
+        h = c_s / v_K * (r/rc)**flare
+        sigma_0 = (2 - rho_slope) * (Mdisk / 2 / np.pi / rc**2)
+        sigma_g = sigma_0 * (r/rc)**-rho_slope * \
+            np.exp(-(r/rc)**(2-rho_slope))
 
         # Add a smooth inner rim
         if rim_rout > 0:
-            h_rin = np.sqrt(kB * T_0 * (rin/self.r_c)**-T_slope / m_H2) / \
+            h_rin = np.sqrt(kB * T_0 * (rin/rc)**-T_slope / m_H2) / \
                 np.sqrt(G * Mstar / rin**3)
-            a = h_0 * (r/self.r_c)**rho_slope
-            b = h_0 * (rim_rout * rin / h_0)**rho_slope
+            a = h0 * (r/rc)**rho_slope
+            b = h0 * (rim_rout * rin / h0)**rho_slope
             c = h_rin * (r/rin)**(np.log10(b / h_rin) / np.log10(rim_rout))
             h = (a**8 + c**8)**(1/8) * r
             sigma_rim = sigma_0 * (srim_rout*rin/rout)**-rho_slope * \
@@ -268,6 +284,11 @@ class PPdiskGapRim(BaseModel):
         # Density profile from hydrostatic equilibrium
         rho_g = sigma_g / np.sqrt(2*np.pi) / h * np.exp(-z*z / (2*h*h))
         rho_g = rho_g + rho_bg
+
+        # Temperature profile
+        T_0 = 30
+        T_slope = 3 / 7
+        self.T_r = T_0 * (r3d/self.rc)**-T_slope
 
         return rho_g
 
@@ -309,7 +330,7 @@ class SpiralDisk(BaseModel):
         y = self.y
         z = self.z
         theta = np.tan(0.23)
-        r_theta = self.r_c * np.exp(b*theta)
+        r_theta = rc * np.exp(b*theta)
 
     @property
     def temp(self):
