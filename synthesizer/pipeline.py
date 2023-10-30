@@ -31,7 +31,7 @@ class Pipeline:
     def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=3.5, nang=181, 
             nphot=1e5, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
             dgrowth=False, csubl=0, sootline=300, material='sg', bbox=None,
-            polarization=False, alignment=False, 
+            polarization=False, alignment=False, print_photons=True, 
             overwrite=False, verbose=True):
 
         self.steps = []
@@ -58,6 +58,7 @@ class Pipeline:
         self.distance = 140
         self.cmap = 'magma'
         self.stretch = 'linear'
+        self.print_photons = print_photons
 
         if polarization:
             self.scatmode = 5
@@ -82,20 +83,12 @@ class Pipeline:
         self.dgrowth = dgrowth
         self.kappa = None
 
-        if star is None:
-            self.xstar = 0
-            self.ystar = 0
-            self.zstar = 0
-            self.rstar = 2e11
-            self.mstar = 2e33
-            self.tstar = 4000        
-        else:
-            self.xstar = star[0]
-            self.ystar = star[1]
-            self.zstar = star[2]
-            self.rstar = star[3]
-            self.mstar = star[4]
-            self.tstar = star[5]
+        self.xstar = 0
+        self.ystar = 0
+        self.zstar = 0
+        self.rstar = 2e11
+        self.mstar = 2e33
+        self.tstar = 4000        
 
         self.bbox = bbox
         self.overwrite = overwrite
@@ -106,7 +99,7 @@ class Pipeline:
             self, model=None, sphfile=None, amrfile=None, 
             source='sphng', bbox=None, ncells=None, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
-            render=False, g2d=100, temperature=True, show_particles=False, 
+            render=False, g2d=100, temperature=False, show_particles=False, 
             alignment=False, cmap=None, rin=None, rout=None, rc=None, h0=None,
             flare=None, mdisk=None,
         ):
@@ -440,11 +433,12 @@ class Pipeline:
                 f.write(f'nphot = {int(self.nphot)}\n')
                 f.write(f'nphot_scat = {int(self.nphot)}\n')
                 f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
-                #f.write(f'countwrite = {int(self.nphot / 100)}\n')
                 f.write(f'mc_scat_maxtauabs = {int(5)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
                 if self.alignment and not mc: 
                     f.write(f'alignment_mode = 1\n')
+                if not self.print_photons:
+                    f.write(f'countwrite = {int(self.nphot)}\n')
 
         if wavelength: 
             # Create a wavelength grid in micron
@@ -537,7 +531,7 @@ class Pipeline:
                 f'from the input model.{utils.color.none}')
 
     @utils.elapsed_time
-    def monte_carlo(self, nphot, radmc3d_cmds=''):
+    def monte_carlo(self, nphot, star=None, radmc3d_cmds=''):
         """ 
             Call radmc3d to calculate the radiative temperature distribution 
         """
@@ -557,6 +551,14 @@ class Pipeline:
                 """) 
 
         self.nphot = nphot
+
+        if star is not None:
+            self.xstar = star[0] * u.au.to(u.cm)
+            self.ystar = star[1] * u.au.to(u.cm)
+            self.zstar = star[2] * u.au.to(u.cm)
+            self.rstar = star[3] * u.Rsun.to(u.cm)
+            self.mstar = star[4] * u.Msun.to(u.g)
+            self.tstar = star[5]
 
         # Make sure there's at least a grid, density and temp. distribution
         utils.file_exists('amr_grid.inp', 

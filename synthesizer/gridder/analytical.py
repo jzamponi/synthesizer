@@ -452,7 +452,7 @@ class AnalyticalModel():
 
             # Render data
             plot = mlab.contour3d(
-                data, contours=100, opacity=0.2, colormap=cmap)
+                data, contours=20, opacity=0.2, colormap=cmap)
 
             # Add a colorbar
             cbar = mlab.colorbar(plot, orientation='vertical', title=title)

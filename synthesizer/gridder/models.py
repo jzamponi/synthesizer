@@ -157,13 +157,6 @@ class PPdisk(BaseModel):
 
     @property
     def dens(self):
-        utils.print_('\nModels Params:')
-        utils.print_(f'\t{self.rin = }')
-        utils.print_(f'\t{self.rout = }')
-        utils.print_(f'\t{self.rc = }')
-        utils.print_(f'\t{self.h0 = }')
-        utils.print_(f'\t{self.flare = }')
-        utils.print_(f'\t{self.mdisk = }')
 
         x = self.x
         y = self.y

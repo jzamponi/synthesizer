@@ -149,6 +149,9 @@ def synthesizer():
     parser.add_argument('--nphot', action='store', type=float, default=1e5,
         help='Set the number of photons for scattering and thermal Monte Carlo')
 
+    parser.add_argument('--no-photons', action='store_true', default=False,
+        help='Disable the printing of every photon from RADMC3D.')
+
     parser.add_argument('--nthreads', action='store', default=4, 
         help='Number of threads used for the Monte-Carlo runs')
 
@@ -185,7 +188,7 @@ def synthesizer():
     parser.add_argument('--star', action='store', default=None, nargs=6,
         metavar=('x', 'y', 'z', 'Rstar', 'Mstar', 'Teff'), type=float, 
         help='6 parameters used to define a radiating star ' +\
-            '(values should be given in cgs)')
+            '(AU, AU, AU, Rsun, Msun, K)')
         
     parser.add_argument('--tau', action='store_true', default=False,  
         help='Generate a 2D optical depth map.')
@@ -267,12 +270,12 @@ def synthesizer():
         default=False, help='Overwrite opacities, RADMC3D and CASA input files')
 
     parser.add_argument('--quiet', action='store_true', default=False,
-        help='Disable verbosity. Do not output anything.')
+        help='Disable CASA diagnostic plots when running --synobs.')
 
     parser.add_argument('--dry', action='store_true', default=False, 
         help='Run the Synthesizer in dry mode: only prints the arguments given.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.6')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.7')
 
     
 
@@ -281,8 +284,7 @@ def synthesizer():
 
     # Run in dry mode: 
     if cli.dry:
-        print('Running in dry mode. Command received:')
-        print('synthesizer ', end='')
+        print('Running in dry mode. Command received:\nsynthesizer ', end='')
         [print(f'{i} ', end='') for i in sys.argv[1:]]
         print('')
         exit(0)
@@ -292,9 +294,10 @@ def synthesizer():
         lam=cli.lam, lmin=cli.lmin, lmax=cli.lmax, nlam=cli.nlam,
         amin=cli.amin, amax=cli.amax, na=cli.na,
         csubl=cli.sublimation, sootline=cli.sootline, dgrowth=cli.dust_growth,
-        polarization=cli.polarization, alignment=cli.alignment, star=cli.star, 
+        polarization=cli.polarization, alignment=cli.alignment,  
         bbox=cli.bbox, nphot=cli.nphot, nthreads=cli.nthreads, 
-        material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet
+        material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet,
+        print_photons=not cli.no_photons,
     )
 
     # Generate the input grid for RADMC3D
@@ -323,7 +326,11 @@ def synthesizer():
 
     # Run a thermal Monte-Carlo
     if cli.monte_carlo:
-        pipeline.monte_carlo(nphot=cli.nphot, radmc3d_cmds=cli.radmc3d)
+        pipeline.monte_carlo(
+            nphot=cli.nphot, 
+            star=cli.star,
+            radmc3d_cmds=cli.radmc3d
+    )
 
     # Run a ray-tracing on the new grid and generate an image
     if cli.raytrace:
