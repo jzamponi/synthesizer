@@ -218,7 +218,7 @@ def plot_checkout(fig, show, savefig, path="", block=True):
 
 
 def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
-        stokes='I', dpc=140, verbose=False):
+        stokes='I', tau=False, dpc=140, verbose=False):
     """ Read in an image.out file created by RADMC3D and generate a
         FITS file with a CASA-compatible header, ready for a 
         synthetic observation.
@@ -244,14 +244,15 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
     # Make a squared map
     img = img.reshape(nx, ny)
 
-    # Rescale to Jy/sr
-    img = img * (
-        u.erg * u.s ** -1 * u.cm ** -2 * u.Hz ** -1 * u.sr ** -1).to(
-        u.Jy * u.sr ** -1
-    )
+    if not tau:
+        # Rescale to Jy/sr
+        img = img * (
+            u.erg * u.s ** -1 * u.cm ** -2 * u.Hz ** -1 * u.sr ** -1).to(
+            u.Jy * u.sr ** -1
+        )
 
-    # Convert sr into pixels (Jy/sr --> Jy/pixel)
-    img = img * (pixsize_x**2 / (dpc*u.pc.to(u.cm))**2)
+        # Convert sr into pixels (Jy/sr --> Jy/pixel)
+        img = img * (pixsize_x**2 / (dpc*u.pc.to(u.cm))**2)
 
     # Convert physical pixel size to angular size
     cdelt1 = (pixsize_x / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
@@ -271,8 +272,8 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
         'CUNIT2': f'deg',
         'CTYPE2': f'DEC--SIN',
         'RESTFRQ': c.c.cgs.value / (lam*u.micron.to(u.cm)),
-        'BUNIT': 'Jy/pixel',
-        'BTYPE': 'Intensity', 
+        'BUNIT': 'Jy/pixel' if not tau else '',
+        'BTYPE': 'Intensity' if not tau else 'op. depth', 
         'BZERO': 1.0, 
         'BSCALE': 'BSCALE', 
         'LONPOLE': 180.0, 

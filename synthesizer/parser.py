@@ -149,8 +149,9 @@ def synthesizer():
     parser.add_argument('--nphot', action='store', type=float, default=1e5,
         help='Set the number of photons for scattering and thermal Monte Carlo')
 
-    parser.add_argument('--no-photons', action='store_true', default=False,
-        help='Disable the printing of every photon from RADMC3D.')
+    parser.add_argument('--print-photons', action='store_true', default=False,
+        help='Enable the printing of one photon per line from RADMC3D. ' +
+            'Helpful to diagnose if the scattering Monte Carlo is running.')
 
     parser.add_argument('--nthreads', action='store', default=4, 
         help='Number of threads used for the Monte-Carlo runs')
@@ -297,7 +298,7 @@ def synthesizer():
         polarization=cli.polarization, alignment=cli.alignment,  
         bbox=cli.bbox, nphot=cli.nphot, nthreads=cli.nthreads, 
         material=cli.material, overwrite=cli.overwrite, verbose=not cli.quiet,
-        print_photons=not cli.no_photons,
+        print_photons=cli.print_photons,
     )
 
     # Generate the input grid for RADMC3D

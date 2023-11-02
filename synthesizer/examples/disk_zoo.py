@@ -21,7 +21,7 @@ from pathlib import Path
 from synthesizer import utils
 from synthesizer.pipeline import Pipeline
 
-cwd = Path.home()/'class0disks/results'
+cwd = Path.home()/'testdir'
 
 for m, mass in zip([1e-3, 1e-5], ['hm', 'lm']):
     for flare in [0, 0.5, 1]:
@@ -29,7 +29,8 @@ for m, mass in zip([1e-3, 1e-5], ['hm', 'lm']):
             for incl in [75, 90]:
 
                 path_out = cwd/f'{mass}/a1/b{flare}/{settling}/trad/L2/sg/a100um/{incl}deg'
-                os.chdir(pathout)
+                os.makedirs(path_out, exist_ok=True)
+                os.chdir(path_out)
             
                 pipeline = Pipeline(
                     overwrite=True,
