@@ -276,7 +276,7 @@ def synthesizer():
     parser.add_argument('--dry', action='store_true', default=False, 
         help='Run the Synthesizer in dry mode: only prints the arguments given.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.7')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.8')
 
     
 
@@ -372,8 +372,8 @@ def synthesizer():
         pipeline.plot_rt(
             distance=cli.distance, cmap=cli.cmap, stretch=cli.stretch)
 
-        if cli.tau:
-            pipeline.plot_tau(show=True, cmap=cli.cmap, stretch=cli.stretch)
+    if cli.tau:
+        pipeline.plot_tau(show=cli.show_rt, cmap=cli.cmap, stretch=cli.stretch)
 
     if cli.show_synobs and not cli.synobs:
         pipeline.plot_synobs(

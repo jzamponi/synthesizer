@@ -25,7 +25,7 @@
 
 from synthesizer import parser
 
-__version__ = "0.0.7"
+__version__ = "0.0.8"
 
 if __name__ == "__main__":
     parser.parser()
