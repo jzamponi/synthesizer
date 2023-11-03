@@ -18,7 +18,7 @@ keywords = ["", "", ""]
 dependencies = [
     "requests",
     "astropy >= 5.1",
-    "matplotlib >= 3.8.0",
+    "matplotlib",
     "numpy",
     "scipy",
     "mpmath",

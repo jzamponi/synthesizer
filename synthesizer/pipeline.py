@@ -1061,8 +1061,15 @@ class Pipeline:
             if self.stretch == 'log':
                 norm = LogNorm(vmin=None, vmax=None)
             elif self.stretch == 'asinh':
-                norm = AsinhNorm(linear_width=0.5, 
-                        vmin=tau_map.min(), vmax=tau_map.max())
+
+                try:
+                    from matplotlib.colors import AsinhNorm
+                    norm = AsinhNorm(linear_width=1, 
+                            vmin=tau_map.min(), vmax=tau_map.max())
+                except ImportError:
+                    utils.print_('Current version of Matplotlib does not ' +
+                        'support asinh stretch. Consider upgrading to >=3.8.0')
+                    norm = None
             else:
                 norm = None
             
