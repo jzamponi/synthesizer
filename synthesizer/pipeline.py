@@ -1015,7 +1015,7 @@ class Pipeline:
     def plot_tau(self, show=False, cmap=None, stretch=None):
         """ Calls RADMC3D with the tau mode to calculate an op. depth image """
 
-        from matplotlib.colors import LogNorm, AsinhNorm
+        from matplotlib.colors import LogNorm
 
         if cmap is not None:
             self.cmap = cmap 
