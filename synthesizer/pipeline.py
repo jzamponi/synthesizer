@@ -1088,7 +1088,6 @@ class Pipeline:
             plt.colorbar()
             plt.show()
 
-        utils.write_fits('tau.fits', data=tau_map, overwrite=True)
 
     @utils.elapsed_time
     def plot_grid_2d(self, temp=False, cmap=None):
