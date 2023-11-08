@@ -224,6 +224,7 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
         synthetic observation.
     """
 
+    # Read the header
     with open(radmc3dimage, 'r') as f:
         iformat = int(f.readline())
         line = f.readline().split()
@@ -235,6 +236,7 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
         pixsize_y = float(line[1])
         lam = float(f.readline())
         
+    # Read the data
     img = np.loadtxt(radmc3dimage, skiprows=5)
 
     # Select Stokes map
@@ -254,23 +256,35 @@ def radmc3d_casafits(fitsfile='radmc3d_I.fits', radmc3dimage='image.out',
         # Convert sr into pixels (Jy/sr --> Jy/pixel)
         img = img * (pixsize_x**2 / (dpc*u.pc.to(u.cm))**2)
 
-    # Convert physical pixel size to angular size
-    cdelt1 = (pixsize_x / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
-    cdelt2 = (pixsize_y / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
+        # Convert physical pixel size to angular size for the header
+        cdelt1 = (pixsize_x / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
+        cdelt2 = (pixsize_y / (dpc*u.pc.to(u.cm))) * u.rad.to(u.deg)
+        cunit1 = 'deg'
+        cunit2 = 'deg'
+        ctype1 = 'RA---SIN'
+        ctype2 = 'DEC--SIN'
+
+    else:
+        cdelt1 = pixsize_x * u.cm.to(u.au)
+        cdelt2 = pixsize_y * u.cm.to(u.au)
+        cunit1 = 'AU'
+        cunit2 = 'AU'
+        ctype1 = 'param'
+        ctype2 = 'param'
 
     # Set a minimal header
-    header = fits.Header()
-    header.update({
+    header = fits.Header({
         'CRPIX1': 1 + nx / 2,
         'CDELT1': cdelt1,
-        'CRVAL1': 248.0943, 
-        'CUNIT1': f'deg',
-        'CTYPE1': f'RA---SIN',
+        'CRVAL1': 0, 
+        'CUNIT1': cunit1,
+        'CTYPE1': ctype1,
         'CRPIX2': 1 + ny / 2,
         'CDELT2': cdelt2,
-        'CRVAL2': -24.4755, 
-        'CUNIT2': f'deg',
-        'CTYPE2': f'DEC--SIN',
+        'CRVAL2': 0, 
+        'CUNIT2': cunit2,
+        'CTYPE2': ctype2,
+        'LAMBDA': f'{lam}um',
         'RESTFRQ': c.c.cgs.value / (lam*u.micron.to(u.cm)),
         'BUNIT': 'Jy/pixel' if not tau else '',
         'BTYPE': 'Intensity' if not tau else 'op. depth', 

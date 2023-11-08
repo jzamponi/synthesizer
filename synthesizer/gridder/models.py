@@ -153,7 +153,7 @@ class PPdisk(BaseModel):
         self.rc = 140 * u.au.to(u.cm) if rc is None else rc
         self.h0 = 5 * u.au.to(u.cm) if h0 is None else h0
         self.flare = 1 if flare is None else flare
-        self.mdisk = 1e-3 * u.Msun.to(u.g) if mdisk is None else mdisk
+        self.mdisk = 1e-1 * u.Msun.to(u.g) if mdisk is None else mdisk
 
     @property
     def dens(self):

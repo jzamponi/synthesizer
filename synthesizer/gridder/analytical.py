@@ -2,6 +2,7 @@ import numpy as np
 import astropy.units as u
 import astropy.constants as const
 import matplotlib.pyplot as plt
+from astropy.io import fits
 
 from synthesizer.gridder.vector_field import VectorField
 from synthesizer.gridder.custom_model import CustomModel
@@ -297,7 +298,7 @@ class AnalyticalModel():
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
             from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the density grid midplane')
+            utils.print_(f'Plotting the {field} grid midplane')
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
             plt.rcParams['xtick.top'] = True
@@ -318,7 +319,7 @@ class AnalyticalModel():
             # Set the plot title for the right field
             title = {
                 'density': r'Dust Density (g cm$^{-3}$)', 
-                'temperature': r'Gas Temperature (K)',
+                'temperature': r'Dust Temperature (K)',
             }[field]
 
             # Set the bbox if existent
@@ -414,6 +415,26 @@ class AnalyticalModel():
         except Exception as e:
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
+
+        # Write maps to FITS files
+        utils.write_fits(
+            f'{field}_midplane.fits', 
+            data=np.array([data_xy, data_xz]),
+            header=fits.Header({
+                'BTYPE': title.split('(')[0],
+                'BUNIT': title.split('(')[1][:-1].replace('$',''),
+                'CDELT1': 2 * bbox / self.ncells,
+                'CRPIX1': self.ncells // 2,
+                'CRVAL1': 0,
+                'CUNIT1': 'AU',
+                'CDELT2': 2 * bbox / self.ncells,
+                'CRPIX2': self.ncells // 2,
+                'CRVAL2': 0,
+                'CUNIT2': 'AU',
+            }),
+            overwrite=True,
+            verbose=True,
+        )
 
     def plot_3d(self, field, data=None, tau=False, cmap=None): 
         """ Render the interpolated 3D field using Mayavi """

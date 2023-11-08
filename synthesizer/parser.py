@@ -29,6 +29,7 @@ from synthesizer import utils
 from synthesizer.pipeline import Pipeline
 
 
+@utils.elapsed_time
 def synthesizer():
     
     # Initialize the argument parser
@@ -171,7 +172,7 @@ def synthesizer():
     parser.add_argument('--nlam', action='store', type=int, default=200,
         help='Number of wavelengths to build a logarithmically spaced grid.')
 
-    parser.add_argument('--npix', action='store', type=int, default=300,
+    parser.add_argument('--npix', action='store', type=int, default=100,
         help='Number of pixels per side of new image')
 
     parser.add_argument('--incl', action='store', type=float, default=0,
@@ -372,8 +373,9 @@ def synthesizer():
         pipeline.plot_rt(
             distance=cli.distance, cmap=cli.cmap, stretch=cli.stretch)
 
-    if cli.tau:
-        pipeline.plot_tau(show=cli.show_rt, cmap=cli.cmap, stretch=cli.stretch)
+        if cli.tau:
+            pipeline.plot_tau(
+                show=cli.show_rt, cmap=cli.cmap, stretch=cli.stretch)
 
     if cli.show_synobs and not cli.synobs:
         pipeline.plot_synobs(
@@ -385,7 +387,7 @@ def synthesizer():
         cli.grid, cli.opacity, cli.monte_carlo, cli.raytrace, 
         cli.synobs, cli.quiet, cli.show_grid_2d, cli.show_grid_3d,
         cli.show_rt, cli.show_synobs, cli.show_opacity, cli.show_nk,
-        cli.show_z12z11
+        cli.show_z12z11,
     ]):
 
         utils.print_('Nothing to do. Main options are:' +\

@@ -530,6 +530,9 @@ class Pipeline:
                 f'--vector-field to --grid to create the alignment field ' +\
                 f'from the input model.{utils.color.none}')
 
+        # Register the pipeline step 
+        self.steps.append('generate_input_files')
+
     @utils.elapsed_time
     def monte_carlo(self, nphot, star=None, radmc3d_cmds=''):
         """ 
@@ -598,6 +601,34 @@ class Pipeline:
         self._radmc3d_banner()
         
         self._catch_radmc3d_error()
+        
+        # Read in the new temperature 
+        temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
+        nx = int(np.cbrt(temp_mc.size))
+        temp_mc = temp_mc.reshape((nx, nx, nx))
+
+        # Write the new temperature field to FITS file
+        utils.write_fits(
+            f'temperature-mc_midplane.fits', 
+            data=temp_mc,
+            header=fits.Header({
+                'BTYPE': 'Dust Temperature',
+                'BUNIT': 'K',
+                'CDELT1': 2 * self.bbox / self.ncells,
+                'CRPIX1': self.ncells // 2,
+                'CRVAL1': 0,
+                'CUNIT1': 'AU',
+                'CDELT2': 2 * self.bbox / self.ncells,
+                'CRPIX2': self.ncells // 2,
+                'CRVAL2': 0,
+                'CUNIT2': 'AU',
+            }),
+            overwrite=True,
+            verbose=True,
+        )
+        
+        # Free up memory
+        del temp_mc
 
         # Register the pipeline step 
         self.steps.append('monte_carlo')
@@ -859,7 +890,10 @@ class Pipeline:
                 else:
                     # Create a minimal template CASA script
                     if self.npix is None: 
-                        self.npix = fits.getheader('radmc3d_I.fits').get('NAXIS1')
+                        self.npix = fits.getheader(
+                            'radmc3d_I.fits').get('NAXIS1')
+
+                    # Create a map bigger than model to measure rms on borders
                     script.imsize = int(self.npix + 100)
 
                 # Tailor the script to the pipeline setup
@@ -902,7 +936,7 @@ class Pipeline:
             self.plot_synobs()
 
         # Register the pipeline step 
-        self.steps.append('synobs')
+        self.steps.append('synthetic_observation')
 
 
     @utils.elapsed_time
@@ -955,7 +989,10 @@ class Pipeline:
         except Exception as e:
             utils.print_(
                 f'Unable to plot: {e}', bold=True)
-    
+        
+        # Register the pipeline step
+        self.steps.append('plot_rt')
+ 
     @utils.elapsed_time
     def plot_synobs(self, distance=None, cmap=None, stretch=None):
         utils.print_(f'Plotting the new synthetic image')
@@ -1011,6 +1048,9 @@ class Pipeline:
             utils.print_(
                 f'Unable to plot: {e}', bold=True)
 
+        # Register the pipeline step
+        self.steps.append('plot_synobs')
+
     @utils.elapsed_time
     def plot_tau(self, show=False, cmap=None, stretch=None):
         """ Calls RADMC3D with the tau mode to calculate an op. depth image """
@@ -1022,39 +1062,47 @@ class Pipeline:
         if stretch is not None:
             self.stretch = stretch 
 
-        utils.print_(
-            f'Generating optical depth map at {self.lam} microns' +\
-            f'using RADMC3D')
+        if not os.path.exists('tau.fits') or \
+            (os.path.exists('tau.fits') and self.overwrite):
 
-        if os.path.exists(filename:='image.out'):
             utils.print_(
-                'Backing up existing image.out to image.out_backup')
-            os.system(f'cp {filename} {filename}_backup ')
+                f'Generating optical depth map at {self.lam} microns ' +\
+                f'using RADMC3D')
 
-        # Call RADMC3D with the tau mode
-        cmd = f'radmc3d image tracetau '
-        cmd += f'lambda {self.lam} '
-        cmd += f'incl {self.incl} ' if self.incl is not None else ''
-        cmd += f'phi {self.phi}' if self.phi is not None else ''
+            if os.path.exists(filename:='image.out'):
+                utils.print_(
+                    'Backing up existing image.out to image.out_backup')
+                os.system(f'cp {filename} {filename}_backup ')
 
-        utils.print_(f'Executing command: {cmd}')
-        os.system(f'{cmd} > /dev/null')
+            # Call RADMC3D with the tau mode
+            cmd = f'radmc3d image tracetau '
+            cmd += f'lambda {self.lam} '
+            cmd += f'sizeau {self.sizeau} '
+            cmd += f'npix {self.npix} '
+            cmd += f'incl {self.incl} ' if self.incl is not None else ''
+            cmd += f'phi {self.phi}' if self.phi is not None else ''
 
-        # Recover the original image.out 
-        if utils.file_exists(filename, raise_=False):
-            utils.print_(f'Restoring backup to {filename}')
-            os.system(f'mv {filename} tau.out')
-            os.system(f'cp {filename}_backup {filename} ')
+            utils.print_(f'Executing command: {cmd}')
+            os.system(f'{cmd} > /dev/null')
 
-        # Write the tau image to fits
-        utils.radmc3d_casafits(
-            tau=True,
-            fitsfile='tau.fits',
-            radmc3dimage='tau.out',
-            dpc=self.distance, 
-        )
+            # Recover the original image.out 
+            if utils.file_exists(filename, raise_=False):
+                utils.print_(f'Restoring backup to {filename}')
+                os.system(f'mv {filename} tau.out')
+                os.system(f'cp {filename}_backup {filename} ')
 
-        tau_map = fits.getdata('tau.fits')
+            # Write the tau image to fits
+            utils.radmc3d_casafits(
+                tau=True,
+                fitsfile='tau.fits',
+                radmc3dimage='tau.out',
+                dpc=self.distance, 
+            )
+
+        else:
+            utils.print_('Reading from existing tau.fits')
+
+        tau_map, tau_hdr = fits.getdata('tau.fits', header=True)
 
         if show:
             # Set the colormap normalization from the stretch parameter
@@ -1072,7 +1120,17 @@ class Pipeline:
                     norm = None
             else:
                 norm = None
-            
+
+            # Find the size of the box to set the spatial scale 
+            if self.bbox is None:
+                bbox = tau_hdr['CDELT1'] * tau_hdr['NAXIS1'] / 2
+                
+            else:
+                bbox = self.bbox
+                if 'create_grid' in self.steps:
+                    bbox *= u.cm.to(u.au)
+
+            # Customize the figure
             plt.rcParams['font.family'] = 'Times New Roman'
             plt.rcParams['xtick.direction'] = 'in'
             plt.rcParams['ytick.direction'] = 'in'
@@ -1082,12 +1140,20 @@ class Pipeline:
             plt.rcParams['ytick.minor.visible'] = True
 
             plt.title(fr'Optical depth at $\lambda = ${self.lam}$\mu$m')
-            plt.imshow(tau_map, origin='lower', cmap=self.cmap, norm=norm)
-            plt.yticks([])
-            plt.xticks([])
+            plt.imshow(
+                tau_map, 
+                origin='lower', 
+                cmap=self.cmap, 
+                norm=norm,
+                extent = [-bbox, bbox] * 2
+            )
+            plt.xlabel('X (AU)')
+            plt.ylabel('Y (AU)')
             plt.colorbar()
             plt.show()
 
+        # Register the pipeline step
+        self.steps.append('plot_tau')
 
     @utils.elapsed_time
     def plot_grid_2d(self, temp=False, cmap=None):
@@ -1121,6 +1187,10 @@ class Pipeline:
             temp = temp.reshape((nx, nx, nx))
             grid = gridder.CartesianGrid(nx, bbox)
             grid.plot_2d('temperature', data=temp, cmap=self.cmap)
+            del temp
+
+        # Register the pipeline step
+        self.steps.append('plot_grid_2d')
         
     @utils.elapsed_time
     def plot_grid_3d(self, temp=False, cmap=None):
@@ -1156,6 +1226,9 @@ class Pipeline:
             grid = gridder.CartesianGrid(nx, bbox)
             grid.plot_3d('temperature', data=temp, cmap=self.cmap)
 
+        # Register the pipeline step
+        self.steps.append('plot_grid_3d')
+
     @utils.elapsed_time
     def plot_nk(self):
         """ Plot optical constants from the .lnk tables """
@@ -1164,6 +1237,9 @@ class Pipeline:
         dust = dustmixer.Dust()
         dust.set_nk(filename, skip=1, get_dens=True)
         dust.plot_nk()
+
+        # Register the pipeline step
+        self.steps.append('plot_nk')
 
     @utils.elapsed_time
     def plot_opacities(self):
@@ -1194,6 +1270,9 @@ class Pipeline:
         plt.xlim(1e-1, 3e4)
         plt.tight_layout()
         plt.show()
+
+        # Register the pipeline step
+        self.steps.append('plot_opacities')
 
     def _get_opac_name(self, csubl=0, dgrowth=False, material2=False):
         """ Get the name of the currently used opacity file dustk*.inp """
