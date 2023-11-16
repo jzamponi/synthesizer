@@ -283,32 +283,31 @@ class Pipeline:
             New dust materials can be manually defined here if desired.
         """
 
-        self.material = material if material is None else self.material
-        self.amin = amin if amin is None else self.amin
-        self.amax = amax if amax is None else self.amax
-        self.na = na if na is None else self.na
-        self.q = q if q is None else self.q
-        self.nang = nang if nang is None else self.nang
-        if polarization is None: self.polarization = polarization
-
-        print('')
-        utils.print_("Calculating dust opacities ...\n", bold=True)
-
-        # Create a dust grain size grid
-        self.a_dist = np.logspace(
-            np.log10(self.amin), np.log10(self.amax), self.na)
-
+        self.material = material if material is not None else self.material
+        self.amin = amin if amin is not None else self.amin
+        self.amax = amax if amax is not None else self.amax
+        self.na = na if na is not None else self.na
+        self.q = q if q is not None else self.q
+        self.nang = nang if nang is not None else self.nang
+        if polarization is not None: self.polarization = polarization
         if self.polarization and self.nang < 181: self.nang = 181
 
         # Use 1 until the parallelization with polarization is fully implemented
         nth = self.nthreads
         nth = 1
 
+        print('')
+        utils.print_("Calculating dust opacities ...\n", bold=True)
+
         # Initialize a Dust object and set its wavelenght grid to the pipeline's
         mix = dustmixer.Dust()
         mix.pb = pb
         mix.set_lgrid(self.lmin, self.lmax, self.nlam)
         mix.scatmatrix = self.polarization
+
+        # Create a dust grain size grid
+        self.a_dist = np.logspace(
+            np.log10(self.amin), np.log10(self.amax), self.na)
 
         # Source code location where optical constants .lnk are stored
         pathnk = Path(source_dir/'dustmixer/nk')
@@ -324,26 +323,30 @@ class Pipeline:
             mix.name = 'Silicate'
             mix.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
             if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            mix.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
         
         elif self.material == 'g':
             mix.name = 'Graphite'
             mix.set_nk(f'{pathnk}/c-gra-Draine2003.lnk')
             if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            mix.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
         
         elif self.material == 'o':
             mix.name = 'Organics'
             mix.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
             if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            mix.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
 
         elif self.material == 'p':
             mix.name = 'Pyroxene-Mg70'
             mix.set_nk(f'{pathnk}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
             mix.set_density(3.01, cgs=True)
             if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            mix.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
 
         elif self.material == 'sg':
             sil = copy.deepcopy(mix)
@@ -356,8 +359,10 @@ class Pipeline:
             if show_nk: sil.plot_nk(savefig=savefig)
             if show_nk: gra.plot_nk(savefig=savefig)
 
-            sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            sil.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+            gra.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
 
             # Sum the opacities weighted by their mass fractions
             mix = sil * 0.625 + gra * 0.375
@@ -378,9 +383,12 @@ class Pipeline:
             if show_nk: gra.plot_nk(savefig=savefig)
             if show_nk: org.plot_nk(savefig=savefig)
 
-            sil.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            gra.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
-            org.get_opacities(a=self.a_dist, nang=self.nang, nproc=nth)
+            sil.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+            gra.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+            org.get_opacities(
+                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
 
             mf_sil = 0.625
             mf_gra = 0.375
