@@ -78,6 +78,10 @@ class CartesianGrid(Grid):
                 self.x, self.y, self.z, self.dens and self.temp (optional) 
          """
 
+        # Download the script if a URL is provided
+        if 'http' in filename: 
+            utils.download_file(filename)
+
         utils.print_(
             f'Reading data from: {filename} | Format: {source.upper()}', end='')
         if not os.path.exists(filename): 
@@ -128,6 +132,10 @@ class CartesianGrid(Grid):
         """ Read AMR data """
 
         source = source.lower()
+
+        # Download the script if a URL is provided
+        if 'http' in filename: 
+            utils.download_file(filename)
 
         utils.print_(f'Reading data from: {filename} | Format: {source}')
         if not os.path.exists(filename): 

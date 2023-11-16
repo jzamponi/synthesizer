@@ -152,7 +152,7 @@ class PPdisk(BaseModel):
         self.rout = 200 * u.au.to(u.cm) if rout is None else rout
         self.rc = 140 * u.au.to(u.cm) if rc is None else rc
         self.h0 = 5 * u.au.to(u.cm) if h0 is None else h0
-        self.flare = 1 if flare is None else flare
+        self.flare = 0.3 if flare is None else flare
         self.mdisk = 1e-1 * u.Msun.to(u.g) if mdisk is None else mdisk
 
     @property
@@ -199,6 +199,9 @@ class PPdisk(BaseModel):
         rho_g = rho_g + rho_bg
         rho_g[r3d < self.rin] = rho_bg
         rho_g[r3d > self.rout] = rho_bg
+
+        # Trim temperature to region with background density
+        self.T_r[rho_g == rho_bg] = 2.73
 
         return rho_g
 

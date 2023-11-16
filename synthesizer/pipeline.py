@@ -28,7 +28,7 @@ source_dir = source_path.parent
 
 class Pipeline:
     
-    def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=3.5, nang=181, 
+    def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=-3.5, nang=181, 
             nphot=1e5, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
             dgrowth=False, csubl=0, sootline=300, material='sg', bbox=None,
             polarization=False, alignment=False, print_photons=False, 
@@ -97,7 +97,7 @@ class Pipeline:
     @utils.elapsed_time
     def create_grid(
             self, model=None, sphfile=None, amrfile=None, 
-            source='sphng', bbox=None, ncells=None, tau=False, 
+            source='sphng', bbox=None, ncells=100, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=False, show_particles=False, 
             alignment=False, cmap=None, rin=None, rout=None, rc=None, h0=None,
@@ -264,6 +264,13 @@ class Pipeline:
 
     @utils.elapsed_time
     def dustmixer(self, 
+            material=None,
+            amin=None,
+            amax=None,
+            q=None,
+            na=None,
+            nang=None,
+            polarization=False,
             show_nk=False, 
             show_z12z11=False,
             show_dust_eff=False, 
@@ -276,15 +283,24 @@ class Pipeline:
             New dust materials can be manually defined here if desired.
         """
 
+        self.material = material if material is None else self.material
+        self.amin = amin if amin is None else self.amin
+        self.amax = amax if amax is None else self.amax
+        self.na = na if na is None else self.na
+        self.q = q if q is None else self.q
+        self.nang = nang if nang is None else self.nang
+        if polarization is None: self.polarization = polarization
+
         print('')
         utils.print_("Calculating dust opacities ...\n", bold=True)
 
+        # Create a dust grain size grid
         self.a_dist = np.logspace(
             np.log10(self.amin), np.log10(self.amax), self.na)
 
         if self.polarization and self.nang < 181: self.nang = 181
 
-        # Use 1 until the parallelization of polarization is properly implemented
+        # Use 1 until the parallelization with polarization is fully implemented
         nth = self.nthreads
         nth = 1
 
@@ -853,7 +869,7 @@ class Pipeline:
 
         # Use casa simobserve/tclean
         else:
-            if script is None:
+            if script is None or script == '':
 
                 script = synobs.CasaScript(self.lam)
 
@@ -899,7 +915,7 @@ class Pipeline:
                 # Tailor the script to the pipeline setup
                 script.resolution = resolution
                 script.obsmode = obsmode
-                script.telescope = telescope
+                script.telescope = telescope.lower()
                 script.totaltime = f'{obstime}h'
                 if script.resolution is not None: script.find_antennalist()
                 script.polarization = self.polarization

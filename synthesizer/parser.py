@@ -154,7 +154,7 @@ def synthesizer():
         help='Enable the printing of one photon per line from RADMC3D. ' +
             'Helpful to diagnose if the scattering Monte Carlo is running.')
 
-    parser.add_argument('--nthreads', action='store', default=4, 
+    parser.add_argument('--nthreads', action='store', default=1, 
         help='Number of threads used for the Monte-Carlo runs')
 
     parser.add_argument('-rt', '--raytrace', action='store_true', default=False,
@@ -319,6 +319,13 @@ def synthesizer():
     # Generate the dust opacity tables
     if cli.opacity:
         pipeline.dustmixer(
+            material=cli.material,
+            amin=cli.amin,
+            amax=cli.amax,
+            na=cli.na,
+            q=cli.q,
+            nang=cli.nang,
+            polarization=False,
             show_nk=cli.show_nk, 
             show_z12z11=cli.show_z12z11,
             show_dust_eff=cli.show_dust_eff, 
