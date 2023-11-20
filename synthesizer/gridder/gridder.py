@@ -81,6 +81,7 @@ class CartesianGrid(Grid):
         # Download the script if a URL is provided
         if 'http' in filename: 
             utils.download_file(filename)
+            filename = filename.split('/')[-1]
 
         utils.print_(
             f'Reading data from: {filename} | Format: {source.upper()}', end='')
@@ -136,6 +137,7 @@ class CartesianGrid(Grid):
         # Download the script if a URL is provided
         if 'http' in filename: 
             utils.download_file(filename)
+            filename = filename.split('/')[-1]
 
         utils.print_(f'Reading data from: {filename} | Format: {source}')
         if not os.path.exists(filename): 
