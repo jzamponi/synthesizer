@@ -109,8 +109,22 @@ def synthesizer():
     parser.add_argument('-op', '--opacity', action='store_true', default=False,
         help='Call dustmixer to generate a dust opacity table')
 
-    parser.add_argument('--material', action='store', default='s',
-        help='Dust optical constants. Can be a predefined key, a path or a url')
+    parser.add_argument('--material', action='store', default='s', nargs='*', 
+        help='Dust optical constants. Can be a predefined mix (sil, gra, org, '+\
+        'ice, tro, pyr, sg, sgo, dsharp), a path or a url, or list of paths '+\
+        'to mix different materials, if so give --mfrac')
+
+    parser.add_argument('--mfrac', action='store', default=None, 
+        type=float, nargs='*',  
+        help='List of mass fractions of every material in case of multiple ' +\
+        'materials. Ignored if --material is a predefined mix.')
+
+    parser.add_argument('--porosity', action='store', default=0, type=float,
+        help='Add a fraction (0 to 1) of porosity to the mixture.')
+
+    parser.add_argument('--mixing', action='store', default='b',
+        choices=['b', 'mg'], help='Mixing of different materials. ' +\
+        'Indices represent, "bruggeman" or "Maxwell-Garnett" mixing.')
 
     parser.add_argument('--amin', action='store', type=float, default=0.1,
         help='Minimum value for the grain size distribution')
@@ -320,6 +334,9 @@ def synthesizer():
     if cli.opacity:
         pipeline.dustmixer(
             material=cli.material,
+            mfrac=cli.mfrac,
+            porosity=cli.porosity,
+            mixing=cli.mixing, 
             amin=cli.amin,
             amax=cli.amax,
             na=cli.na,

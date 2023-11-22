@@ -30,7 +30,8 @@ class Pipeline:
     
     def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=-3.5, nang=181, 
             nphot=1e5, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
-            dgrowth=False, csubl=0, sootline=300, material='sg', bbox=None,
+            dgrowth=False, csubl=0, sootline=300, bbox=None,
+            material='s', mfrac=1, porosity=0, mixing='bruggeman', 
             polarization=False, alignment=False, print_photons=False, 
             overwrite=False, verbose=True):
 
@@ -47,6 +48,9 @@ class Pipeline:
         self.q = q
         self.nang = nang
         self.material = material
+        self.mfrac = mfrac
+        self.porosity = porosity
+        self.mixing = None
         self.nphot = int(nphot)
         self.nthreads = int(nthreads)
         self.npix = None
@@ -265,6 +269,9 @@ class Pipeline:
     @utils.elapsed_time
     def dustmixer(self, 
             material=None,
+            mfrac=None, 
+            porosity=None, 
+            mixing=None, 
             amin=None,
             amax=None,
             q=None,
@@ -283,14 +290,41 @@ class Pipeline:
             New dust materials can be manually defined here if desired.
         """
 
-        self.material = material if material is not None else self.material
-        self.amin = amin if amin is not None else self.amin
-        self.amax = amax if amax is not None else self.amax
-        self.na = na if na is not None else self.na
-        self.q = q if q is not None else self.q
-        self.nang = nang if nang is not None else self.nang
+        if mfrac is not None: self.mfrac = mfrac
+        if porosity is not None: self.porosity = porosity
+        if mixing is not None: self.mixing = mixing.lower()
+        if self.amin is not None: self.amin = amin
+        if self.amax is not None: self.amax = amax
+        if self.na is not None: self.na = na
+        if self.q is not None: self.q = q
+        if self.nang is not None: self.nang = nang
         if polarization is not None: self.polarization = polarization
         if self.polarization and self.nang < 181: self.nang = 181
+
+        # Parse whether material is a single key or a list of materials to mix
+        if material is not None: 
+            if isinstance(material, (list, np.ndarray)):
+                if len(material) ==  1:
+                    self.material = material[0]
+                else:
+                    self.material = material
+            else:
+                self.material = material
+
+        # Make sure mfrac is also set when using providing multiple materials
+        if isinstance(material, (list, np.ndarray)):
+            if mfrac is None or len(material) != len(mfrac):
+                raise ValueError(f'{utils.color.red}Make sure to set --mfrac'+\
+                    f' when providing multiple materials{utils.color.none}')
+
+            # Make sure all mass fractions add up to 1
+            if np.sum(mfrac) != 1:
+                raise ValueError(
+                    f'mass fractions should add up to 1 but {mfrac = }')
+
+        # Make sure porosity is betwen 0 and 1
+        if porosity < 0 or porosity >= 1:
+            raise ValueError(f'Porosity must be between 0 and 1. {porosity = }')
 
         # Use 1 until the parallelization with polarization is fully implemented
         nth = self.nthreads
@@ -300,78 +334,100 @@ class Pipeline:
         utils.print_("Calculating dust opacities ...\n", bold=True)
 
         # Initialize a Dust object and set its wavelenght grid to the pipeline's
-        mix = dustmixer.Dust()
-        mix.pb = pb
-        mix.set_lgrid(self.lmin, self.lmax, self.nlam)
-        mix.scatmatrix = self.polarization
+        dust = dustmixer.Dust()
+        dust.amin = self.amin
+        dust.amax = self.amax
+        dust.na = self.na
+        dust.nang = self.nang
+        dust.scatmatrix = self.polarization
+        dust.pb = pb
+
+        # Create a wavelength grid
+        dust.set_lgrid(self.lmin, self.lmax, self.nlam)
 
         # Create a dust grain size grid
         self.a_dist = np.logspace(
             np.log10(self.amin), np.log10(self.amax), self.na)
 
-        # Source code location where optical constants .lnk are stored
+        # Source code location where the optical constants .lnk are stored
         pathnk = Path(source_dir/'dustmixer/nk')
 
         # Make sure the source n k tables are accesible. If not, download
-        if not utils.file_exists(
-            f'{pathnk}/astrosil-Draine2003.lnk', raise_=False):
+        if not utils.file_exists(f'{pathnk}/astrosil-Draine2003.lnk', 
+            raise_=False):
 
             pathnk = 'https://raw.githubusercontent.com/jzamponi/'+\
                 'utils/main/opacity_tables'
 
-        if self.material == 's':
-            mix.name = 'Silicate'
-            mix.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
-            if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+        # Set predefined dust materials
+        if self.material in ['s', 'sil']:
+            utils.print_('Using silicate as dust material')
+            dust.name = 'Silicate'
+            dust.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
+            if show_nk: dust.plot_nk(savefig=savefig)
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
         
-        elif self.material == 'g':
-            mix.name = 'Graphite'
-            mix.set_nk(f'{pathnk}/c-gra-Draine2003.lnk')
-            if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+        elif self.material in ['g', 'gra']:
+            utils.print_('Using graphite as dust material')
+            dust.name = 'Graphite'
+            dust.set_nk(f'{pathnk}/c-gra-Draine2003.lnk')
+            if show_nk: dust.plot_nk(savefig=savefig)
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
         
-        elif self.material == 'o':
-            mix.name = 'Organics'
-            mix.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
-            if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+        elif self.material in ['o', 'org']:
+            utils.print_('Using refractory organics as dust material')
+            dust.name = 'Organics'
+            dust.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
+            if show_nk: dust.plot_nk(savefig=savefig)
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
-        elif self.material == 'p':
-            mix.name = 'Pyroxene-Mg70'
-            mix.set_nk(f'{pathnk}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
-            mix.set_density(3.01, cgs=True)
-            if show_nk: mix.plot_nk(savefig=savefig)
-            mix.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+        elif self.material in ['p', 'pyr']:
+            utils.print_('Using pyroxene (Mg70) as dust material')
+            dust.name = 'Pyroxene-Mg70'
+            dust.set_nk(f'{pathnk}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
+            dust.set_density(3.01, cgs=True)
+            if show_nk: dust.plot_nk(savefig=savefig)
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
-        elif self.material == 'sg':
-            sil = copy.deepcopy(mix)
-            gra = copy.deepcopy(mix)
+        elif self.material in ['t', 'tro']:
+            utils.print_('Using troilite as dust material')
+            dust.name = 'Troilite'
+            dust.set_nk(f'{pathnk}/fes-Henning1996.lnk', get_dens=False)
+            dust.set_density(4.83, cgs=True)
+            if show_nk: dust.plot_nk(savefig=savefig)
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
+
+        elif self.material in ['i', 'ice']:
+            utils.print_('Using water ice as dust material')
+            dust.name = 'Ice'
+            dust.set_nk(f'{pathnk}/h2o-w-Warren2008.lnk', get_dens=False)
+            dust.set_density(0.92, cgs=True)
+            if show_nk: dust.plot_nk(savefig=savefig)
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
+
+        elif self.material in ['sg', 'silgra']:
+            utils.print_('Creating a mix of silicate and graphite')
+            sil = copy.deepcopy(dust)
+            gra = copy.deepcopy(dust)
             sil.name = 'Silicate'
             gra.name = 'Graphite'
 
             sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
             gra.set_nk(f'{pathnk}/c-gra-Draine2003.lnk')
-            if show_nk: sil.plot_nk(savefig=savefig)
-            if show_nk: gra.plot_nk(savefig=savefig)
+            [d.plot_nk(savefig=savefig) for d in [sil, gra] if show_nk]
 
-            sil.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
-            gra.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+            sil.get_opacities(self.a_dist, self.q, self.nang, nth)
+            gra.get_opacities(self.a_dist, self.q, self.nang, nth)
 
             # Sum the opacities weighted by their mass fractions
-            mix = sil * 0.625 + gra * 0.375
+            dust = sil * 0.625 + gra * 0.375
 
-        elif self.material == 'sgo':
-            mix.name = 'Sil-Gra-Org'
-            sil = copy.deepcopy(mix)
-            gra = copy.deepcopy(mix)
-            org = copy.deepcopy(mix)
+        elif self.material in ['sgo', 'silgraorg']:
+            utils.print_('Creating a mix of silicate, graphite and organics.')
+            dust.name = 'Sil-Gra-Org'
+            sil = copy.deepcopy(dust)
+            gra = copy.deepcopy(dust)
+            org = copy.deepcopy(dust)
             sil.name = 'Silicate'
             gra.name = 'Graphite'
             org.name = 'Organics'
@@ -379,17 +435,13 @@ class Pipeline:
             sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
             gra.set_nk(f'{pathnk}/c-gra-Draine2003.lnk')
             org.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
-            if show_nk: sil.plot_nk(savefig=savefig)
-            if show_nk: gra.plot_nk(savefig=savefig)
-            if show_nk: org.plot_nk(savefig=savefig)
+            [d.plot_nk(savefig=savefig) for d in [sil, gra, org] if show_nk]
 
-            sil.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
-            gra.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
-            org.get_opacities(
-                a=self.a_dist, q=self.q, nang=self.nang, nproc=nth)
+            sil.get_opacities(self.a_dist, self.q, self.nang, nth)
+            gra.get_opacities(self.a_dist, self.q, self.nang, nth)
+            org.get_opacities(self.a_dist, self.q, self.nang, nth)
 
+            # This type of mixing weight the opacities with their mass fractions
             mf_sil = 0.625
             mf_gra = 0.375
 
@@ -402,41 +454,118 @@ class Pipeline:
                 mf_org = 0
 
             # Sum the opacities weighted by their mass fractions
-            mix = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
+            dust = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
 
         elif self.material == 'dsharp':
-            utils.not_implemented('Opacity: DSHARP')
+            utils.print_('Creating DSHARP mix: water ice (20%), '+\
+                'silicate (33%), troilite (7.4%), organics (39.6%)')
+
+            dust.name = 'DSHARP'
+            ice = copy.deepcopy(dust)
+            sil = copy.deepcopy(dust)
+            tro = copy.deepcopy(dust)
+            org = copy.deepcopy(dust)
+            ice.name = 'WaterIce'
+            sil.name = 'Silicate'
+            tro.name = 'Troilite'
+            org.name = 'Organics'
+
+            ice.set_nk(f'{pathnk}/h2o-w-Warren2008.lnk')
+            sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
+            tro.set_nk(f'{pathnk}/fes-Henning1996.lnk')
+            org.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
+            [d.plot_nk(savefig=savefig) for d in [ice,sil,tro,org] if show_nk]
+
+            # Set the individual material densities
+            ice.set_density(0.92)
+            sil.set_density(3.30)
+            tro.set_density(4.83)
+            org.set_density(1.50)
+
+            # Set the individual mass fractions
+            ice.set_mfrac(0.2000)
+            sil.set_mfrac(0.3291)
+            tro.set_mfrac(0.0743)
+            org.set_mfrac(0.3966)
+
+            # Brugemman Mixing of the optical constants
+            dust.mix(
+                comps=[ice, sil, tro, org], 
+                rule=self.mixing, 
+                porosity=self.porosity,
+            )
+
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
+
+            # Convert the new mixed material to opacities
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
         elif self.material == 'diana':
             utils.not_implemented('Opacity: DIANA')
     
         else:
-            try:
-                mix.name = self.material.split('/')[-1].split('.')[0]
-                mix.set_nk(path=self.material, skip=1, get_dens=True)
-                if show_nk: mix.plot_nk(savefig=savefig)
-                self.material = mix.name
+            if isinstance(self.material, str):
+                # Use a single user provided nk table
+                try:
+                    dust.name = utils.basename(self.material)
+                    utils.print_(f'Creating opacities for {dust.name}')
+                    dust.set_nk(path=self.material, skip=1, get_dens=True)
+                    self.material = dust.name
+                    if show_nk:
+                        dust.plot_nk(savefig=savefig)
 
-            except Exception as e:
-                utils.print_(e, red=True)
-                raise ValueError(f'Material = {self.material} not found.')
+                except Exception as e:
+                    utils.print_(e, red=True)
+                    raise ValueError(f'Material = {self.material} not found.')
+
+            else:
+                # Set several user provided nk tables
+                material = [utils.basename(i) for i in self.material]
+                utils.print_(
+                    f'Creating opacities for {" and ".join(material)}')
+                comps = []
+
+                for i, m in enumerate(self.material):
+                    d = copy.deepcopy(dust)
+                    d.name = material[i]
+                    d.set_nk(path=m, skip=1, get_dens=True)
+                    d.set_mfrac(self.mfrac[i])
+                    comps.append(d)
+                    if show_nk: 
+                        d.plot_nk(savefig=savefig)
+
+                # Overwrite list of materials with a new name
+                dust.name = 'NewMixture'
+                self.material = dust.name
+
+                dust.mix(
+                    comps=comps,
+                    rule=self.mixing,
+                    porosity=self.porosity,
+                )
+                if show_nk: 
+                    dust.plot_nk(savefig=savefig)
+
+            # Convert the new material to opacities
+            dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
         if show_z12z11:
-            mix.plot_z12z11(self.lam, self.a_dist, self.nang)
+            dust.plot_z12z11(self.lam, self.a_dist, self.nang)
 
         if show_opac or savefig is not None:
-            mix.plot_opacities(show=show_opac, savefig=savefig)
+            dust.plot_opacities(show=show_opac, savefig=savefig)
 
         if show_dust_eff:
-            mix.plot_efficiencies()
+            dust.plot_efficiencies()
 
-        mix.write_opacity_file(name=self._get_opac_name(self.csubl))
+        dust.write_opacity_file(name=self._get_opac_name(self.csubl))
 
         if self.alignment:
-            mix.write_align_factor(name=self._get_opac_name(self.csubl))
+            dust.write_align_factor(name=self._get_opac_name(self.csubl))
 
         # Store the current dust opacity in the pipeline instance
-        self.kappa = mix._get_kappa_at_lam(self.lam) 
+        self.kappa = dust._get_kappa_at_lam(self.lam) 
 
         # Register the pipeline step 
         self.steps.append('dustmixer')
@@ -939,7 +1068,7 @@ class Pipeline:
                     # Download the script if a URL is provided
                     utils.download_file(script)
 
-                script_name = script.split('/')[-1]
+                script_name = utils.basename(script)
                 script = synobs.CasaScript(self.lam)
                 script.read(script_name)
 

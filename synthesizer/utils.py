@@ -71,6 +71,14 @@ def print_(string, verbose=True, bold=False, red=False, blue=False, green=False,
             print(f"[{fname}] {string}", flush=True, 
                 *args, **kwargs)
 
+def basename(path, dot=True):
+    """ Trim the trailing path from full path to leave the filename alone """
+    if '/' in path:
+        path = path.split('/')[-1]
+        if dot and '.' in path:
+            path = path.split('.')[0]
+
+    return path
 
 def not_implemented(msg=''): 
     raise NotImplementedError(
@@ -158,7 +166,8 @@ def download_file(url, msg=None, verbose=True, *args, **kwargs):
             *args, **kwargs)
 
     if 'github' in url and 'raw' not in url:
-        raise ValueError("URLs of files from Github must come in raw format.")
+        raise ValueError("URLs of files from GitHub must come in raw format."+\
+            ' Consider adding ?raw=true at the end of the url.')
     
     import requests
 

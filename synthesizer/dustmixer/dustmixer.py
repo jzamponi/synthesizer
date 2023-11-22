@@ -41,14 +41,16 @@ class Dust():
     """ Dust object. Defines the properties of a dust component. """
     verbose = False
 
-    def __init__(self, name='', scatmatrix=False):
+    def __init__(self, name='', n=[], k=[], dens=0, l=None, 
+            scatmatrix=False, pb=True):
+
         self.name = name
-        self.l = []
-        self.n = []
-        self.k = []
+        self.l = np.logspace(-1, 5, 200) * u.micron.to(u.cm) if l is None else l
+        self.n = n * np.ones(self.l.shape) if np.isscalar(n) else n
+        self.k = k * np.ones(self.l.shape) if np.isscalar(k) else k
+        self.dens = dens
         self.mf = 0
         self.vf = 0
-        self.dens = 0
         self.mass = 0
         self.mf_all = []
         self.Qext = None
@@ -57,10 +59,9 @@ class Dust():
         self.kext = None
         self.ksca = None
         self.kabs = None
-        self.nlam = None
+        self.nlam = self.l.size
         self.scatmatrix = scatmatrix
-        self.l = np.logspace(-1, 5, 200) * u.micron.to(u.cm)
-        self.pb = True
+        self.pb = pb
 
     def __str__(self):
         print(f'{self.name}')
@@ -113,7 +114,7 @@ class Dust():
         dust.z33 = self.z33 * mass_fraction
         dust.z34 = self.z34 * mass_fraction
         dust.z44 = self.z44 * mass_fraction
-        dust.mf = mass_fraction
+        dust.set_mfrac(mass_fraction)
         dust.mf_all.append(mass_fraction)
 
         return dust
@@ -130,7 +131,7 @@ class Dust():
         """ Division of Dust objects by scalars """
         return self * (1 / other)
 
-    def check_mass_fractions(self):
+    def check_mfrac(self):
         if np.sum(self.mf_all) != 1:
             raise ValueError(
                 f'Mass fractions should add up to 1. Values are {self.mf_all}') 
@@ -141,9 +142,9 @@ class Dust():
         """ Set the bulk density of the dust component. """
         self.dens = dens if cgs else dens * (u.kg/u.m**3).to(u.g/u.cm**3)
     
-    def set_volume_fraction(self, volume_fraction):
-        """ Set the volume fraction of the dust component. """
-        self.vf = vf
+    def set_mfrac(self, mf):
+        """ Set the mass fraction of the dust component. """
+        self.mf = mf
 
     def set_lgrid(self, lmin, lmax, nlam):
         """ Set the wavelength grid for the optical constants and opacities """
@@ -236,53 +237,98 @@ class Dust():
         self.n = self.interpolate(self.l_nk, self.n, at=self.l)
         self.k = self.interpolate(self.l_nk, self.k, at=self.l)
         
-    def mix(self, other):
+    def mix(self, comps, rule='bruggeman', porosity=0):
         """
             Mix two dust components using the bruggeman rule. 
-
-            *** This feature is currently incomplete. ***
         """
+
+        rule = {'b': 'bruggeman', 'mg': 'maxwell-garnett'}[rule]
     
-        utils.not_implemented('Bruggeman Mixing')
+        utils.print_(f'Mixing materials using the {rule} rule')
+    
+        # If just one other material is given, mix with itself
+        if isinstance(comps, Dust): comps = [self, comps]
 
-        # Creates a new Dust instance to contain the mixed optical constants
-        mixture = Dust(self)
-        mixture.name = " + ".join([self.name,other.name])
+        # Mix the optical constants for every wavelenthg
+        if rule in ['b', 'bruggeman']:
+            self.n, self.k, self.dens = self.bruggeman_mixing(comps)
 
-        # Apply the Bruggeman rule for n & k mixing
-        mixture.n, mixture.k = self.bruggeman_mixing([self.vf, other.vf])
+        elif rule in ['mg', 'maxwell-garnett']:
+            self.n, self.k, self.dens = self.maxwell_garnett_mixing(comps)
 
-        mixture.dens = np.dot([self.dens, other.dens], [self.vf, other.vf])
+        # Add porosity (i.e., mix this new mixture once again with vacuum)
+        if porosity > 0:
+            utils.not_implemented('Porosity is momentarily disabled.')
+            vacuum = Dust(n=1, k=0, dens=0, name='vacuum')
+            vacuum.set_mfrac(porosity)
+            self.set_mfrac(1 - porosity)
+            self.dens *= 1 - porosity
+            self.n, self.k, _ = self.mix(vacuum, rule='mg')
 
-        return mixture
-
-    def bruggeman_mixing(self, vf):
+    def bruggeman_mixing(self, comps):
         """ This function explicity mixes the n & k indices using the 
             Bruggeman mixing rule. 
-            Receives: list of volume fractions
+            Receives: list of dust objects
             Returns: (n,k)
         """
         from mpmath import findroot
 
-        # Let epsilon = m^2 = (n+ik)^2
-        eps = np.array([ 
-                [complex(n,k)**2 for (n,k) in zip(self.n1, self.k)], 
-                [complex(n,k)**2 for (n,k) in zip(self.n2, self.k)]
-        ])
-        
-        # Let f_i be the vol. fractions of each material
-        f_i = np.array(vf)
+        # Mean density of the mixture
+        dens = 1 / np.sum([i.mf / i.dens for i in comps])
+
+        # Convert mass fractions to volume fractions
+        vfrac = dens * np.array([i.mf / i.dens for i in comps]) 
 
         # Iterate over wavelenghts
         eps_mean = np.empty(np.shape(self.l)).astype('complex')
+
         for i, l in enumerate(self.l):
+
+            # List the epsilon = m^2 = (n+ik)^2 for all compositions
+            eps = np.array([complex(c.n[i], c.k[i])**2 for c in comps])
+
             # Define the expresion for mixing and solve for eps_mean
-            expression = lambda x: sum(f_i * ((eps[:,i]-x) / (eps[:,i] + 2*x)))
-            eps_mean[i] = complex(findroot(expression, complex(0.5, 0.5)))
+            function = lambda x: sum(vfrac * ((eps - x) / (eps + 2 * x)))
+            eps_mean[i] = complex(findroot(function, complex(0.5, 0.5)))
         
         eps_mean = np.sqrt(eps_mean)
 
-        return eps_mean.real.squeeze(), eps_mean.imag.squeeze()
+        return eps_mean.real.squeeze(), eps_mean.imag.squeeze(), dens
+
+    def maxwell_garnett_mixing(self, comps):
+        """ This function explicity mixes the n & k indices using the 
+            Maxwell-Garnett mixing rule. 
+            Receives: list of dust objects
+            Returns: (n,k)
+        """
+        from mpmath import findroot
+
+        # Mean density of the mixture
+        dens = 1 / np.sum(
+            [i.mf / i.dens if i.dens != 0 else i.mf for i in comps])
+
+        # Convert mass fractions to volume fractions
+        vfrac = dens * np.array(
+            [i.mf / i.dens if i.dens != 0 else i.mf for i in comps]) 
+
+        # Iterate over wavelenghts
+        eps_mean = np.empty(np.shape(self.l)).astype('complex')
+
+        for i, l in enumerate(self.l):
+
+            # List the epsilon = m^2 = (n+ik)^2 for all compositions
+            eps = np.array([complex(c.n[i], c.k[i])**2 for c in comps])
+
+            eps_m = eps[0]
+            eps_i = eps[1:]
+            f_i = vfrac[1:]
+            beta_i = 3 * eps_m / (eps_i + 2 * eps_m)
+            eps_mean[i] = ((1-f_i.sum()) * eps_m + (f_i * beta_i * eps_i).sum()) / \
+                (1 - f_i.sum() + (f_i * beta_i).sum())
+        
+        eps_mean = np.sqrt(eps_mean)
+
+        return eps_mean.real.squeeze(), eps_mean.imag.squeeze(), dens
         
     def get_efficiencies(self, a, nang=3, algorithm='bhmie', coat=None, 
             verbose=True, parallel_counter=0):
@@ -415,7 +461,7 @@ class Dust():
 
         
     def get_opacities(self, a=np.logspace(-1, 2, 100), q=-3.5, 
-            algorithm='bhmie', nang=2, nproc=1):
+            nang=2, nproc=1, algorithm='bhmie'):
         """ 
             Convert the dust efficiencies into dust opacities by integrating 
             them over a range of grain sizes. Assumes grain sizes are given in
