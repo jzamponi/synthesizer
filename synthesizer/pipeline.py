@@ -104,8 +104,9 @@ class Pipeline:
             source='sphng', bbox=None, ncells=100, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=False, show_particles=False, 
-            alignment=False, cmap=None, rin=None, rout=None, rc=None, h0=None,
-            flare=None, mdisk=None,
+            alignment=False, cmap=None, rin=None, rout=None, rc=None, r0=None, 
+            h0=None, alpha=None, flare=None, mdisk=None, r_rim=None, 
+            r_gap=None, w_gap=None, dr_gap=None, rho0=None, 
         ):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
@@ -118,9 +119,16 @@ class Pipeline:
         self.rin = rin * u.au.to(u.cm) if rin is not None else rin
         self.rout = rout * u.au.to(u.cm) if rout is not None else rout
         self.rc = rc * u.au.to(u.cm) if rc is not None else rc
+        self.r0 = r0 * u.au.to(u.cm) if r0 is not None else r0
         self.h0 = h0 * u.au.to(u.cm) if h0 is not None else h0
         self.mdisk = mdisk * u.Msun.to(u.g) if mdisk is not None else mdisk
+        self.r_rim = r_rim * u.au.to(u.cm) if r_rim is not None else r_rim
+        self.r_gap = r_gap * u.au.to(u.cm) if r_gap is not None else r_gap
+        self.w_gap = w_gap * u.au.to(u.cm) if w_gap is not None else w_gap
+        self.dr_gap = dr_gap * u.au.to(u.cm) if dr_gap is not None else dr_gap
+        self.alpha = alpha 
         self.flare = flare 
+        self.rho0 = rho0
 
         # Make sure the model temp is read when c-sublimation is enabled
         if self.csubl > 0 and not temperature:
@@ -148,9 +156,16 @@ class Pipeline:
                 rin=self.rin, 
                 rout=self.rout,
                 rc=self.rc, 
+                r0=self.r0, 
                 h0=self.h0,
+                alpha=self.alpha,
                 flare=self.flare,
                 mdisk=self.mdisk,
+                r_rim=self.r_rim,
+                r_gap=self.r_gap,
+                w_gap=self.w_gap,
+                dr_gap=self.dr_gap,
+                rho0=self.rho0, 
             )
             
             # Create a model density grid 
@@ -312,8 +327,8 @@ class Pipeline:
                 self.material = material
 
         # Make sure mfrac is also set when using providing multiple materials
-        if isinstance(material, (list, np.ndarray)):
-            if mfrac is None or len(material) != len(mfrac):
+        if isinstance(self.material, (list, np.ndarray)):
+            if mfrac is None or len(self.material) != len(mfrac):
                 raise ValueError(f'{utils.color.red}Make sure to set --mfrac'+\
                     f' when providing multiple materials{utils.color.none}')
 

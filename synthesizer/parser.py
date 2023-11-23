@@ -42,7 +42,9 @@ def synthesizer():
 
     exc_grid = parser.add_mutually_exclusive_group() 
     exc_grid.add_argument('--model', action='store', default=None, 
-        help='Keyword for a predefined density model.')
+        help='Keyword for a predefined density model.', 
+        choices=['constant', 'plaw', 'pcore', 'ppdisk', 'ppdisk-gap-rim', 
+                'l1544', 'filament', 'user'])
 
     exc_grid.add_argument('--sphfile', action='store', default=None, 
         help='Name of the input SPH file (snapshot from a particle-based code')
@@ -68,14 +70,35 @@ def synthesizer():
     parser.add_argument('--rc', action='store', type=float, default=None, 
         help='Size of the model characteristic radius in au')
 
+    parser.add_argument('--r0', action='store', type=float, default=None, 
+        help='Size of the radius to set h0 in au (if model is ppdisk)')
+
     parser.add_argument('--h0', action='store', type=float, default=None, 
-        help='Size of the model scale height in au')
+        help='Size of the model scale height in au (if model is ppdisk)')
+
+    parser.add_argument('--alpha', action='store', type=float, default=None, 
+        help='Slope of the inner surface density (if model is ppdisk, l1544 or plaw)')
+
+    parser.add_argument('--flare', action='store', type=float, default=None, 
+        help='Flaring parameter (if model is ppdisk)')
 
     parser.add_argument('--mdisk', action='store', type=float, default=None, 
         help='Gas disk mass in Msun (if model is ppdisk)')
 
-    parser.add_argument('--flare', action='store', type=float, default=None, 
-        help='Flaring parameter (if model is ppdisk)')
+    parser.add_argument('--r_rim', action='store', type=float, default=None, 
+        help='Size of the inner rim radius in au (if model is ppdisk-gap-rim)')
+
+    parser.add_argument('--r_gap', action='store', type=float, default=None, 
+        help='Radius at which to create a gap in au (if model is ppdisk-gap-rim)')
+
+    parser.add_argument('--w_gap', action='store', type=float, default=None, 
+        help='Width of the gap in au (if model is ppdisk-gap-rim)')
+
+    parser.add_argument('--dr_gap', action='store', type=float, default=None, 
+        help='Density reduction factor within the gap (if model is ppdisk-gap-rim)')
+
+    parser.add_argument('--rho0', action='store', type=float, default=None, 
+        help='Central core density (within rc) in cgs (if model is pcore or l1544)')
 
     parser.add_argument('--bbox', action='store', type=float, default=None, 
         help='Size of the half-lenght of the bounding box in au.')
@@ -291,7 +314,7 @@ def synthesizer():
     parser.add_argument('--dry', action='store_true', default=False, 
         help='Run the Synthesizer in dry mode: only prints the arguments given.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.8')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.9')
 
     
 
@@ -326,8 +349,10 @@ def synthesizer():
             show_3d=cli.show_grid_3d, vector_field=cli.vector_field, 
             tau=cli.tau, show_particles=cli.show_particles, 
             alignment=cli.alignment, cmap=cli.cmap,
-            rin=cli.rin, rout=cli.rout, rc=cli.rc, h0=cli.h0, 
-            flare=cli.flare, mdisk=cli.mdisk,
+            rin=cli.rin, rout=cli.rout, rc=cli.rc, r0=cli.r0, 
+            h0=cli.h0, alpha=cli.alpha, flare=cli.flare, mdisk=cli.mdisk,
+            r_rim=cli.r_rim, r_gap=cli.r_gap, w_gap=cli.w_gap, 
+            dr_gap=cli.dr_gap, rho0=cli.rho0,
         )
 
     # Generate the dust opacity tables
@@ -342,7 +367,7 @@ def synthesizer():
             na=cli.na,
             q=cli.q,
             nang=cli.nang,
-            polarization=False,
+            polarization=cli.polarization,
             show_nk=cli.show_nk, 
             show_z12z11=cli.show_z12z11,
             show_dust_eff=cli.show_dust_eff, 
