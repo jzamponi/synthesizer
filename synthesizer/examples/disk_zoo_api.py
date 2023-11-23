@@ -17,6 +17,7 @@
  
 """
 
+import os
 from pathlib import Path
 from synthesizer import utils
 from synthesizer.pipeline import Pipeline

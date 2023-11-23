@@ -314,7 +314,7 @@ def synthesizer():
     parser.add_argument('--dry', action='store_true', default=False, 
         help='Run the Synthesizer in dry mode: only prints the arguments given.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.9')
+    parser.add_argument('--version', action='version', version='%(prog)s 1.0.0')
 
     
 

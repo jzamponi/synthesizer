@@ -11,11 +11,11 @@
 basedir="$HOME/testdir/"
 
 # Define some parameter grids
-m=( "1e-3" "5e-5" )
+m=( "1e-3" "1e-5" )
 mass=( "hm" "lm" )
 flare=( "0" "0.5" "1" )
-s=( "5" "0.5" )
-sett=( "ns" "s" )
+s=( "0.5" "5" )
+sett=( "s" "ns" )
 incl=( "75" "90" )
 
 i=0
@@ -32,7 +32,7 @@ do
             for ii in "${incl[@]}"
             do
                 # Create and enter to the output folder
-                working_dir=$basedir/${mi}/a1/b${bi}/${si}/trad/L2/sg/a100um/1.3mm/${ii}deg
+                working_dir=$basedir/${mi}/a1/b${bi}/${si}/trad/L2/sg/a10um/1.3mm/${ii}deg
                 mkdir --parents --verbose $working_dir
                 cd $working_dir
                 echo -e "\n\n\nEntering $PWD"
@@ -44,15 +44,16 @@ do
                     --mdisk ${m[i]} 
                     --flare ${flare[j]} 
                     --h0 ${s[k]} 
-                    --ncells 400 
+                    --ncells 100 
                     --bbox 200 
                     --monte-carlo 
-                    --nphot 1e7 
+                    --nphot 1e5 
                     --raytrace 
                     --npix 400 
                     --sizeau 400 
                     --lam 1300 
-                    --amax 100 
+                    --amax 10 
+                    --na 50
                     --material sg 
                     --incl ${incl[l]} 
                     --use-template 

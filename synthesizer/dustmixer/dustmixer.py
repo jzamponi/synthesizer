@@ -242,7 +242,9 @@ class Dust():
             Mix two dust components using the bruggeman rule. 
         """
 
-        rule = {'b': 'bruggeman', 'mg': 'maxwell-garnett'}[rule]
+        #rule = {'b': 'bruggeman', 'mg': 'maxwell-garnett'}[rule]
+        if rule == 'b': rule = 'bruggeman'
+        elif rule == 'mg': rule = 'maxwell-garnett'
     
         utils.print_(f'Mixing materials using the {rule} rule')
     

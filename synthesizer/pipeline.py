@@ -50,7 +50,7 @@ class Pipeline:
         self.material = material
         self.mfrac = mfrac
         self.porosity = porosity
-        self.mixing = None
+        self.mixing = mixing
         self.nphot = int(nphot)
         self.nthreads = int(nthreads)
         self.npix = None
@@ -306,13 +306,13 @@ class Pipeline:
         """
 
         if mfrac is not None: self.mfrac = mfrac
-        if porosity is not None: self.porosity = porosity
+        self.porosity = 0 if porosity is None else porosity
         if mixing is not None: self.mixing = mixing.lower()
-        if self.amin is not None: self.amin = amin
-        if self.amax is not None: self.amax = amax
-        if self.na is not None: self.na = na
-        if self.q is not None: self.q = q
-        if self.nang is not None: self.nang = nang
+        if amin is not None: self.amin = amin
+        if amax is not None: self.amax = amax
+        if na is not None: self.na = na
+        if q is not None: self.q = q
+        if nang is not None: self.nang = nang
         if polarization is not None: self.polarization = polarization
         if self.polarization and self.nang < 181: self.nang = 181
 
@@ -338,7 +338,7 @@ class Pipeline:
                     f'mass fractions should add up to 1 but {mfrac = }')
 
         # Make sure porosity is betwen 0 and 1
-        if porosity < 0 or porosity >= 1:
+        if self.porosity < 0 or self.porosity >= 1:
             raise ValueError(f'Porosity must be between 0 and 1. {porosity = }')
 
         # Use 1 until the parallelization with polarization is fully implemented

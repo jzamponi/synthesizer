@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astro-synthesizer"
-version = "0.0.9"
+version = "1.0.0"
 description = "Generate astronomical synthetic observations from the command-line "
 readme = "README.md"
 authors = [{ name = "Joaquin Zamponi", email = "jzamponi@mpe.mpg.de" }]
@@ -24,10 +24,14 @@ dependencies = [
     "mpmath",
     "progressbar2",
     "aplpy",
-    "mayavi",
     "h5py",
 ]
 requires-python = ">=3.8"
+
+[project.optional-dependencies]
+gui = [
+    "mayavi",
+]
 
 [project.urls]
 Homepage = "https://github.com/jzamponi/synthesizer"
