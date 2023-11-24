@@ -20,9 +20,17 @@ class CustomModel(BaseModel):
         self.vx, self.vy and self.vz.
     """
 
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+
     @property
     def dens(self):
         # Example: create a sphere
-        r = np.sqrt(x*x + y*y + z*z)
-        return 1 / r
+        self.r = np.sqrt(self.x**2 + self.y**2 + self.z**2)
+        return 1 / self.r
+
+    @property
+    def temp(self):
+        # Example: radial temperature profile
+        return 100 / self.r
 

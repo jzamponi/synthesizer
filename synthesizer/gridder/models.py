@@ -64,12 +64,14 @@ class BaseModel(ABC):
 class Constant(BaseModel):
     """ Box with a constant density """
 
-    def __init__(self, x, y, z, field):
+    def __init__(self, x, y, z, field, rho0):
         super().__init__(x, y, z, field)
+        
+        self.rho0 = 1e-12 if rho0 is None else rho0
 
     @property
     def dens(self):
-        return 1e-12 * np.ones(self.x.shape)
+        return self.rho0 * np.ones(self.x.shape)
 
     @property
     def temp(self):
@@ -86,10 +88,7 @@ class PowerLaw(BaseModel):
 
     @property
     def dens(self):
-        x = self.x
-        y = self.y
-        z = self.z
-        self.r = np.sqrt(x**2 + y**2 + z**2)
+        self.r = np.sqrt(self.x**2 + self.y**2 + self.z**2)
         self.plotmin = 1e-19
         return self.rho0 * (self.r / self.rc)**(-self.alpha)
 
@@ -107,12 +106,9 @@ class PrestellarCore(BaseModel):
 
     @property
     def dens(self):
-        x = self.x
-        y = self.y
-        z = self.z
         rho_c = 1.07e-15
-        r = np.sqrt(x**2 + y**2 + z**2)
-        return rho_c * self.rc**2 / (r**2 + self.rc**2)
+        self.r = np.sqrt(self.x**2 + self.y**2 + self.z**2)
+        return rho_c * self.rc**2 / (self.r**2 + self.rc**2)
 
     @property
     def temp(self):
@@ -129,11 +125,8 @@ class L1544(BaseModel):
 
     @property
     def dens(self):
-        x = self.x
-        y = self.y
-        z = self.z
-        r = np.sqrt(x**2 + y**2 + z**2)
-        return self.rho0 / (1 + (r / self.rc)**self.alpha)
+        self.r = np.sqrt(self.x**2 + self.y**2 + self.z**2)
+        return self.rho0 / (1 + (self.r / self.rc)**self.alpha)
 
     @property
     def temp(self):
@@ -156,19 +149,21 @@ class PPdisk(BaseModel):
         self.rc = 140 * u.au.to(u.cm) if rc is None else rc
         self.h0 = 5 * u.au.to(u.cm) if h0 is None else h0
         self.r0 = 5 * u.au.to(u.cm) if r0 is None else r0
-        self.alpha = 5 * u.au.to(u.cm) if alpha is None else alpha
+        self.alpha = 1 if alpha is None else alpha
         self.flare = 0.3 if flare is None else flare
         self.mdisk = 1e-1 * u.Msun.to(u.g) if mdisk is None else mdisk
 
     @property
     def dens(self):
 
+        # Create temporal shorter vars for ease of writing
         x = self.x
         y = self.y
         z = self.z
         r = np.sqrt(x**2 + y**2)
         r3d = np.sqrt(x**2 + y**2 + z**2)
 
+        # Set star mass in order to change how to calculate scale height
         Mstar = 0 * u.Msun.to(u.g)
         rho_bg = 1e-30
         self.plotmin = rho_bg
@@ -179,12 +174,12 @@ class PPdisk(BaseModel):
         self.T_r = T_0 * (r3d/self.rc)**-T_slope
 
         # Surface density
-        exp_r = np.exp(-(self.rout/self.rc)**(2-alpha)) - \
-                np.exp(-(self.rin/self.rc)**(2-alpha))
+        exp_r = np.exp(-(self.rout/self.rc)**(2-self.alpha)) - \
+                np.exp(-(self.rin/self.rc)**(2-self.alpha))
 
-        sigma_0 = (alpha - 2) * (self.mdisk / 2 / np.pi / self.rc**2) / exp_r
-        sigma_g = sigma_0 * (r/self.rc)**-alpha * \
-                np.exp(-(r/self.rc)**(2-alpha))
+        sigma_0 = (self.alpha - 2) * (self.mdisk / 2 / np.pi / self.rc**2) / exp_r
+        sigma_g = sigma_0 * (r/self.rc)**-self.alpha * \
+                np.exp(-(r/self.rc)**(2-self.alpha))
 
         # If Mstar is set, set scale height from s. speed and kep. vel.
         if Mstar > 0:
@@ -229,7 +224,7 @@ class PPdiskGapRim(BaseModel):
         self.h0 = 5 * u.au.to(u.cm) if h0 is None else h0
         self.r0 = 30 * u.au.to(u.cm) if r0 is None else r0
         self.alpha = 1 if alpha is None else alpha
-        self.flare = 1 if flare is None else flare
+        self.flare = 0.3 if flare is None else flare
         self.mdisk = 1e-3 * u.Msun.to(u.g) if mdisk is None else mdisk
         self.r_rim = 1 * u.au.to(u.cm) if r_rim is None else r_rim
         self.r_gap = 100 * u.au.to(u.cm) if r_gap is None else r_gap
@@ -355,6 +350,32 @@ class SpiralDisk(BaseModel):
     @property
     def temp(self):
         pass
+
+class Streamer(BaseModel):
+    """
+     Gas streamer
+    """
+
+    def __init__(self, x, y, z, field):
+        super().__init__(x, y, z, field)
+    
+        self.rho = 4e-19
+        self.r0 = 0.03 * u.pc.to(u.cm) 
+
+    @property
+    def dens(self):
+        x = self.x
+        y = self.y
+        z = self.z
+        p = 2
+        r = np.sqrt(x**2 + y**2)
+        return self.rho0 / (1 + (r/self.r0)**2)**(p/2)
+
+    @property
+    def temp(self):
+        return 15 * np.ones(self.temp.shape)
+
+
 
 class Filament(BaseModel):
     """

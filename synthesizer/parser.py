@@ -43,8 +43,8 @@ def synthesizer():
     exc_grid = parser.add_mutually_exclusive_group() 
     exc_grid.add_argument('--model', action='store', default=None, 
         help='Keyword for a predefined density model.', 
-        choices=['constant', 'plaw', 'pcore', 'ppdisk', 'ppdisk-gap-rim', 
-                'l1544', 'filament', 'user'])
+        choices=['const', 'plaw', 'pcore', 'ppdisk', 'ppdisk-gap-rim', 
+                'l1544', 'user'])
 
     exc_grid.add_argument('--sphfile', action='store', default=None, 
         help='Name of the input SPH file (snapshot from a particle-based code')
@@ -101,7 +101,7 @@ def synthesizer():
         help='Central core density (within rc) in cgs (if model is pcore or l1544)')
 
     parser.add_argument('--bbox', action='store', type=float, default=None, 
-        help='Size of the half-lenght of the bounding box in au.')
+        help='Size of the half-length of the bounding box in au.')
 
     parser.add_argument('--g2d', action='store', type=float, default=100, 
         help='Set the gas-to-dust mass ratio.')
@@ -289,7 +289,7 @@ def synthesizer():
 
     parser.add_argument('--obsmode', action='store', type=str, default='int',
         choices=['int', 'sd'], 
-        help="Wheter to observe with an radio interferometer or a single-dish.")
+        help="Whether to observe with a radio interferometer or a single-dish.")
     
     parser.add_argument('--telescope', action='store', type=str, default='alma',
         choices=['alma', 'aca', 'vla', 'sma', 'noema', 'atca',  

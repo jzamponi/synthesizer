@@ -16,21 +16,21 @@ kB = const.k_B.cgs.value
 
 class AnalyticalModel():
     def __init__(self, model, bbox, ncells=100, g2d=100, temp=False, nspec=1, 
-            csubl=0, sootline=300, rin=1, rout=200, rc=100, r0=30, h0=10, 
-            alpha=1, flare=1, mdisk=0.001, r_rim=1, r_gap=100, w_gap=5, 
-            dr_gap=1e-5, rho0=1.6e6*m_H2, rflat=2336, 
+            csubl=0, sootline=300, rin=None, rout=None, rc=None, r0=None, h0=None, 
+            alpha=None, flare=None, mdisk=None, r_rim=None, r_gap=None, w_gap=None, 
+            dr_gap=None, rho0=None, rflat=None, 
         ):
         """
         Create an analytical density model indexed by the variable model.
         All quantities should be treated in cgs unless explicitly converted.
         """
 
+        self.ncells = ncells
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
         self.vfield = None
         self.add_temp = temp
         self.model = model 
-        self.ncells = ncells
         self.g2d = g2d
         self.nspec = nspec
         self.csubl = csubl
@@ -99,7 +99,7 @@ class AnalyticalModel():
 
         # Constant density  
         elif self.model == 'constant':          
-            model = models.Constant(x, y, z, field)
+            model = models.Constant(x, y, z, field, rho0)
 
         # Radial power-law 
         elif self.model == 'plaw':
@@ -137,6 +137,11 @@ class AnalyticalModel():
             utils.not_implemented(f'Model: {self.model}')
             model = models.SpiralDisk(x, y, z, field)
 
+        # Streamer 
+        elif self.model == 'streamer':
+            utils.not_implemented(f'Model: {self.model}')
+            model = models.Streamer(x, y, z, field)
+
         # Gas filament 
         elif self.model == 'filament':
             utils.not_implemented(f'Model: {self.model}')
@@ -149,7 +154,7 @@ class AnalyticalModel():
     
         # PPDisk: TW Hya
         elif self.model == 'twhya':
-            #utils.not_implemented(f'Model: {self.model}')
+            utils.not_implemented(f'Model: {self.model}')
             model = models.TWHya(x, y, z, field)
     
         # PPDisk: HD 163296
@@ -299,8 +304,7 @@ class AnalyticalModel():
  
         utils.print_('Writing grain alignment direction file')
  
-        if self.model != 'user':
-            self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
+        self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
  
         with open('grainalign_dir.inp','w+') as f:
             f.write('1\n')
