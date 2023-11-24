@@ -975,7 +975,7 @@ class Pipeline:
             script=None, simobserve=True, clean=True, exportfits=True, 
             obstime=1, resolution=None, obsmode='int', graphic=False, 
             use_template=False, telescope=None, verbose=False, 
-            cmap=None, stretch=None,
+            cmap=None, stretch=None, no_noise=False,
             ):
         """ 
             Prepare the input for the CASA simulator from the RADMC3D output,
@@ -985,17 +985,35 @@ class Pipeline:
         print('')
         utils.print_('Running synthetic observation ...\n', bold=True)
 
-        # Make sure RADMC3D is installed and callable
-        utils.which('casa', msg='It is easy to install. ' +\
-            'Go to https://casa.nrao.edu/casa_obtaining.shtml') 
-
-        # If the observing wavelength is outside the working range of CASA, 
-        # simplify the synthetic obs. to a PSF convolution and thermal noise
-        if self.lam < 400 or self.lam > 4e6:
-
-            utils.print_('Observing wavelength is outside mm/sub-mm range. ')
+        # Warn the user if current lambda differs from that in input rt model
+        model_lambda = fits.getheader('radmc3d_I.fits')['LAMBDA']
+        if self.lam != model_lambda:
             utils.print_(
-                'Limiting the observation to convolution and noise addition.')
+                f'Warning: current lambda ({self.lam}) differs from ' +\
+                f'that in input model radmc3d_I.fits ({model_lambda})', 
+                blue=True)
+
+        # Make sure CASA is installed and callable. If not, bypass it
+        try: 
+            utils.which('casa', msg='It is easy to install. ' +\
+                'Go to https://casa.nrao.edu/casa_obtaining.shtml') 
+
+        except Execption as e:
+            utils.print_(f'{e}. I will set obsmode="convolve"', red=True)
+            obsmode = 'convolve'
+
+        # If the observing wav. is outside the CASA working range, do not use
+        if self.lam < 400 or self.lam > 4e6: 
+            utils.print_('Observing wavelength is outside mm/sub-mm range. ')
+            obsmode = 'convolve' 
+
+        # If obsmode is convolve, do not use CASA.
+        # Simply do PSF convolution and thermal noise.
+        if obsmode == 'convolve':
+
+            utils.print_(
+                'Limiting the observation to convolution' + \
+                ' and noise addition.' if not no_noise else '')
     
             if resolution is not None:
                 self.resolution = resolution
@@ -1006,7 +1024,9 @@ class Pipeline:
 
             img = synobs.SynImage('radmc3d_I.fits')
             img.convolve(self.resolution)
-            img.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+            if not no_noise:
+                img.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+
             img.write_fits('synobs_I.fits')
 
             if self.polarization:

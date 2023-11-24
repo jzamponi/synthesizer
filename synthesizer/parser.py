@@ -287,8 +287,11 @@ def synthesizer():
     parser.add_argument('--resolution', action='store', type=float, default=None,
         help="Set a desired angular resolution in arcseconds.")
 
+    parser.add_argument('--no-noise', action='store_true', default=False,
+        help="Disable the addition of thermal noise to the final image.")
+    
     parser.add_argument('--obsmode', action='store', type=str, default='int',
-        choices=['int', 'sd'], 
+        choices=['int', 'sd', 'convolve'], 
         help="Whether to observe with a radio interferometer or a single-dish.")
     
     parser.add_argument('--telescope', action='store', type=str, default='alma',
@@ -399,7 +402,7 @@ def synthesizer():
             simobserve=not cli.dont_observe, clean=not cli.dont_clean, 
             exportfits=not cli.dont_export, obstime=cli.obs_time,  
             resolution=cli.resolution, obsmode=cli.obsmode, 
-            use_template=cli.use_template, 
+            use_template=cli.use_template, no_noise=cli.no_noise,
             telescope=cli.telescope, verbose=not cli.quiet,
             cmap=cli.cmap, stretch=cli.stretch,
         )
