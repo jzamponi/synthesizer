@@ -184,7 +184,7 @@ def synthesizer():
         action='store_true', default=False, 
         help='Call RADMC3D to raytrace the new grid and plot an image')
 
-    parser.add_argument('--nphot', action='store', type=float, default=1e5,
+    parser.add_argument('--nphot', action='store', type=float, default=1e4,
         help='Set the number of photons for scattering and thermal Monte Carlo')
 
     parser.add_argument('--print-photons', action='store_true', default=False,

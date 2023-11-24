@@ -29,7 +29,7 @@ source_dir = source_path.parent
 class Pipeline:
     
     def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=-3.5, nang=181, 
-            nphot=1e5, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
+            nphot=1e4, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
             dgrowth=False, csubl=0, sootline=300, bbox=None,
             material='s', mfrac=1, porosity=0, mixing='bruggeman', 
             polarization=False, alignment=False, print_photons=False, 
@@ -733,10 +733,10 @@ class Pipeline:
 
         # Make sure there's at least a grid, density and temp. distribution
         utils.file_exists('amr_grid.inp', 
-            msg='You must create a model grid first. Use synthesizer --grid')
+            msg='You must create a model grid first. Use synthesizer -g')
 
         utils.file_exists('dust_density.inp', 
-            msg='You must create a density model first. Use synthesizer --grid')
+            msg='You must create a density model first. Use synthesizer -g')
 
         # Generate only the input files that are not available in the directory
         self.generate_input_files(inpfile=True, mc=True)
@@ -826,10 +826,10 @@ class Pipeline:
 
         # Make sure there's at least a grid, density and temp. distribution
         utils.file_exists('amr_grid.inp', 
-            msg='You must create a model grid first. Use synthesizer --grid')
+            msg='You must create a model grid first. Use synthesizer -g')
 
         utils.file_exists('dust_density.inp', 
-            msg='You must create a density model first. Use synthesizer --grid')
+            msg='You must create a density model first. Use synthesizer -g')
 
         utils.file_exists('dust_temperature.dat',
             msg='You must create a temperature model first. '+\
@@ -985,13 +985,9 @@ class Pipeline:
         print('')
         utils.print_('Running synthetic observation ...\n', bold=True)
 
-        # Warn the user if current lambda differs from that in input rt model
-        model_lambda = fits.getheader('radmc3d_I.fits')['LAMBDA']
-        if self.lam != model_lambda:
-            utils.print_(
-                f'Warning: current lambda ({self.lam}) differs from ' +\
-                f'that in input model radmc3d_I.fits ({model_lambda})', 
-                blue=True)
+        # Make sure input model image exists
+        utils.file_exists('radmc3d_I.fits', 
+            msg='You must create a model image first. Use synthesizer -rt')
 
         # Make sure CASA is installed and callable. If not, bypass it
         try: 
@@ -1006,6 +1002,14 @@ class Pipeline:
         if self.lam < 400 or self.lam > 4e6: 
             utils.print_('Observing wavelength is outside mm/sub-mm range. ')
             obsmode = 'convolve' 
+
+        # Warn the user if current lambda differs from that in input rt model
+        model_lambda = fits.getheader('radmc3d_I.fits')['LAMBDA']
+        if self.lam != model_lambda:
+            utils.print_(
+                f'Warning: current lambda ({self.lam}) differs from ' +\
+                f'input model radmc3d_I.fits ({model_lambda})', 
+                blue=True)
 
         # If obsmode is convolve, do not use CASA.
         # Simply do PSF convolution and thermal noise.
