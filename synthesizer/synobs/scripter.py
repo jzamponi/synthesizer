@@ -29,6 +29,7 @@ class CasaScript():
         self.graphics = 'both'
         self.overwrite = True
         self.polarization = True
+        self.noisy = True
 
         # simobserve
         self.project = 'synobs_data'
@@ -54,7 +55,9 @@ class CasaScript():
         self.seed = lambda: int(random.randint(0, 1000))
 
         # tclean
-        self.vis = f'{self.project}/{self.project}.{self.arrayfile}.noisy.ms'
+        self.vis = f'{self.project}/{self.project}.{self.arrayfile}.ms'
+        if self.noisy:
+            self.vis = self.replace('.ms', '.noisy.ms')
         self.imagename = lambda s: f'{self.project}/clean_{s}'
         self.imsize = 100
         if self.resolution is None:
@@ -276,7 +279,9 @@ class CasaScript():
 
                 # Reset, to keep track in case arrayfile was updated
                 self.vis = \
-                    f'{self.project}/{self.project}.{self.arrayfile}.noisy.ms'
+                    f'{self.project}/{self.project}.{self.arrayfile}.ms'
+                if self.noisy:
+                    self.vis = self.vis.replace('.ms', '.noisy')
 
                 self.mask = self.vis.replace('noisy.ms', 'skymodel')
     

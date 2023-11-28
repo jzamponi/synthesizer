@@ -775,9 +775,9 @@ class Pipeline:
         nx = int(np.cbrt(temp_mc.size))
         temp_mc = temp_mc.reshape((nx, nx, nx))
 
-        # Write the new temperature field to FITS file
+        # Write the new 3D temperature field to FITS file
         utils.write_fits(
-            f'temperature-mc_midplane.fits', 
+            f'temperature-mc.fits', 
             data=temp_mc,
             header=fits.Header({
                 'BTYPE': 'Dust Temperature',
@@ -1093,6 +1093,7 @@ class Pipeline:
                 script.obsmode = obsmode
                 script.telescope = telescope.lower()
                 script.totaltime = f'{obstime}h'
+                script.noisy = not no_noise
                 if script.resolution is not None: script.find_antennalist()
                 script.polarization = self.polarization
                 script.simobserve = simobserve

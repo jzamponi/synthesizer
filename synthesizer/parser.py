@@ -281,7 +281,7 @@ def synthesizer():
     parser.add_argument('--dont-export', action='store_true', default=False,
         help="Don't export tclean's output as a fits image.")
 
-    parser.add_argument('--obs-time', action='store', type=float, default=1,
+    parser.add_argument('--obstime', action='store', type=float, default=1,
         help="Set the observing time in hours. Default is 1h.")
 
     parser.add_argument('--resolution', action='store', type=float, default=None,
@@ -400,7 +400,7 @@ def synthesizer():
         pipeline.synthetic_observation(
             show=cli.show_synobs, script=cli.script, 
             simobserve=not cli.dont_observe, clean=not cli.dont_clean, 
-            exportfits=not cli.dont_export, obstime=cli.obs_time,  
+            exportfits=not cli.dont_export, obstime=cli.obstime,  
             resolution=cli.resolution, obsmode=cli.obsmode, 
             use_template=cli.use_template, no_noise=cli.no_noise,
             telescope=cli.telescope, verbose=not cli.quiet,
