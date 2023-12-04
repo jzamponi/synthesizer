@@ -54,8 +54,12 @@ def synthesizer():
 
     parser.add_argument('--source', action='store', default='sphng', 
         choices=['sphng', 'gizmo', 'gadget', 'arepo', 'phantom', 'nbody6', 
-            'athena', 'zeustw', 'flash', 'enzo', 'ramses'], 
+            'athena++', 'zeustw', 'flash', 'enzo', 'ramses'], 
         help='Name of the code used to generate the inputfile.')
+    
+    parser.add_argument('--geometry', action='store',  default='cartesian',
+        choices=['cartesian', 'spherical'],  
+        help='Defines the geometry of the grid.')
 
     parser.add_argument('--ncells', action='store', type=int, default=100,
         help='Number of cells in every direction')
@@ -317,7 +321,7 @@ def synthesizer():
     parser.add_argument('--dry', action='store_true', default=False, 
         help='Run the Synthesizer in dry mode: only prints the arguments given.')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 1.0.0')
+    parser.add_argument('--version', action='version', version='%(prog)s 1.0.1')
 
     
 
@@ -345,7 +349,7 @@ def synthesizer():
     # Generate the input grid for RADMC3D
     if cli.grid:
         pipeline.create_grid(
-            sphfile=cli.sphfile, amrfile=cli.amrfile, 
+            sphfile=cli.sphfile, amrfile=cli.amrfile, geometry=cli.geometry,
             source=cli.source, model=cli.model, ncells=cli.ncells, 
             g2d=cli.g2d, bbox=cli.bbox, temperature=cli.temperature, 
             render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 

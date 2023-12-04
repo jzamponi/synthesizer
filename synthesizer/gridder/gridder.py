@@ -7,24 +7,15 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 
 from synthesizer.gridder.vector_field import VectorField
-from synthesizer.gridder.sph_reader  import *
-from synthesizer.gridder.amr_reader  import *
+from synthesizer.gridder.hydro_reader import *
 from synthesizer import utils
 
 
 class Grid():
-    """ 
-        Base class for different grid geometries.
-
-        To Do: Abstract tecartesian and spherical grid object methods 
-               using this base class
-    """
-    pass
-
-class CartesianGrid(Grid):
-    def __init__(self, ncells, bbox=None, rout=None, nspec=1, csubl=0, 
-            sootline=300, g2d=100, temp=False, vfield=None):
-        """ 
+    def __init__(self, geometry, ncells, regular=True, bbox=None, 
+            rin=None, rout=None, nspec=1, csubl=0, sootline=300, g2d=100, 
+            temp=False, vfield=None):
+        """
         Create a cartesian grid from a set of 3D points.
 
         The input SPH particle coordinates should be given as cartesian 
@@ -38,16 +29,15 @@ class CartesianGrid(Grid):
         Examples: bbox = [[xmin, xmax], [ymin, ymax], [zmin, zmax]]  
                   bbox = 50 
                   rout = 50
-
         """
 
-        self.cordsystem = 1
-        self.fx = 1
-        self.fy = 1
-        self.fz = 1
-        self.nx = ncells
-        self.ny = ncells
-        self.nz = ncells
+        self.geometry = geometry
+        self.coordsystem = {'cartesian': 1, 'spherical': 100}[geometry]
+        self.regular = True
+        self.fx, self.fy, self.fz = 1, 1, 1
+        self.nx, self.ny, self.nz = ncells, ncells, ncells
+        self.xw, self.yw, self.zw = None, None, None
+        self.xc, self.yc, self.zc = None, None, None
         self.ncells = ncells
         self.dens = np.zeros((self.nx, self.ny, self.nz))
         self.temp = np.zeros((self.nx, self.ny, self.nz))
@@ -71,12 +61,16 @@ class CartesianGrid(Grid):
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
 
     def read_sph(self, filename, source='sphng'):
-        """ Read SPH data. 
+        """ 
+            Read SPH data. 
             Below are defined small interfaces to read in data from SPH codes.
 
             To add new code sources, synthesizer needs (all values in CGS):
                 self.x, self.y, self.z, self.dens and self.temp (optional) 
-         """
+        """
+
+        source = source.lower()
+        self.source_type = 'amr'
 
         # Download the script if a URL is provided
         if 'http' in filename: 
@@ -133,6 +127,7 @@ class CartesianGrid(Grid):
         """ Read AMR data """
 
         source = source.lower()
+        self.source_type = 'amr'
 
         # Download the script if a URL is provided
         if 'http' in filename: 
@@ -140,48 +135,15 @@ class CartesianGrid(Grid):
             filename = filename.split('/')[-1]
 
         utils.print_(f'Reading data from: {filename} | Format: {source}')
+
         if not os.path.exists(filename): 
-            if source != 'zeustw':
-                utils.file_exists(filename,
-                    msg='Input AMR file does not exist')
+            utils.file_exists(filename, msg='Input AMR file does not exist')
 
         if source == 'athena++':
-            utils.not_implemented()
+            self.amr = Athena(filename, self.geometry, self.add_temp, True)
 
         elif source == 'zeustw':
-            # Generate a Data instance
-            data = ZeusTW()
-
-            # Set the coordinate system
-            self.cordsystem = data.cordsystem
-
-            # Read coordinates: x?a are cell edges and x?b are cell centers
-            data.generate_coords(r="z_x1ap", th="z_x2ap", ph="z_x3ap")
-
-            frame = str(filename).zfill(5)
-            data.rho = data.read(f"o_d__{frame}")
-            data.Br = data.read(f"o_b1_{frame}")
-            data.Bth = data.read(f"o_b2_{frame}")
-            data.Bph = data.read(f"o_b3_{frame}")
-            data.Vr = data.read(f"o_v1_{frame}")
-            data.Vth = data.read(f"o_v2_{frame}")
-            data.Vph = data.read(f"o_v3_{frame}")
-
-            data.trim_ghost_cells(field_type='coords', ng=3)
-            data.trim_ghost_cells(field_type='scalar', ng=3)
-            data.trim_ghost_cells(field_type='vector', ng=3)
-            data.LH_to_Gaussian()
-            data.generate_temperature()
-            #data.generate_cartesian()
-
-            self.xc = data.x
-            self.yc = data.y
-            self.zc = data.z
-            self.nx = data.x.size
-            self.ny = data.y.size
-            self.nz = data.z.size
-            self.grid_dens = data.rho * self.g2d
-            self.grid_temp = data.temp
+            utils.not_implemented()
 
         elif source == 'flash':
             utils.not_implemented()
@@ -194,6 +156,21 @@ class CartesianGrid(Grid):
             
         else:
             raise ValueError(f'Source = {source} is currently not supported')
+
+        self.x = self.amr.x
+        self.y = self.amr.y
+        self.z = self.amr.z
+        self.grid_dens = self.amr.rho_g / self.g2d
+
+        if self.add_temp:
+            self.grid_temp = self.sph.temp
+        else:
+            self.grid_temp = np.zeros(self.dens.shape)
+        
+        if self.vfield:
+            self.grid_vx = self.amr.vx
+            self.grid_vy = self.amr.vy
+            self.grid_vz = self.amr.vz
 
     def trim_box(self):
         """ 
@@ -306,8 +283,10 @@ class CartesianGrid(Grid):
     def interpolate(self, field, method='linear', fill='min'):
         """
             Interpolate a set of points in cartesian coordinates along with their
-            values into a rectangular grid.
+            values into a rectangular regular cartesian grid.
         """
+
+        self.regular = True
 
         # Construct the rectangular grid
         rmin = np.min([self.x.min(), self.y.min(), self.z.min()])
@@ -381,39 +360,58 @@ class CartesianGrid(Grid):
             self.grid_vz = interp
 
 
-    def write_grid_file(self, regular=True):
-        """ Write the regular cartesian grid file """
+    def create_grid(self):
+        """
+            This method creates the final cell walls to then be written to file
+    
+            For conversion of grid codes, makes sure cell walls are set and 
+            populates wall centers.
+        """
+
+        if self.xw is None:
+            if self.x is None:
+                raise ValueError('Cells walls xw, yw, zw have not been set')
+            
+            else:
+                # If cell walls are set, compute cell centers
+                if self.xc is None:
+                    self.xw = self.x
+                    self.yw = self.y
+                    self.zw = self.z
+                    self.xc = np.diff(self.xw)
+                    self.yc = np.diff(self.yw)
+                    self.zc = np.diff(self.zw)
+
+        # If cell centers are set, shift them right to set the cell walls
+        if self.xc is not None and regular:
+            dx = np.diff(self.xc)[0]
+            dy = np.diff(self.yc)[0]
+            dz = np.diff(self.zc)[0]
+            self.xw = self.xc + dx
+            self.yw = self.yc + dy
+            self.zw = self.zc + dz
+
+            # Add the missing wall at the beginning of each axis
+            self.xw = np.insert(self.xw, 0, self.xc[0])
+            self.yw = np.insert(self.yw, 0, self.yc[0])
+            self.zw = np.insert(self.zw, 0, self.zc[0])
+
+
+    def write_grid_file(self):
+        """ Write the  grid file """
         with open('amr_grid.inp','w+') as f:
             # iformat
             f.write('1\n')                     
             # Regular grid
-            f.write('0\n')                      
+            f.write(f'{int(not self.regular)}\n')
             # Coordinate system
-            f.write(f'{self.cordsystem}\n')                     
+            f.write(f'{self.coordsystem}\n')                     
             # Gridinfo
             f.write('0\n')                       
-            # Number of cells
+            # incl_x incl_y incl_z: set to 1 if dimension is fully active
             f.write('1 1 1\n')                   
             # Size of the grid
             f.write(f'{self.nx:d} {self.ny:d} {self.nz:d}\n')
-
-            # Shift the cell centers right to set the cell walls
-            if regular:
-                dx = np.diff(self.xc)[0]
-                dy = np.diff(self.yc)[0]
-                dz = np.diff(self.zc)[0]
-                self.xw = self.xc + dx
-                self.yw = self.yc + dy
-                self.zw = self.zc + dz
-
-                # Add the missing wall at the beginning of each axis
-                self.xw = np.insert(self.xw, 0, self.xc[0])
-                self.yw = np.insert(self.yw, 0, self.yc[0])
-                self.zw = np.insert(self.zw, 0, self.zc[0])
-            else:
-                self.xw = self.xc
-                self.yw = self.yc
-                self.zw = self.zc
 
             # Write the cell walls
             for i in self.xw:
@@ -478,7 +476,9 @@ class CartesianGrid(Grid):
         utils.print_('Writing grain alignment direction file')
  
         if self.vfield:
-            self.vfield = VectorField(self.X, self.Y, self.Z, morphology)
+            
+            x3d, y3d, z3d = np.meshgrid(self.xc, self.yc, self.zc)
+            self.vfield = VectorField(x3d, y3d, z3d, morphology)
             self.vfield.vx = self.grid_vx 
             self.vfield.vy = self.grid_vy 
             self.vfield.vz = self.grid_vz 
@@ -495,6 +495,13 @@ class CartesianGrid(Grid):
 
     def plot_2d(self, field, data=None, cmap=None):
         """ Plot the density midplane at z=0 using Matplotlib """
+
+        if self.geometry == 'spherical':
+            utils.not_implemented('Plot grid 2d in spherical coordinates.')                
+
+        if not self.regular:
+            utils.not_implemented('Plot irregular grids.')
+
         try:
             from matplotlib.colors import LogNorm
             utils.print_(f'Plotting the {field} grid midplane')
@@ -624,6 +631,13 @@ class CartesianGrid(Grid):
 
     def plot_3d(self, field, data=None, tau=False, cmap=None): 
         """ Render the interpolated 3D field using Mayavi """
+
+        if self.geometry == 'spherical':
+            utils.not_implemented('Plot grid 3d in spherical coordinates.')                
+
+        if not self.regular:
+            utils.not_implemented('Plot irregular grids.')
+
         try:
             from mayavi import mlab
             from mayavi.api import Engine
@@ -764,13 +778,4 @@ class CartesianGrid(Grid):
             utils.print_(e, bold=True)
 
 
-class SphericalGrid(Grid):
-    def __init__(self):
-        """ This is yet to be implemented.
-            It will be translated from old scripts and from the very own
-            radmc3d's implementation.
-            src:https://github.com/dullemond/radmc3d-2.0/blob/master/python/
-                radmc3d_tools/sph_to_sphergrid.py
-         """
 
-        utils.not_implemented()

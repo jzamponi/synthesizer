@@ -15,10 +15,10 @@ G = const.G.cgs.value
 kB = const.k_B.cgs.value
 
 class AnalyticalModel():
-    def __init__(self, model, bbox, ncells=100, g2d=100, temp=False, nspec=1, 
-            csubl=0, sootline=300, rin=None, rout=None, rc=None, r0=None, h0=None, 
-            alpha=None, flare=None, mdisk=None, r_rim=None, r_gap=None, w_gap=None, 
-            dr_gap=None, rho0=None, rflat=None, 
+    def __init__(self, model, bbox, geometry, ncells=100, g2d=100, temp=False, 
+            nspec=1, csubl=0, sootline=300, rin=None, rout=None, rc=None, 
+            r0=None, h0=None, alpha=None, flare=None, mdisk=None, r_rim=None, 
+            r_gap=None, w_gap=None, dr_gap=None, rho0=None, rflat=None, 
         ):
         """
         Create an analytical density model indexed by the variable model.
@@ -26,6 +26,7 @@ class AnalyticalModel():
         """
 
         self.ncells = ncells
+        self.geometry = geometry
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
         self.vfield = None
@@ -51,6 +52,8 @@ class AnalyticalModel():
         self.dr_gap = dr_gap
         self.rho0 = rho0
         self.rflat = rflat
+        self.regular = True
+        self.coordsystem = {'cartesian': 1, 'spherical': 100}[geometry]
 
         if bbox is None:
             # Set default half-box sizes for predefined models
@@ -73,10 +76,21 @@ class AnalyticalModel():
 
         utils.print_(f'Creating density model: {self.model}')
     
-        # Coordinate grid: cell walls and cell centers
-        self.xw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
-        self.yw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
-        self.zw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
+        # Set up a coordinate grid: cell walls and cell centers
+        if self.geometry == 'cartesian':
+            self.xw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
+            self.yw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
+            self.zw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
+
+        elif self.geometry == 'spherical':
+            self.xw = np.linspace(0, self.bbox, self.ncells+1)
+            self.yw = np.linspace(0, 2 * np.pi, self.ncells+1)
+            self.zw = np.linspace(0, np.pi, self.ncells+1)
+
+        else:
+            utils.not_implemented(f'{self.geometry = }')
+
+        # Create a grid
         xc = 0.5 * (self.xw[0: self.ncells] + self.xw[1: self.ncells + 1])
         yc = 0.5 * (self.yw[0: self.ncells] + self.yw[1: self.ncells + 1])
         zc = 0.5 * (self.zw[0: self.ncells] + self.zw[1: self.ncells + 1])
@@ -226,18 +240,18 @@ class AnalyticalModel():
         if model.plotmax is not None: self.plotmax = model.plotmax
 
 
-    def write_grid_file(self, regular=True):
+    def write_grid_file(self):
         """ Write the regular cartesian grid file """
         with open('amr_grid.inp','w+') as f:
             # iformat
             f.write('1\n')
-            # Regular grid
-            f.write('0\n' if regular else '1\n')
+            # Grid style (negate boolean var to match radmc3d's fortran syntax)
+            f.write(f'{int(not self.regular)}\n')
             # Coordinate system: cartesian
-            f.write('1\n')
+            f.write(f'{int(self.coordsystem)}\n')
             # Gridinfo
             f.write('0\n')
-            # Number of cells
+            # Axis refinement (Active or not active)
             f.write('1 1 1\n')
             # Size of the grid
             f.write(f'{self.ncells:d} {self.ncells:d} {self.ncells:d}\n')

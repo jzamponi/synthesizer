@@ -100,7 +100,7 @@ class Pipeline:
 
     @utils.elapsed_time
     def create_grid(
-            self, model=None, sphfile=None, amrfile=None, 
+            self, model=None, sphfile=None, amrfile=None, geometry='cartesian',
             source='sphng', bbox=None, ncells=100, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=False, show_particles=False, 
@@ -113,6 +113,7 @@ class Pipeline:
         self.model = model
         self.sphfile = sphfile
         self.amrfile = amrfile
+        self.geometry = geometry
         self.ncells = ncells
         self.g2d = g2d
         self.bbox = bbox * u.au.to(u.cm) if bbox is not None else bbox
@@ -130,6 +131,10 @@ class Pipeline:
         self.flare = flare 
         self.rho0 = rho0
 
+        # Parse grid geometry 
+        if geometry not in ['cartesian', 'spherical']:
+            raise ValueError(f'Parameter {geometry = } not valid.')
+
         # Make sure the model temp is read when c-sublimation is enabled
         if self.csubl > 0 and not temperature:
             utils.print_('--sublimation was given but not --temperature.') 
@@ -144,10 +149,10 @@ class Pipeline:
     
         # Create a grid using an analytical model
         if model is not None:
-            regular = True
 
             self.grid = gridder.AnalyticalModel(
                 model=self.model,
+                geometry=self.geometry, 
                 bbox=self.bbox, 
                 ncells=self.ncells, 
                 g2d=self.g2d,
@@ -168,16 +173,18 @@ class Pipeline:
                 rho0=self.rho0, 
             )
             
-            # Create a model density grid 
+            # Create a model grid 
             self.grid.create_model()
 
         # Create a grid from SPH particles
         elif sphfile is not None:
-            regular = True
 
-            self.grid = gridder.CartesianGrid(
+            self.grid = gridder.Grid(
+                geometry=self.geometry,
+                regular=True, 
                 ncells=self.ncells, 
                 bbox=self.bbox, 
+                rin=self.rin,
                 rout=self.rout,
                 csubl=self.csubl, 
                 nspec=self.nspec, 
@@ -209,41 +216,54 @@ class Pipeline:
                 self.grid.interpolate('vy', 'linear', fill=0)
                 self.grid.interpolate('vz', 'linear', fill=0)
 
+            # Create a grid 
+            self.grid.create_grid()
+
         # Create a grid from an AMR grid
         elif amrfile is not None:
-            regular = False    
 
-            self.grid = gridder.CartesianGrid(
+            self.grid = gridder.Grid(
+                geometry=self.geometry,
+                regular=False, 
                 ncells=self.ncells, 
                 bbox=self.bbox, 
+                rin=self.rin,
                 rout=self.rout,
                 csubl=self.csubl, 
                 nspec=self.nspec, 
                 sootline=self.sootline, 
                 g2d=self.g2d, 
                 temp=temperature,
+                vfield=alignment, 
             )
             
             # Read the AMR data
             self.grid.read_amr(self.amrfile, source=source)
+            
+            # Create a density grid 
+            self.grid.create_grid()
         
+        # No input file has been given
         else:
             raise ValueError(
                 f'{utils.color.red}When --grid is set, either --model, ' +\
                 f'--sphfile or --amrfile must be given{utils.color.none}'
             )
 
+
         self.bbox = self.grid.bbox
 
         # Write the new cartesian grid to radmc3d file format
-        self.grid.write_grid_file(regular=regular)
+        self.grid.write_grid_file()
 
         # Write the dust density distribution to radmc3d file format
         self.grid.write_density_file()
         
+        # Write the dust temperature distribution to radmc3d file format
         if temperature:
             self.grid.write_temperature_file()
 
+        # Write the alignment vector field to radmc3d file format
         if vector_field is not None or alignment:
             self.grid.write_vector_field(morphology=vector_field)
 
