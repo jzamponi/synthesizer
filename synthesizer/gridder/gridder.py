@@ -32,7 +32,7 @@ class Grid():
         """
 
         self.geometry = geometry
-        self.coordsystem = {'cartesian': 1, 'spherical': 100}[geometry]
+        self.coordsystem = {'cartesian': 1, 'spherical': 150}[geometry]
         self.regular = True
         self.fx, self.fy, self.fz = 1, 1, 1
         self.nx, self.ny, self.nz = ncells, ncells, ncells
@@ -70,7 +70,7 @@ class Grid():
         """
 
         source = source.lower()
-        self.source_type = 'amr'
+        self.source_type = 'sph'
 
         # Download the script if a URL is provided
         if 'http' in filename: 
@@ -78,7 +78,9 @@ class Grid():
             filename = filename.split('/')[-1]
 
         utils.print_(
-            f'Reading data from: {filename} | Format: {source.upper()}', end='')
+            f'Reading data from: {filename} | ' +\
+            f'Format: {source.upper()} ({self.source_type}).upper()', end='')
+
         if not os.path.exists(filename): 
             raise FileNotFoundError(f'{utils.color.red}' +\
                 f'Input SPH file does not exist{utils.color.none}')
@@ -134,7 +136,9 @@ class Grid():
             utils.download_file(filename)
             filename = filename.split('/')[-1]
 
-        utils.print_(f'Reading data from: {filename} | Format: {source}')
+        utils.print_(
+            f'Reading data from: {filename} | ' +\
+            f'Format: {source.upper()} ({self.source_type.upper()})')
 
         if not os.path.exists(filename): 
             utils.file_exists(filename, msg='Input AMR file does not exist')
@@ -163,9 +167,9 @@ class Grid():
         self.grid_dens = self.amr.rho_g / self.g2d
 
         if self.add_temp:
-            self.grid_temp = self.sph.temp
+            self.grid_temp = self.amr.temp
         else:
-            self.grid_temp = np.zeros(self.dens.shape)
+            self.grid_temp = np.zeros(self.grid_dens.shape)
         
         if self.vfield:
             self.grid_vx = self.amr.vx
@@ -368,50 +372,54 @@ class Grid():
             populates wall centers.
         """
 
-        if self.xw is None:
+        # If input file is a grid, just copy the cell walls
+        if self.source_type == 'amr':
             if self.x is None:
                 raise ValueError('Cells walls xw, yw, zw have not been set')
             
             else:
-                # If cell walls are set, compute cell centers
+                self.xw = self.x
+                self.yw = self.y
+                self.zw = self.z
+
                 if self.xc is None:
-                    self.xw = self.x
-                    self.yw = self.y
-                    self.zw = self.z
                     self.xc = np.diff(self.xw)
                     self.yc = np.diff(self.yw)
                     self.zc = np.diff(self.zw)
 
-        # If cell centers are set, shift them right to set the cell walls
-        if self.xc is not None and regular:
-            dx = np.diff(self.xc)[0]
-            dy = np.diff(self.yc)[0]
-            dz = np.diff(self.zc)[0]
-            self.xw = self.xc + dx
-            self.yw = self.yc + dy
-            self.zw = self.zc + dz
+        # If input is particles, cell centers were created by the interpolation
+        else:
+            if self.xc is not None and self.regular:
+                dx = np.diff(self.xc)[0]
+                dy = np.diff(self.yc)[0]
+                dz = np.diff(self.zc)[0]
+                self.xw = self.xc + dx
+                self.yw = self.yc + dy
+                self.zw = self.zc + dz
 
-            # Add the missing wall at the beginning of each axis
-            self.xw = np.insert(self.xw, 0, self.xc[0])
-            self.yw = np.insert(self.yw, 0, self.yc[0])
-            self.zw = np.insert(self.zw, 0, self.zc[0])
+                # Add the missing wall at the beginning of each axis
+                self.xw = np.insert(self.xw, 0, self.xc[0])
+                self.yw = np.insert(self.yw, 0, self.yc[0])
+                self.zw = np.insert(self.zw, 0, self.zc[0])
 
 
     def write_grid_file(self):
-        """ Write the  grid file """
+        """ Write the grid file """
+        utils.print_('Writing grid file')
+
         with open('amr_grid.inp','w+') as f:
             # iformat
             f.write('1\n')                     
             # Regular grid
             f.write(f'{int(not self.regular)}\n')
             # Coordinate system
-            f.write(f'{self.coordsystem}\n')                     
+            f.write(f'{int(self.coordsystem)}\n')                     
             # Gridinfo
             f.write('0\n')                       
             # incl_x incl_y incl_z: set to 1 if dimension is fully active
             f.write('1 1 1\n')                   
-            # Size of the grid
-            f.write(f'{self.nx:d} {self.ny:d} {self.nz:d}\n')
+            # Number of grid cell centers
+            f.write(f'{self.xc.size:d} {self.yc.size:d} {self.zc.size:d}\n')
 
             # Write the cell walls
             for i in self.xw:
@@ -496,8 +504,8 @@ class Grid():
     def plot_2d(self, field, data=None, cmap=None):
         """ Plot the density midplane at z=0 using Matplotlib """
 
-        if self.geometry == 'spherical':
-            utils.not_implemented('Plot grid 2d in spherical coordinates.')                
+        #if self.geometry == 'spherical':
+        #    utils.not_implemented('Plot grid 2d in spherical coordinates.')                
 
         if not self.regular:
             utils.not_implemented('Plot irregular grids.')

@@ -414,42 +414,50 @@ class Athena(HydroCode):
         Object designed to read in spatial and physical quantities from 
         Athena++ snapshots.
     """
+
+
     def __init__(self, filename, geometry, temp=False, vfield=False):
+        
+        from synthesizer.gridder.athena_reader import AthenaReader 
+
         self.add_temp = temp
         self.vfield = vfield
 
-        import h5py
-
-        # radmc3d standard: (x,y,z) --> (r,th,ph)
-        self.data = h5py.File(filename, "r")
+        # radmc3d standard: (x,y,z) --> (r,th(0,pi],ph[0,2pi])
+        self.data = AthenaReader(filename).get_data()
         self.x = np.ravel(self.data['x1f'])
         self.y = np.ravel(self.data['x2f']) 
         self.z = np.ravel(self.data['x3f'])
 
-        self.x = self.x * u.au.to(u.cm)
+        # Lenght unit: 100 au
+        # Density: Msun / (100 au)**3
+        # Temperature: 1000 K
+        
+        self.x = self.x * 100*u.au.to(u.cm)
+
         if geometry == 'cartesian':
-            self.y = self.y * u.au.to(u.cm)
-            self.z = self.z * u.au.to(u.cm)
+            self.y = self.y * 100*u.au.to(u.cm)
+            self.z = self.z * 100*u.au.to(u.cm)
 
     @property
     def rho_g(self):
-        return self.data['prim'][0].ravel()
+        return self.data['rho'] * (u.Msun/(100*u.au)**3).to(u.g/u.cm**3).value
 
     @property
     def temp(self):
-        return self.data[:, 9] 
+        return 1000 * self.data['rho'] / self.data['press']
 
     @property
     def vx(self):
-        return self.data['prim'][2].ravel() * (u.km/u.s).to(u.cm/u.s)
+        return self.data['vel1'] * (u.km/u.s).to(u.cm/u.s)
 
     @property
     def vy(self):
-        return self.data['prim'][3].ravel() * (u.km/u.s).to(u.cm/u.s)
+        return self.data['vel2'] * (u.km/u.s).to(u.cm/u.s)
 
     @property
     def vz(self):
-        return self.data['prim'][4].ravel() * (u.km/u.s).to(u.cm/u.s)
+        return self.data['vel3'] * (u.km/u.s).to(u.cm/u.s)
 
 
 class Flash(HydroCode):
