@@ -929,4 +929,48 @@ def Tb(data, outfile="", freq=0, bmin=0, bmaj=0, overwrite=False, verbose=False)
     return temp.value
 
 
+def spherical_to_cartesian(d, r, t, p, order=3):
+    """ 
+    Convert a 3D cube in spherical coordinates to
+    a 3D cube in cartesian coordinates.
+        
+    args:
+        - d: physical quantity in the Cartesian grid. shape: (nz,ny,nx)
+        - r: radius array
+        - theta: latitudinal array
+        - phi: longitudinal array
+        - x: x-coordinate
+        - y: x-coordinate
+        - z: x-coordinate
+        - order: order of the interpolation
+
+    Courtesy of Felipe H. Navarrete
+    """
+
+    from scipy.interpolate import interp1d
+    from scipy.ndimage import map_coordinates
+
+    X, Y, Z = np.meshgrid(
+        *([np.linspace(-r.max(), r.max(), r.size)] * 3))
+
+    rc = np.sqrt(X**2 + Y**2 + Z**2)
+    tc = np.arccos(Z / rc)
+    pc = np.arctan2(Y, X)
+
+    ir = interp1d(r, np.arange(len(r)), bounds_error=False)
+    it = interp1d(t, np.arange(len(t)))
+    ip = interp1d(p, np.arange(len(p)))
+
+    ir = ir(rc.ravel())
+    it = it(tc.ravel())
+    ip = ip(pc.ravel())
+    
+    ir[rc.ravel() > r.max()] = len(r)-1
+    ir[rc.ravel() < r.min()] = 0
+
+    return map_coordinates(
+            d, 
+            np.array([ir, it, ip]),
+            order=order
+        ).reshape(rc.shape)
 

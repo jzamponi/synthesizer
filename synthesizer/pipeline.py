@@ -792,8 +792,10 @@ class Pipeline:
         
         # Read in the new temperature 
         temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
-        nx = int(np.cbrt(temp_mc.size))
-        temp_mc = temp_mc.reshape((nx, nx, nx))
+        dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+        nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
+        temp_mc = temp_mc.reshape((nx, ny, nz))
+        bbox = self._get_bbox() * u.cm.to(u.au)
 
         # Write the new 3D temperature field to FITS file
         utils.write_fits(
@@ -802,12 +804,12 @@ class Pipeline:
             header=fits.Header({
                 'BTYPE': 'Dust Temperature',
                 'BUNIT': 'K',
-                'CDELT1': 2 * self.bbox / self.ncells,
-                'CRPIX1': self.ncells // 2,
+                'CDELT1': 2 * bbox / nx,
+                'CRPIX1': nx // 2,
                 'CRVAL1': 0,
                 'CUNIT1': 'AU',
-                'CDELT2': 2 * self.bbox / self.ncells,
-                'CRPIX2': self.ncells // 2,
+                'CDELT2': 2 * bbox / ny,
+                'CRPIX2': ny // 2,
                 'CRVAL2': 0,
                 'CUNIT2': 'AU',
             }),
@@ -1390,7 +1392,7 @@ class Pipeline:
         nx = int(np.cbrt(dens.size))
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
-        grid = gridder.CartesianGrid(nx, bbox)
+        grid = gridder.Grid('cartesian', nx, bbox)
         grid.plot_2d('density', data=dens, cmap=self.cmap)
 
         if temp: 
@@ -1398,7 +1400,7 @@ class Pipeline:
             utils.print_('Reading temperature from dust_temperature.dat')
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
             temp = temp.reshape((nx, nx, nx))
-            grid = gridder.CartesianGrid(nx, bbox)
+            grid = gridder.Grid('cartesian', nx, bbox)
             grid.plot_2d('temperature', data=temp, cmap=self.cmap)
             del temp
 
@@ -1428,7 +1430,7 @@ class Pipeline:
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
         utils.print_(f'Rendering a box of {nx}^3 pixels')
-        grid = gridder.CartesianGrid(nx, bbox)
+        grid = gridder.Grid('cartesian', nx, bbox)
         grid.plot_3d('density', data=dens, cmap=self.cmap)
 
         if temp: 
@@ -1436,7 +1438,7 @@ class Pipeline:
             utils.print_('Reading temperature from dust_temperature.dat')
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
             temp = temp.reshape((nx, nx, nx))
-            grid = gridder.CartesianGrid(nx, bbox)
+            grid = gridder.Grid('cartesian', nx, bbox)
             grid.plot_3d('temperature', data=temp, cmap=self.cmap)
 
         # Register the pipeline step
@@ -1574,14 +1576,16 @@ class Pipeline:
     def _get_bbox(self):
         """ Return the current value for bbox if existent, namely, 
             if --grid was given. Otherwise read from the grid file.
+
+            To Do: this function is correct only for a rectangular cartesian box
         """
 
         if self.bbox is not None:
             return self.bbox
         else:
             gridid = int(np.loadtxt('amr_grid.inp', skiprows=1, max_rows=1))
-            ncells = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
-            nx, ny, nz = int(ncells[0]), int(ncells[1]), int(ncells[2])
+            dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+            nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
 
             # Number of lines to skip from grid style (0: reg, 1: oct, 10: amr)
             skip = {0: 6, 1: 7, 10: 7}[gridid]

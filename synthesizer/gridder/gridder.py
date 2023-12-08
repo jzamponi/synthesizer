@@ -12,7 +12,7 @@ from synthesizer import utils
 
 
 class Grid():
-    def __init__(self, geometry, ncells, regular=True, bbox=None, 
+    def __init__(self, geometry, ncells, bbox=None, regular=True,  
             rin=None, rout=None, nspec=1, csubl=0, sootline=300, g2d=100, 
             temp=False, vfield=None):
         """
@@ -165,6 +165,7 @@ class Grid():
         self.y = self.amr.y
         self.z = self.amr.z
         self.grid_dens = self.amr.rho_g / self.g2d
+        self.bbox = np.min([self.x.min(), self.y.min(), self.z.min()])
 
         if self.add_temp:
             self.grid_temp = self.amr.temp
@@ -402,6 +403,10 @@ class Grid():
                 self.yw = np.insert(self.yw, 0, self.yc[0])
                 self.zw = np.insert(self.zw, 0, self.zc[0])
 
+        self.nx = self.xc.size
+        self.ny = self.yc.size
+        self.nz = self.zc.size
+
 
     def write_grid_file(self):
         """ Write the grid file """
@@ -504,8 +509,8 @@ class Grid():
     def plot_2d(self, field, data=None, cmap=None):
         """ Plot the density midplane at z=0 using Matplotlib """
 
-        #if self.geometry == 'spherical':
-        #    utils.not_implemented('Plot grid 2d in spherical coordinates.')                
+        if self.geometry == 'spherical':
+            utils.not_implemented('Plot grid 2d in spherical coordinates.')                
 
         if not self.regular:
             utils.not_implemented('Plot irregular grids.')
@@ -542,6 +547,18 @@ class Grid():
             else:
                 bbox = self.bbox * u.cm.to(u.au)
                 extent = [-bbox, bbox] * 2
+
+            # If data cube is in spher. coords., interpolate to a cartesian cube
+            if self.geometry == 'spherical':
+                utils.print_(f'Before conversion: {data.shape = }', blue=True)
+                data = utils.spherical_to_cartesian(
+                    data,
+                    self.xc, 
+                    self.yc, 
+                    self.zc, 
+                    order=3,
+                )
+                utils.print_(f'After conversion: {data.shape = }', blue=True)
         
             # Extract the middle plane 
             plane = self.ncells//2 - 1
@@ -616,25 +633,29 @@ class Grid():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-        # Write maps to FITS files
-        utils.write_fits(
-            f'{field}_midplane.fits', 
-            data=np.array([data_xy, data_xz]),
-            header=fits.Header({
-                'BTYPE': title.split('(')[0],
-                'BUNIT': title.split('(')[1][:-1].replace('$',''),
-                'CDELT1': 2 * bbox / self.ncells,
-                'CRPIX1': self.ncells // 2,
-                'CRVAL1': 0,
-                'CUNIT1': 'AU',
-                'CDELT2': 2 * bbox / self.ncells,
-                'CRPIX2': self.ncells // 2,
-                'CRVAL2': 0,
-                'CUNIT2': 'AU',
-            }),
-            overwrite=True,
-            verbose=True,
-        )
+        try:
+            # Write maps to FITS files
+            utils.write_fits(
+                f'{field}_midplane.fits', 
+                data=np.array([data_xy, data_xz]),
+                header=fits.Header({
+                    'BTYPE': title.split('(')[0],
+                    'BUNIT': title.split('(')[1][:-1].replace('$',''),
+                    'CDELT1': 2 * bbox / self.ncells,
+                    'CRPIX1': self.ncells // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / self.ncells,
+                    'CRPIX2': self.ncells // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+        except Exception as e:
+            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_(e, bold=True)
 
 
     def plot_3d(self, field, data=None, tau=False, cmap=None): 
