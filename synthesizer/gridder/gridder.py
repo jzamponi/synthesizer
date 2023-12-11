@@ -12,7 +12,7 @@ from synthesizer import utils
 
 
 class Grid():
-    def __init__(self, geometry, ncells, bbox=None, regular=True,  
+    def __init__(self, ncells, bbox=None, regular=True,
             rin=None, rout=None, nspec=1, csubl=0, sootline=300, g2d=100, 
             temp=False, vfield=None):
         """
@@ -31,8 +31,7 @@ class Grid():
                   rout = 50
         """
 
-        self.geometry = geometry
-        self.coordsystem = {'cartesian': 1, 'spherical': 150}[geometry]
+        self.geometry = 'cartesian'
         self.regular = True
         self.fx, self.fy, self.fz = 1, 1, 1
         self.nx, self.ny, self.nz = ncells, ncells, ncells
@@ -79,7 +78,7 @@ class Grid():
 
         utils.print_(
             f'Reading data from: {filename} | ' +\
-            f'Format: {source.upper()} ({self.source_type}).upper()', end='')
+            f'Format: {source.upper()} ({self.source_type.upper()})', end='')
 
         if not os.path.exists(filename): 
             raise FileNotFoundError(f'{utils.color.red}' +\
@@ -132,7 +131,7 @@ class Grid():
         self.source_type = 'amr'
 
         # Download the script if a URL is provided
-        if 'http' in filename: 
+        if 'http' in filename:
             utils.download_file(filename)
             filename = filename.split('/')[-1]
 
@@ -144,7 +143,7 @@ class Grid():
             utils.file_exists(filename, msg='Input AMR file does not exist')
 
         if source == 'athena++':
-            self.amr = Athena(filename, self.geometry, self.add_temp, True)
+            self.amr = Athena(filename, self.add_temp, True)
 
         elif source == 'zeustw':
             utils.not_implemented()
@@ -164,6 +163,7 @@ class Grid():
         self.x = self.amr.x
         self.y = self.amr.y
         self.z = self.amr.z
+        self.geometry = self.amr.geometry
         self.grid_dens = self.amr.rho_g / self.g2d
         self.bbox = np.min([self.x.min(), self.y.min(), self.z.min()])
 
@@ -418,7 +418,7 @@ class Grid():
             # Regular grid
             f.write(f'{int(not self.regular)}\n')
             # Coordinate system
-            f.write(f'{int(self.coordsystem)}\n')                     
+            f.write(f'{int({"cartesian":1, "spherical": 100}[self.geometry])}\n')
             # Gridinfo
             f.write('0\n')                       
             # incl_x incl_y incl_z: set to 1 if dimension is fully active

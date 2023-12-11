@@ -100,7 +100,7 @@ class Pipeline:
 
     @utils.elapsed_time
     def create_grid(
-            self, model=None, sphfile=None, amrfile=None, geometry='cartesian',
+            self, model=None, hydromodel=None, geometry='cartesian',
             source='sphng', bbox=None, ncells=100, tau=False, 
             vector_field=None, show_2d=False, show_3d=False, vtk=False, 
             render=False, g2d=100, temperature=False, show_particles=False, 
@@ -111,8 +111,7 @@ class Pipeline:
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
         self.model = model
-        self.sphfile = sphfile
-        self.amrfile = amrfile
+        self.hydromodel = hydromodel
         self.geometry = geometry
         self.ncells = ncells
         self.g2d = g2d
@@ -152,8 +151,8 @@ class Pipeline:
 
             self.grid = gridder.AnalyticalModel(
                 model=self.model,
-                geometry=self.geometry, 
-                bbox=self.bbox, 
+                geometry=self.geometry,
+                bbox=self.bbox,
                 ncells=self.ncells, 
                 g2d=self.g2d,
                 nspec=self.nspec,
@@ -177,11 +176,10 @@ class Pipeline:
             self.grid.create_model()
 
         # Create a grid from SPH particles
-        elif sphfile is not None:
+        elif hydromodel is not None:
 
             self.grid = gridder.Grid(
-                geometry=self.geometry,
-                regular=True, 
+                regular=True,
                 ncells=self.ncells, 
                 bbox=self.bbox, 
                 rin=self.rin,
@@ -194,60 +192,41 @@ class Pipeline:
                 vfield=alignment,
             )
 
-            # Read the SPH data
-            self.grid.read_sph(self.sphfile, source=source)
+            if source in ['athena++', 'zeustw', 'flash', 'enzo', 'ramses']:
+                # Read the AMR data
+                self.grid.read_amr(self.hydromodel, source=source)
 
-            # Set a bounding box or radius to trim particles outside of it
-            if self.bbox is not None or self.rout is not None:
-                self.grid.trim_box()
+            else:
+                # Read the SPH data
+                self.grid.read_sph(self.hydromodel, source=source)
 
-            # Render SPH particles in 3D space before interpolation
-            if show_particles:
-                self.grid.plot_particles()
-    
-            # Interpolate the SPH points onto a regular cartesian grid
-            self.grid.interpolate('dens', 'linear', fill='min')
+                # Set a bounding box or radius to trim particles outside of it
+                if self.bbox is not None or self.rout is not None:
+                    self.grid.trim_box()
 
-            if temperature:
-                self.grid.interpolate('temp', 'linear', fill='min')
+                # Render SPH particles in 3D space before interpolation
+                if show_particles:
+                    self.grid.plot_particles()
 
-            if alignment:
-                self.grid.interpolate('vx', 'linear', fill=0)
-                self.grid.interpolate('vy', 'linear', fill=0)
-                self.grid.interpolate('vz', 'linear', fill=0)
+                # Interpolate the SPH points onto a regular cartesian grid
+                self.grid.interpolate('dens', 'linear', fill='min')
+
+                if temperature:
+                    self.grid.interpolate('temp', 'linear', fill='min')
+
+                if alignment:
+                    self.grid.interpolate('vx', 'linear', fill=0)
+                    self.grid.interpolate('vy', 'linear', fill=0)
+                    self.grid.interpolate('vz', 'linear', fill=0)
 
             # Create a grid 
             self.grid.create_grid()
 
-        # Create a grid from an AMR grid
-        elif amrfile is not None:
-
-            self.grid = gridder.Grid(
-                geometry=self.geometry,
-                regular=False, 
-                ncells=self.ncells, 
-                bbox=self.bbox, 
-                rin=self.rin,
-                rout=self.rout,
-                csubl=self.csubl, 
-                nspec=self.nspec, 
-                sootline=self.sootline, 
-                g2d=self.g2d, 
-                temp=temperature,
-                vfield=alignment, 
-            )
-            
-            # Read the AMR data
-            self.grid.read_amr(self.amrfile, source=source)
-            
-            # Create a density grid 
-            self.grid.create_grid()
-        
         # No input file has been given
         else:
             raise ValueError(
                 f'{utils.color.red}When --grid is set, either --model, ' +\
-                f'--sphfile or --amrfile must be given{utils.color.none}'
+                f'--hydromodel must be given{utils.color.none}'
             )
 
 

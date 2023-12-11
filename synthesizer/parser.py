@@ -4,7 +4,7 @@
 
     Example:
 
-    $ synthesizer --grid --sphfile snap_001.dat --source arepo --ncells 100 
+    $ synthesizer --grid --hydromodel snap_001.dat --source arepo --ncells 100
         --bbox 50 --show-grid-2d --show-grid-3d --raytrace --lam 1300 
         --polarization --opacity --material s --amin 0.1 --amax 10 --na 100 
         --synobs --show-rt --show-synobs
@@ -40,22 +40,19 @@ def synthesizer():
     parser.add_argument('-g', '--grid', action='store_true', default=False, 
         help='Create an input grid for the radiative transfer')
 
-    exc_grid = parser.add_mutually_exclusive_group() 
-    exc_grid.add_argument('--model', action='store', default=None, 
+    exc_grid = parser.add_mutually_exclusive_group()
+    exc_grid.add_argument('--model', action='store', default=None,
         help='Keyword for a predefined density model.', 
         choices=['const', 'plaw', 'pcore', 'ppdisk', 'ppdisk-gap-rim', 
                 'l1544', 'user'])
 
-    exc_grid.add_argument('--sphfile', action='store', default=None, 
-        help='Name of the input SPH file (snapshot from a particle-based code')
+    exc_grid.add_argument('--hydromodel', action='store', default=None,
+        help='Name of the input simulation snapshot')
 
-    exc_grid.add_argument('--amrfile', action='store', default=None, 
-        help='Name of the input AMR grid file (snapshot from a grid-based code)')
-
-    parser.add_argument('--source', action='store', default='sphng', 
+    parser.add_argument('--source', action='store', default='sphng',
         choices=['sphng', 'gizmo', 'gadget', 'arepo', 'phantom', 'nbody6', 
             'athena++', 'zeustw', 'flash', 'enzo', 'ramses'], 
-        help='Name of the code used to generate the inputfile.')
+        help='Name of the code used to generate the --hydromodel inputfile.')
     
     parser.add_argument('--geometry', action='store',  default='cartesian',
         choices=['cartesian', 'spherical'],  
@@ -349,7 +346,7 @@ def synthesizer():
     # Generate the input grid for RADMC3D
     if cli.grid:
         pipeline.create_grid(
-            sphfile=cli.sphfile, amrfile=cli.amrfile, geometry=cli.geometry,
+            hydromodel=cli.hydromodel, geometry=cli.geometry,
             source=cli.source, model=cli.model, ncells=cli.ncells, 
             g2d=cli.g2d, bbox=cli.bbox, temperature=cli.temperature, 
             render=cli.render, vtk=cli.vtk, show_2d=cli.show_grid_2d, 

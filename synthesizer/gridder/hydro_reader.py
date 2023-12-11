@@ -4,6 +4,8 @@ import astropy.units as u
 import astropy.constants as c
 from abc import ABC, abstractmethod
 
+import yt
+
 from synthesizer.gridder.vector_field import VectorField
 from synthesizer import utils
 
@@ -415,33 +417,42 @@ class Athena(HydroCode):
         Athena++ snapshots.
     """
 
+    import yt
 
-    def __init__(self, filename, geometry, temp=False, vfield=False):
+    def __init__(self, filename, units=None, temp=False, vfield=False):
         
         from synthesizer.gridder.athena_reader import AthenaReader 
 
         self.add_temp = temp
         self.vfield = vfield
 
-        # radmc3d standard: (x,y,z) --> (r,th(0,pi],ph[0,2pi])
-        self.data = AthenaReader(filename).get_data()
-        self.x = np.ravel(self.data['x1f'])
-        self.y = np.ravel(self.data['x2f']) 
-        self.z = np.ravel(self.data['x3f'])
+        if units is None:
+            units = {
+                "length_unit": (100, "au"),
+                "mass_unit": (1, "Msun"),
+            }
 
-        # Lenght unit: 100 au
-        # Density: Msun / (100 au)**3
-        # Temperature: 1000 K
-        
-        self.x = self.x * 100*u.au.to(u.cm)
+        if isinstance(filename, yt.frontends.athena_pp.AthenaPPDataset):
+            ds = filename
+        else:
+            # Read in data from HDF5 file
+            ds = yt.load(filename, units_override=units)
 
-        if geometry == 'cartesian':
-            self.y = self.y * 100*u.au.to(u.cm)
-            self.z = self.z * 100*u.au.to(u.cm)
+        self.data = ds.all_data()
+        self.geometry = ds.geometry
+
+        if self.geometry == 'cartesian':
+            self.x = self.data['x'].to('cm').value
+            self.y = self.data['y'].to('cm').value
+            self.z = self.data['z'].to('cm').value
+        else:
+            self.x = self.data['gas', 'r'].to('cm').value
+            self.y = self.data['gas', 'theta'].value
+            self.z = self.data['gas', 'phi'].value
 
     @property
     def rho_g(self):
-        return self.data['rho'] * (u.Msun/(100*u.au)**3).to(u.g/u.cm**3).value
+        return self.data['density'].to('g/cm**3').value
 
     @property
     def temp(self):
