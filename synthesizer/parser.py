@@ -124,7 +124,13 @@ def synthesizer():
     parser.add_argument('--show-grid-3d', action='store_true', default=False, 
         help='Render the new cartesian grid in 3D')
 
-    parser.add_argument('--vtk', action='store_true', default=False, 
+    parser.add_argument('--save-grid-2d', action='store_true', default=False,
+                        help='Save the 2D grid to FITS file')
+
+    parser.add_argument('--save-grid-3d', action='store_true', default=False,
+                        help='Save the 3D grid to FITS file. Applies to MC output too.')
+
+    parser.add_argument('--vtk', action='store_true', default=False,
         help='Call RADCM3D to create a VTK file of the newly created grid')
 
     parser.add_argument('--render', action='store_true', default=False, 
@@ -357,6 +363,7 @@ def synthesizer():
             h0=cli.h0, alpha=cli.alpha, flare=cli.flare, mdisk=cli.mdisk,
             r_rim=cli.r_rim, r_gap=cli.r_gap, w_gap=cli.w_gap, 
             dr_gap=cli.dr_gap, rho0=cli.rho0,
+            save_grid_2d=cli.save_grid_2d, save_grid_3d=cli.save_grid_3d,
         )
 
     # Generate the dust opacity tables
@@ -384,7 +391,9 @@ def synthesizer():
         pipeline.monte_carlo(
             nphot=cli.nphot, 
             star=cli.star,
-            radmc3d_cmds=cli.radmc3d
+            radmc3d_cmds=cli.radmc3d,
+            write_fits_2d=True,
+            write_fits_3d=cli.save_grid_3d,
     )
 
     # Run a ray-tracing on the new grid and generate an image

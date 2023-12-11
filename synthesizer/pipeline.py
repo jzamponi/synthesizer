@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import copy
 import random
-import requests
 import warnings
-import subprocess
 import numpy as np
 from glob import glob
 from pathlib import Path
@@ -14,10 +11,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import astropy.constants as const
 from astropy.io import ascii, fits
-from scipy.interpolate import griddata
 
 from synthesizer import utils
-from synthesizer import raytrace
 from synthesizer import synobs
 from synthesizer import gridder
 from synthesizer import dustmixer
@@ -26,14 +21,15 @@ from synthesizer import dustmixer
 source_path = Path(__file__).resolve()
 source_dir = source_path.parent
 
+
 class Pipeline:
-    
-    def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=-3.5, nang=181, 
-            nphot=1e4, nthreads=1, lmin=0.1, lmax=1e5, nlam=200, star=None, 
-            dgrowth=False, csubl=0, sootline=300, bbox=None,
-            material='s', mfrac=1, porosity=0, mixing='bruggeman', 
-            polarization=False, alignment=False, print_photons=False, 
-            overwrite=False, verbose=True):
+
+    def __init__(self, lam=1300, amin=0.1, amax=10, na=100, q=-3.5, nang=181,
+                 nphot=1e4, nthreads=1, lmin=0.1, lmax=1e5, nlam=200,
+                 dgrowth=False, csubl=0, sootline=300, bbox=None,
+                 material='s', mfrac=1, porosity=0, mixing='bruggeman',
+                 polarization=False, alignment=False, print_photons=False,
+                 savefig=True, overwrite=False, verbose=True):
 
         self.steps = []
         self.lam = int(lam)
@@ -75,7 +71,7 @@ class Pipeline:
             self.scatmode = 4
             self.inputstyle = 20
             self.polarization = True
-    
+
         self.csubl = csubl
         if self.csubl > 0:
             self.nspec = 2
@@ -92,22 +88,24 @@ class Pipeline:
         self.zstar = 0
         self.rstar = 2e11
         self.mstar = 2e33
-        self.tstar = 4000        
+        self.tstar = 4000
 
         self.bbox = bbox
+        self.savefig = savefig
         self.overwrite = overwrite
         self.verbose = verbose
 
     @utils.elapsed_time
     def create_grid(
             self, model=None, hydromodel=None, geometry='cartesian',
-            source='sphng', bbox=None, ncells=100, tau=False, 
-            vector_field=None, show_2d=False, show_3d=False, vtk=False, 
-            render=False, g2d=100, temperature=False, show_particles=False, 
-            alignment=False, cmap=None, rin=None, rout=None, rc=None, r0=None, 
-            h0=None, alpha=None, flare=None, mdisk=None, r_rim=None, 
-            r_gap=None, w_gap=None, dr_gap=None, rho0=None, 
-        ):
+            source='sphng', bbox=None, ncells=100, tau=False,
+            vector_field=None, show_2d=False, show_3d=False, vtk=False,
+            render=False, g2d=100, temperature=False, show_particles=False,
+            alignment=False, cmap=None, rin=None, rout=None, rc=None, r0=None,
+            h0=None, alpha=None, flare=None, mdisk=None, r_rim=None,
+            r_gap=None, w_gap=None, dr_gap=None, rho0=None,
+            save_grid_2d=False, save_grid_3d=False,
+    ):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
 
         self.model = model
@@ -126,9 +124,11 @@ class Pipeline:
         self.r_gap = r_gap * u.au.to(u.cm) if r_gap is not None else r_gap
         self.w_gap = w_gap * u.au.to(u.cm) if w_gap is not None else w_gap
         self.dr_gap = dr_gap * u.au.to(u.cm) if dr_gap is not None else dr_gap
-        self.alpha = alpha 
-        self.flare = flare 
+        self.alpha = alpha
+        self.flare = flare
         self.rho0 = rho0
+        self.save_grid_2d = save_grid_2d
+        self.save_grid_3d = save_grid_3d
 
         # Parse grid geometry 
         if geometry not in ['cartesian', 'spherical']:
@@ -136,16 +136,16 @@ class Pipeline:
 
         # Make sure the model temp is read when c-sublimation is enabled
         if self.csubl > 0 and not temperature:
-            utils.print_('--sublimation was given but not --temperature.') 
-            utils.print_("I will set --temperature to read in the model's "+\
-                f'temperature and set the sootline at {self.sootline} K.') 
+            utils.print_('--sublimation was given but not --temperature.')
+            utils.print_("I will set --temperature to read it from the model " +
+                         f'and set the sootline at {self.sootline} K.')
 
             temperature = True
 
         # Create a grid instance
         print('')
         utils.print_('Creating model grid ...\n', bold=True)
-    
+
         # Create a grid using an analytical model
         if model is not None:
 
@@ -153,14 +153,14 @@ class Pipeline:
                 model=self.model,
                 geometry=self.geometry,
                 bbox=self.bbox,
-                ncells=self.ncells, 
+                ncells=self.ncells,
                 g2d=self.g2d,
                 nspec=self.nspec,
-                temp=temperature, 
-                rin=self.rin, 
+                temp=temperature,
+                rin=self.rin,
                 rout=self.rout,
-                rc=self.rc, 
-                r0=self.r0, 
+                rc=self.rc,
+                r0=self.r0,
                 h0=self.h0,
                 alpha=self.alpha,
                 flare=self.flare,
@@ -169,9 +169,9 @@ class Pipeline:
                 r_gap=self.r_gap,
                 w_gap=self.w_gap,
                 dr_gap=self.dr_gap,
-                rho0=self.rho0, 
+                rho0=self.rho0,
             )
-            
+
             # Create a model grid 
             self.grid.create_model()
 
@@ -180,17 +180,19 @@ class Pipeline:
 
             self.grid = gridder.Grid(
                 regular=True,
-                ncells=self.ncells, 
-                bbox=self.bbox, 
+                ncells=self.ncells,
+                bbox=self.bbox,
                 rin=self.rin,
                 rout=self.rout,
-                csubl=self.csubl, 
-                nspec=self.nspec, 
-                sootline=self.sootline, 
-                g2d=self.g2d, 
+                csubl=self.csubl,
+                nspec=self.nspec,
+                sootline=self.sootline,
+                g2d=self.g2d,
                 temp=temperature,
                 vfield=alignment,
             )
+
+            self.grid.savefig = self.savefig
 
             if source in ['athena++', 'zeustw', 'flash', 'enzo', 'ramses']:
                 # Read the AMR data
@@ -225,10 +227,9 @@ class Pipeline:
         # No input file has been given
         else:
             raise ValueError(
-                f'{utils.color.red}When --grid is set, either --model, ' +\
+                f'{utils.color.red}When --grid is set, either --model, ' +
                 f'--hydromodel must be given{utils.color.none}'
             )
-
 
         self.bbox = self.grid.bbox
 
@@ -237,7 +238,7 @@ class Pipeline:
 
         # Write the dust density distribution to radmc3d file format
         self.grid.write_density_file()
-        
+
         # Write the dust temperature distribution to radmc3d file format
         if temperature:
             self.grid.write_temperature_file()
@@ -256,19 +257,20 @@ class Pipeline:
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
-            self.grid.plot_3d('density', tau=tau, cmap=cmap)
+            self.grid.plot_3d(
+                'density', tau=tau, cmap=cmap)
 
         # Render the temperature volume in 3D using Mayavi
         if show_3d and temperature:
             self.grid.plot_3d('temperature')
-        
+
         # Call RADMC3D to read the grid file and generate a VTK representation
         if vtk:
             self.grid.create_vtk(dust_density=True, rename=True)
 
             if temperature:
                 self.grid.create_vtk(dust_temperature=True, rename=True)
-        
+
         # Visualize the VTK grid file using ParaView
         if render:
             self.grid.render(dust_density=True)
@@ -276,49 +278,68 @@ class Pipeline:
             if temperature:
                 self.grid.render(dust_temperature=True)
 
+        # Save the grid to a FITS file
+        if save_grid_2d:
+            self.grid.save_grid_2d('density')
+            if temperature:
+                self.grid.save_grid_2d('temperature')
+
+        if save_grid_3d:
+            self.save_grid_3d('density')
+            if temperature:
+                self.save_grid_3d('temperature')
+
         # Register the pipeline step 
         self.steps.append('create_grid')
 
-
     @utils.elapsed_time
-    def dustmixer(self, 
-            material=None,
-            mfrac=None, 
-            porosity=None, 
-            mixing=None, 
-            amin=None,
-            amax=None,
-            q=None,
-            na=None,
-            nang=None,
-            polarization=False,
-            show_nk=False, 
-            show_z12z11=False,
-            show_dust_eff=False, 
-            show_opac=False, 
-            pb=True, 
-            savefig=None
-        ):
+    def dustmixer(self,
+                  material=None,
+                  mfrac=None,
+                  porosity=None,
+                  mixing=None,
+                  amin=None,
+                  amax=None,
+                  q=None,
+                  na=None,
+                  nang=None,
+                  polarization=False,
+                  show_nk=False,
+                  show_z12z11=False,
+                  show_dust_eff=False,
+                  show_opac=False,
+                  pb=True,
+                  savefig=None
+                  ):
         """
             Call dustmixer to generate dust opacity tables. 
             New dust materials can be manually defined here if desired.
         """
 
-        if mfrac is not None: self.mfrac = mfrac
+        if mfrac is not None:
+            self.mfrac = mfrac
         self.porosity = 0 if porosity is None else porosity
-        if mixing is not None: self.mixing = mixing.lower()
-        if amin is not None: self.amin = amin
-        if amax is not None: self.amax = amax
-        if na is not None: self.na = na
-        if q is not None: self.q = q
-        if nang is not None: self.nang = nang
-        if polarization is not None: self.polarization = polarization
-        if self.polarization and self.nang < 181: self.nang = 181
+        if mixing is not None:
+            self.mixing = mixing.lower()
+        if amin is not None:
+            self.amin = amin
+        if amax is not None:
+            self.amax = amax
+        if na is not None:
+            self.na = na
+        if q is not None:
+            self.q = q
+        if nang is not None:
+            self.nang = nang
+        if polarization is not None:
+            self.polarization = polarization
+        if self.polarization and self.nang < 181:
+            self.nang = 181
 
         # Parse whether material is a single key or a list of materials to mix
-        if material is not None: 
+        if material is not None:
             if isinstance(material, (list, np.ndarray)):
-                if len(material) ==  1:
+                if len(material) == 1:
                     self.material = material[0]
                 else:
                     self.material = material
@@ -328,8 +349,9 @@ class Pipeline:
         # Make sure mfrac is also set when using providing multiple materials
         if isinstance(self.material, (list, np.ndarray)):
             if mfrac is None or len(self.material) != len(mfrac):
-                raise ValueError(f'{utils.color.red}Make sure to set --mfrac'+\
-                    f' when providing multiple materials{utils.color.none}')
+                raise ValueError(f'{utils.color.red}Make sure to set --mfrac' +
+                                 f' when providing multiple materials' +
+                                 f'{utils.color.none}')
 
             # Make sure all mass fractions add up to 1
             if np.sum(mfrac) != 1:
@@ -341,7 +363,7 @@ class Pipeline:
             raise ValueError(f'Porosity must be between 0 and 1. {porosity = }')
 
         # Use 1 until the parallelization with polarization is fully implemented
-        nth = self.nthreads
+        # nth = self.nthreads
         nth = 1
 
         print('')
@@ -364,35 +386,37 @@ class Pipeline:
             np.log10(self.amin), np.log10(self.amax), self.na)
 
         # Source code location where the optical constants .lnk are stored
-        pathnk = Path(source_dir/'dustmixer/nk')
+        pathnk = Path(source_dir / 'dustmixer/nk')
 
         # Make sure the source n k tables are accesible. If not, download
-        if not utils.file_exists(f'{pathnk}/astrosil-Draine2003.lnk', 
-            raise_=False):
-
-            pathnk = 'https://raw.githubusercontent.com/jzamponi/'+\
-                'utils/main/opacity_tables'
+        if not utils.file_exists(f'{pathnk}/astrosil-Draine2003.lnk',
+                                 raise_=False):
+            pathnk = 'https://raw.githubusercontent.com/jzamponi/' + \
+                     'utils/main/opacity_tables'
 
         # Set predefined dust materials
         if self.material in ['s', 'sil']:
             utils.print_('Using silicate as dust material')
             dust.name = 'Silicate'
             dust.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
-            if show_nk: dust.plot_nk(savefig=savefig)
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
             dust.get_opacities(self.a_dist, self.q, self.nang, nth)
-        
+
         elif self.material in ['g', 'gra']:
             utils.print_('Using graphite as dust material')
             dust.name = 'Graphite'
             dust.set_nk(f'{pathnk}/c-gra-Draine2003.lnk')
-            if show_nk: dust.plot_nk(savefig=savefig)
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
             dust.get_opacities(self.a_dist, self.q, self.nang, nth)
-        
+
         elif self.material in ['o', 'org']:
             utils.print_('Using refractory organics as dust material')
             dust.name = 'Organics'
             dust.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
-            if show_nk: dust.plot_nk(savefig=savefig)
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
             dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
         elif self.material in ['p', 'pyr']:
@@ -400,7 +424,8 @@ class Pipeline:
             dust.name = 'Pyroxene-Mg70'
             dust.set_nk(f'{pathnk}/pyr-mg70-Dorschner1995.lnk', get_dens=False)
             dust.set_density(3.01, cgs=True)
-            if show_nk: dust.plot_nk(savefig=savefig)
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
             dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
         elif self.material in ['t', 'tro']:
@@ -408,7 +433,8 @@ class Pipeline:
             dust.name = 'Troilite'
             dust.set_nk(f'{pathnk}/fes-Henning1996.lnk', get_dens=False)
             dust.set_density(4.83, cgs=True)
-            if show_nk: dust.plot_nk(savefig=savefig)
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
             dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
         elif self.material in ['i', 'ice']:
@@ -416,7 +442,8 @@ class Pipeline:
             dust.name = 'Ice'
             dust.set_nk(f'{pathnk}/h2o-w-Warren2008.lnk', get_dens=False)
             dust.set_density(0.92, cgs=True)
-            if show_nk: dust.plot_nk(savefig=savefig)
+            if show_nk:
+                dust.plot_nk(savefig=savefig)
             dust.get_opacities(self.a_dist, self.q, self.nang, nth)
 
         elif self.material in ['sg', 'silgra']:
@@ -461,7 +488,7 @@ class Pipeline:
 
             if self.csubl > 0:
                 # Carbon sublimation: 
-                # Replace a percentage of graphite "csubl" by refractory organics
+                # Replace a percentage of graphite "csubl" by refractory organic
                 mf_org = (self.csubl / 100) * mf_gra
                 mf_gra = mf_gra - mf_org
             else:
@@ -471,8 +498,8 @@ class Pipeline:
             dust = (sil * mf_sil) + (gra * mf_gra) + (org * mf_org)
 
         elif self.material == 'dsharp':
-            utils.print_('Creating DSHARP mix: water ice (20%), '+\
-                'silicate (33%), troilite (7.4%), organics (39.6%)')
+            utils.print_('Creating DSHARP mix: water ice (20%), ' +
+                         'silicate (33%), troilite (7.4%), organics (39.6%)')
 
             dust.name = 'DSHARP'
             ice = copy.deepcopy(dust)
@@ -488,7 +515,8 @@ class Pipeline:
             sil.set_nk(f'{pathnk}/astrosil-Draine2003.lnk')
             tro.set_nk(f'{pathnk}/fes-Henning1996.lnk')
             org.set_nk(f'{pathnk}/c-org-Henning1996.lnk')
-            [d.plot_nk(savefig=savefig) for d in [ice,sil,tro,org] if show_nk]
+            [d.plot_nk(savefig=savefig) for d in [ice, sil, tro, org] if
+             show_nk]
 
             # Set the individual material densities
             ice.set_density(0.92)
@@ -504,8 +532,8 @@ class Pipeline:
 
             # Brugemman Mixing of the optical constants
             dust.mix(
-                comps=[ice, sil, tro, org], 
-                rule=self.mixing, 
+                comps=[ice, sil, tro, org],
+                rule=self.mixing,
                 porosity=self.porosity,
             )
 
@@ -517,7 +545,7 @@ class Pipeline:
 
         elif self.material == 'diana':
             utils.not_implemented('Opacity: DIANA')
-    
+
         else:
             if isinstance(self.material, str):
                 # Use a single user provided nk table
@@ -546,7 +574,7 @@ class Pipeline:
                     d.set_nk(path=m, skip=1, get_dens=True)
                     d.set_mfrac(self.mfrac[i])
                     comps.append(d)
-                    if show_nk: 
+                    if show_nk:
                         d.plot_nk(savefig=savefig)
 
                 # Overwrite list of materials with a new name
@@ -558,7 +586,7 @@ class Pipeline:
                     rule=self.mixing,
                     porosity=self.porosity,
                 )
-                if show_nk: 
+                if show_nk:
                     dust.plot_nk(savefig=savefig)
 
             # Convert the new material to opacities
@@ -579,15 +607,15 @@ class Pipeline:
             dust.write_align_factor(name=self._get_opac_name(self.csubl))
 
         # Store the current dust opacity in the pipeline instance
-        self.kappa = dust._get_kappa_at_lam(self.lam) 
+        self.kappa = dust.get_kappa(self.lam)
 
         # Register the pipeline step 
         self.steps.append('dustmixer')
-    
 
-    def generate_input_files(self, mc=False, inpfile=False, wavelength=False, 
-            stars=False, dustopac=False, dustkappa=False, dustkapalignfact=False,
-            grainalign=False):
+    def generate_input_files(self, mc=False, inpfile=False, wavelength=False,
+                             stars=False, dustopac=False, dustkappa=False,
+                             dustkapalignfact=False,
+                             grainalign=False):
         """ Generate the necessary input files for radmc3d """
 
         if inpfile:
@@ -599,15 +627,15 @@ class Pipeline:
                 f.write(f'setthreads = {self.nthreads}\n')
                 f.write(f'nphot = {int(self.nphot)}\n')
                 f.write(f'nphot_scat = {int(self.nphot)}\n')
-                f.write(f'iseed = {random.randint(-1e4, 1e4)}\n')
+                f.write(f'iseed = {random.randint(-1000, 1000)}\n')
                 f.write(f'mc_scat_maxtauabs = {int(5)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
-                if self.alignment and not mc: 
+                if self.alignment and not mc:
                     f.write(f'alignment_mode = 1\n')
                 if not self.print_photons:
                     f.write(f'countwrite = {int(self.nphot)}\n')
 
-        if wavelength: 
+        if wavelength:
             # Create a wavelength grid in micron
             with open('wavelength_micron.inp', 'w+') as f:
                 f.write(f'{self.lgrid.size}\n')
@@ -641,22 +669,21 @@ class Pipeline:
                     f.write(f'{self.inputstyle}\n')
                     f.write('0\n')
                     if self.dgrowth:
-                        f.write(f'{self._get_opac_name(dgrowth=self.dgrowth)}\n')
+                        f.write(
+                            f'{self._get_opac_name(dgrowth=self.dgrowth)}\n')
                     else:
                         f.write(f'{self._get_opac_name(material2=True)}\n')
                 f.write('---------\n')
 
         if dustkappa:
 
-            amax = int(self.amax)
-    
             ofile = 'dustkappa' if not self.polarization else 'dustkapscatmat'
 
             try:
                 # Fetch the corresponding opacity table from a public repo
-                repo = 'https://raw.githubusercontent.com/jzamponi/'+\
-                    f'utils/main/opacity_tables'
-        
+                repo = 'https://raw.githubusercontent.com/jzamponi/' + \
+                       f'utils/main/opacity_tables'
+
                 if self.csubl > 0:
                     # Download opacity of the first species 
                     utils.download_file(
@@ -665,11 +692,13 @@ class Pipeline:
                     # Download opacity of the second species. If dgrowth use 1mm
                     if self.dgrowth:
                         utils.download_file(
-                            f'{repo}/{ofile}_' +\
+                            f'{repo}/{ofile}_' +
                             f'{self._get_opac_name(dgrowth=self.dgrowth)}.inp')
                     else:
-                        utils.download_file(f'{repo}/' +\
-                            f'{ofile}_{self._get_opac_name(material2=True)}.inp')
+                        utils.download_file(
+                            f'{repo}/' +
+                            f'{ofile}_' +
+                            f'{self._get_opac_name(material2=True)}.inp')
 
                 else:
                     # Download opacity for the single dust species 
@@ -678,30 +707,35 @@ class Pipeline:
 
             # If unable to download from the repo, calculate it using dustmixer
             except Exception as e:
+                utils.print_(e, red=True)
                 utils.print_(
-                    f'Unable to download opacity table. I will call ' +\
-                    'dustmixer, as in synthesizer --opacity using '+\
+                    f'Unable to download opacity table. I will call ' +
+                    'dustmixer, as in synthesizer --opacity using ' +
                     'default values.', blue=True)
-                
+
                 self.dust = self.dustmixer()
 
-
         if dustkapalignfact:
-            raise ImportError(f'{utils.color.red}There is no ' +\
-                f'dustkapalignfact_*.inp file. Run synthesizer again with ' +\
-                f'the option --opacity --alignment.{utils.color.none}')
+            raise ImportError(f'{utils.color.red}There is no ' +
+                              f'dustkapalignfact_*.inp file. ' +
+                              f'Run synthesizer again with ' +
+                              f'the option --opacity --alignment.' +
+                              f'{utils.color.none}')
 
         if grainalign:
-            raise ImportError(f'{utils.color.red}There is no ' +\
-                f'grainalign_dir.inp file. Run synthesizer again adding ' +\
-                f'--vector-field to --grid to create the alignment field ' +\
-                f'from the input model.{utils.color.none}')
+            raise ImportError(f'{utils.color.red}There is no ' +
+                              f'grainalign_dir.inp file. ' +
+                              f'Run synthesizer again adding ' +
+                              f'--vector-field to --grid to create the ' +
+                              f'alignment field from the input model.' +
+                              f'{utils.color.none}')
 
         # Register the pipeline step 
         self.steps.append('generate_input_files')
 
     @utils.elapsed_time
-    def monte_carlo(self, nphot, star=None, radmc3d_cmds=''):
+    def monte_carlo(self, nphot, star=None, write_fits_2d=True,
+                    write_fits_3d=False, radmc3d_cmds=''):
         """ 
             Call radmc3d to calculate the radiative temperature distribution 
         """
@@ -710,15 +744,15 @@ class Pipeline:
         utils.print_("Running a thermal Monte Carlo ...", bold=True)
 
         # Make sure RADMC3D is installed and callable
-        utils.which('radmc3d', 
-            msg="""You can easily install it with the following commands:
+        utils.which('radmc3d',
+                    msg="""You can easily install it with the following command:
                     - git clone https://github.com/dullemond/radmc3d-2.0.git
                     - cd radmc3d-2.0/src
                     - make
                     - export PATH=$PWD:$PATH    
                     - cd ../../
                     - synthesizer --raytrace
-                """) 
+                """)
 
         self.nphot = nphot
 
@@ -731,11 +765,13 @@ class Pipeline:
             self.tstar = star[5]
 
         # Make sure there's at least a grid, density and temp. distribution
-        utils.file_exists('amr_grid.inp', 
-            msg='You must create a model grid first. Use synthesizer -g')
+        utils.file_exists('amr_grid.inp',
+                          msg='You must create a model grid first. ' +
+                              'Use synthesizer -g')
 
-        utils.file_exists('dust_density.inp', 
-            msg='You must create a density model first. Use synthesizer -g')
+        utils.file_exists('dust_density.inp',
+                          msg='You must create a density model first. ' +
+                              'Use synthesizer -g')
 
         # Generate only the input files that are not available in the directory
         self.generate_input_files(inpfile=True, mc=True)
@@ -748,7 +784,7 @@ class Pipeline:
 
         # Write a new dustopac file only if dustmixer was used or if unexistent
         if not os.path.exists('dustopac.inp') or \
-            'dustmixer' in self.steps or self.overwrite:
+                'dustmixer' in self.steps or self.overwrite:
             self.generate_input_files(dustopac=True)
 
         # If opacites were calculated within the pipeline, don't overwrite them
@@ -766,36 +802,64 @@ class Pipeline:
             raise Exception('Received SIGKILL. Execution halted by user.')
 
         self._radmc3d_banner()
-        
-        self._catch_radmc3d_error()
-        
-        # Read in the new temperature 
-        temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
-        dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
-        nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
-        temp_mc = temp_mc.reshape((nx, ny, nz))
-        bbox = self._get_bbox() * u.cm.to(u.au)
 
-        # Write the new 3D temperature field to FITS file
-        utils.write_fits(
-            f'temperature-mc.fits', 
-            data=temp_mc,
-            header=fits.Header({
-                'BTYPE': 'Dust Temperature',
-                'BUNIT': 'K',
-                'CDELT1': 2 * bbox / nx,
-                'CRPIX1': nx // 2,
-                'CRVAL1': 0,
-                'CUNIT1': 'AU',
-                'CDELT2': 2 * bbox / ny,
-                'CRPIX2': ny // 2,
-                'CRVAL2': 0,
-                'CUNIT2': 'AU',
-            }),
-            overwrite=True,
-            verbose=True,
-        )
-        
+        self._catch_radmc3d_error()
+
+        if write_fits_2d or write_fits_3d:
+            # Read in the new temperature
+            temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
+            dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+            nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
+            temp_mc = temp_mc.reshape((nx, ny, nz))
+            bbox = self._get_bbox() * u.cm.to(u.au)
+
+        if write_fits_2d:
+            utils.write_fits(
+                f'temperature_mc_2d.fits',
+                data=np.array(
+                    [temp_mc[nx // 2, ...], temp_mc[..., nz // 2]]
+                ),
+                header=fits.Header({
+                    'BTYPE': 'Dust Temperature (MC)',
+                    'BUNIT': 'K',
+                    'CDELT1': 2 * bbox / nx,
+                    'CRPIX1': nx // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / ny,
+                    'CRPIX2': ny // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                    'NPHOT': self.nphot,
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+        if write_fits_3d:
+            utils.write_fits(
+                f'temperature_mc_3d.fits',
+                data=temp_mc,
+                header=fits.Header({
+                    'BTYPE': 'Dust Temperature (MC)',
+                    'BUNIT': 'K',
+                    'CDELT1': 2 * bbox / nx,
+                    'CRPIX1': nx // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / ny,
+                    'CRPIX2': ny // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                    'CDELT3': 2 * bbox / ny,
+                    'CRPIX3': ny // 2,
+                    'CRVAL3': 0,
+                    'CUNIT3': 'AU',
+                    'NPHOT': self.nphot,
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+
         # Free up memory
         del temp_mc
 
@@ -803,38 +867,42 @@ class Pipeline:
         self.steps.append('monte_carlo')
 
     @utils.elapsed_time
-    def raytrace(self, lam=None, incl=None, phi=None, npix=None, sizeau=None, 
-            distance=None, tau=False, tau_surf=None, show_tau_surf=False, 
-            noscat=False, radmc3d_cmds='', cmap=None, stretch=None, show=False):
+    def raytrace(self, lam=None, incl=None, phi=None, npix=None, sizeau=None,
+                 distance=None, tau=False, tau_surf=None, show_tau_surf=False,
+                 noscat=False, radmc3d_cmds='', cmap=None, stretch=None,
+                 show=False):
         """ 
             Call radmc3d to raytrace the newly created grid and plot an image 
         """
 
         print('')
-        utils.print_("Ray-tracing the model density and temperature ...\n", 
-            bold=True)
+        utils.print_("Ray-tracing the model density and temperature ...\n",
+                     bold=True)
 
         # Make sure RADMC3D is installed and callable
-        utils.which('radmc3d', 
-            msg="""\n\nYou can easily install it with the following commands:
+        utils.which('radmc3d',
+                    msg="""\n\n
+                    You can easily install it with the following commands:
                     - git clone https://github.com/dullemond/radmc3d-2.0.git
                     - cd radmc3d-2.0/src
                     - make
                     - export PATH=$PWD:$PATH    
                     - cd ../../
                     - synthesizer --raytrace
-                """) 
+                """)
 
         # Make sure there's at least a grid, density and temp. distribution
-        utils.file_exists('amr_grid.inp', 
-            msg='You must create a model grid first. Use synthesizer -g')
+        utils.file_exists('amr_grid.inp',
+                          msg='You must create a model grid first. ' +
+                              'Use synthesizer -g')
 
-        utils.file_exists('dust_density.inp', 
-            msg='You must create a density model first. Use synthesizer -g')
+        utils.file_exists('dust_density.inp',
+                          msg='You must create a density model first. ' +
+                              'Use synthesizer -g')
 
         utils.file_exists('dust_temperature.dat',
-            msg='You must create a temperature model first. '+\
-                'Use synthesizer -g --temperature or synthesizer -mc')
+                          msg='You must create a temperature model first. Use' +
+                              'synthesizer -g --temperature or synthesizer -mc')
 
         # Generate only the input files that are not available in the directory
         if not os.path.exists('radmc3d.inp') or self.overwrite:
@@ -848,7 +916,7 @@ class Pipeline:
 
         # Write a new dustopac file only if dustmixer was used or if unexistent
         if not os.path.exists('dustopac.inp') or \
-            'dustmixer' in self.steps or self.overwrite:
+                'dustmixer' in self.steps or self.overwrite:
             self.generate_input_files(dustopac=True)
 
         # If opacites were calculated within the pipeline, don't overwrite them
@@ -871,7 +939,7 @@ class Pipeline:
         utils.file_exists('stars.inp')
         utils.file_exists('dustopac.inp')
         utils.file_exists('dustkapscat*' if self.polarization else 'dustkappa*')
-        if self.alignment: 
+        if self.alignment:
             utils.file_exists('dustkapalignfact*')
             utils.file_exists('grainalign_dir.inp')
 
@@ -888,13 +956,14 @@ class Pipeline:
         if phi is not None:
             self.phi = phi
         if sizeau is not None:
-            self.sizeau = sizeau 
+            self.sizeau = sizeau
         else:
             self.sizeau = int(2 * self._get_bbox() * u.cm.to(u.au))
 
         # To do: Double check that this is correct. noscat does include 
         # k_sca in the extincion opacity but maybe scatmode=0 doesn't 
-        if noscat: self.scatmode = 0
+        if noscat:
+            self.scatmode = 0
 
         # Set the RADMC3D command by concatenating options
         cmd = f'radmc3d image '
@@ -906,7 +975,6 @@ class Pipeline:
         cmd += f'phi {self.phi} ' if self.phi is not None else ' '
         cmd += f'npix {self.npix} ' if self.npix is not None else ' '
         cmd += f'{" ".join(radmc3d_cmds)} '
-        
 
         # Call RADMC3D and pipe the output also to radmc3d.out
         try:
@@ -921,7 +989,7 @@ class Pipeline:
         self._catch_radmc3d_error()
 
         utils.print_(
-            f'Dust opacity used: kappa({self.lam}um) = ' +\
+            f'Dust opacity used: kappa({self.lam}um) = ' +
             f'{self._get_opacity():.2} cm2/g', blue=True)
 
         # Generate FITS files from the image.out
@@ -959,25 +1027,27 @@ class Pipeline:
 
                 os.rename('image.out', 'tauimage.out')
             except Exception as e:
-                utils.print_(f'Unable to generate tau surface.\n{e}\n', red=True)
+                utils.print_(f'Unable to generate tau surface.\n{e}\n',
+                             red=True)
 
         # Render the 3D surface 
         if show_tau_surf:
             utils.not_implemented()
-            from mayavi import mlab
+            # from mayavi import mlab
             utils.file_exists('tausurface_3d.out')
 
         # Register the pipeline step 
         self.steps.append('raytrace')
 
-
     @utils.elapsed_time
-    def synthetic_observation(self, show=False, cleanup=True, 
-            script=None, simobserve=True, clean=True, exportfits=True, 
-            obstime=1, resolution=None, obsmode='int', graphic=False, 
-            use_template=False, telescope=None, verbose=False, 
-            cmap=None, stretch=None, no_noise=False,
-            ):
+    def synthetic_observation(self, show=False,
+                              script=None, simobserve=True, clean=True,
+                              exportfits=True,
+                              obstime=1, resolution=None, obsmode='int',
+                              graphic=False,
+                              use_template=False, telescope=None, verbose=False,
+                              cmap=None, stretch=None, no_noise=False,
+                              ):
         """ 
             Prepare the input for the CASA simulator from the RADMC3D output,
             and call CASA to run a synthetic observation.
@@ -987,29 +1057,29 @@ class Pipeline:
         utils.print_('Running synthetic observation ...\n', bold=True)
 
         # Make sure input model image exists
-        utils.file_exists('radmc3d_I.fits', 
-            msg='You must create a model image first. Use synthesizer -rt')
+        utils.file_exists('radmc3d_I.fits',
+                          msg='You must create a model image first. Use synthesizer -rt')
 
         # Make sure CASA is installed and callable. If not, bypass it
-        try: 
-            utils.which('casa', msg='It is easy to install. ' +\
-                'Go to https://casa.nrao.edu/casa_obtaining.shtml') 
+        try:
+            utils.which('casa', msg='It is easy to install. ' + \
+                                    'Go to https://casa.nrao.edu/casa_obtaining.shtml')
 
-        except Execption as e:
+        except Exception as e:
             utils.print_(f'{e}. I will set obsmode="convolve"', red=True)
             obsmode = 'convolve'
 
         # If the observing wav. is outside the CASA working range, do not use
-        if self.lam < 400 or self.lam > 4e6: 
+        if self.lam < 400 or self.lam > 4e6:
             utils.print_('Observing wavelength is outside mm/sub-mm range. ')
-            obsmode = 'convolve' 
+            obsmode = 'convolve'
 
-        # Warn the user if current lambda differs from that in input rt model
+            # Warn the user if current lambda differs from that in input rt model
         model_lambda = fits.getheader('radmc3d_I.fits')['LAMBDA']
         if self.lam != model_lambda:
             utils.print_(
-                f'Warning: current lambda ({self.lam}) differs from ' +\
-                f'input model radmc3d_I.fits ({model_lambda})', 
+                f'Warning: current lambda ({self.lam}) differs from ' + \
+                f'input model radmc3d_I.fits ({model_lambda})',
                 blue=True)
 
         # If obsmode is convolve, do not use CASA.
@@ -1019,7 +1089,7 @@ class Pipeline:
             utils.print_(
                 'Limiting the observation to convolution' + \
                 ' and noise addition.' if not no_noise else '')
-    
+
             if resolution is not None:
                 self.resolution = resolution
             else:
@@ -1030,7 +1100,7 @@ class Pipeline:
             img = synobs.SynImage('radmc3d_I.fits')
             img.convolve(self.resolution)
             if not no_noise:
-                img.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+                img.add_noise(obstime, bandwidth=8 * u.GHz.to(u.Hz))
 
             img.write_fits('synobs_I.fits')
 
@@ -1039,8 +1109,8 @@ class Pipeline:
                 img_u = synobs.SynImage('radmc3d_U.fits')
                 img_q.convolve(self.resolution)
                 img_u.convolve(self.resolution)
-                img_q.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
-                img_u.add_noise(obstime, bandwidth=8*u.GHz.to(u.Hz))
+                img_q.add_noise(obstime, bandwidth=8 * u.GHz.to(u.Hz))
+                img_u.add_noise(obstime, bandwidth=8 * u.GHz.to(u.Hz))
                 img_q.write_fits('synobs_Q.fits')
                 img_u.write_fits('synobs_U.fits')
 
@@ -1050,15 +1120,16 @@ class Pipeline:
 
                 script = synobs.CasaScript(self.lam)
 
-                if use_template and self.lam not in [1300, 3000, 7000, 9000, 18000]: 
+                if use_template and self.lam not in [1300, 3000, 7000, 9000,
+                                                     18000]:
                     utils.print_(
-                        f"There's no template available at {self.lam} um "+\
+                        f"There's no template available at {self.lam} um " + \
                         'I will create a simple one named casa_script.py.',
                         blue=True)
 
-                    utils.print_('You can modify it later and re-run with ' +\
-                        'synthesizer --synobs --script casa_script.py',
-                        blue=True)
+                    utils.print_('You can modify it later and re-run with ' + \
+                                 'synthesizer --synobs --script casa_script.py',
+                                 blue=True)
 
                     use_template = False
 
@@ -1074,15 +1145,16 @@ class Pipeline:
                         18000: 'vla_18mm.py',
                     }[self.lam]
 
-                    if self.polarization: 
+                    if self.polarization:
                         template = template.replace('1.3mm', '1.3mm_pol')
 
-                    script.name = str(source_dir/f'synobs/templates/{template}')
-                    script.read(script.name)                    
+                    script.name = str(
+                        source_dir / f'synobs/templates/{template}')
+                    script.read(script.name)
 
                 else:
                     # Create a minimal template CASA script
-                    if self.npix is None: 
+                    if self.npix is None:
                         self.npix = fits.getheader(
                             'radmc3d_I.fits').get('NAXIS1')
 
@@ -1105,7 +1177,7 @@ class Pipeline:
                 script.write('casa_script.py')
 
             else:
-                if 'http' in script: 
+                if 'http' in script:
                     # Download the script if a URL is provided
                     utils.download_file(script)
 
@@ -1132,18 +1204,17 @@ class Pipeline:
         # Register the pipeline step 
         self.steps.append('synthetic_observation')
 
-
     @utils.elapsed_time
     def plot_rt(self, distance=None, cmap=None, stretch=None):
         utils.print_('Plotting radmc3d_I.fits')
 
         # Override instance values in case it is called from parser.py
         if distance is not None:
-            self.distance = distance 
+            self.distance = distance
         if cmap is not None:
-            self.cmap = cmap 
+            self.cmap = cmap
         if stretch is not None:
-            self.stretch = stretch 
+            self.stretch = stretch
 
         try:
             utils.file_exists('radmc3d_I.fits')
@@ -1154,25 +1225,25 @@ class Pipeline:
             if self.polarization:
                 fig = utils.polarization_map(
                     source='radmc3d',
-                    render='I', 
-                    rotate=90 if self.alignment else 0, 
-                    step=15, 
-                    scale=10, 
-                    min_pfrac=0, 
-                    const_pfrac=True, 
+                    render='I',
+                    rotate=90 if self.alignment else 0,
+                    step=15,
+                    scale=10,
+                    min_pfrac=0,
+                    const_pfrac=True,
                     vector_color='white',
-                    vector_width=1, 
+                    vector_width=1,
                     verbose=False,
-                    block=True, 
-                    distance=self.distance, 
+                    block=True,
+                    distance=self.distance,
                     cmap=self.cmap,
                     stretch=self.stretch,
                 )
             else:
                 fig = utils.plot_map(
-                    filename='radmc3d_I.fits', 
-                    scalebar=50*u.au, 
-                    distance=self.distance, 
+                    filename='radmc3d_I.fits',
+                    scalebar=50 * u.au,
+                    distance=self.distance,
                     bright_temp=False,
                     verbose=False,
                     stretch=self.stretch,
@@ -1183,28 +1254,28 @@ class Pipeline:
         except Exception as e:
             utils.print_(
                 f'Unable to plot: {e}', bold=True)
-        
+
         # Register the pipeline step
         self.steps.append('plot_rt')
- 
+
     @utils.elapsed_time
     def plot_synobs(self, distance=None, cmap=None, stretch=None):
         utils.print_(f'Plotting the new synthetic image')
 
         # Override instance values in case it is called from parser.py
         if distance is not None:
-            self.distance = distance 
+            self.distance = distance
         if cmap is not None:
-            self.cmap = cmap 
+            self.cmap = cmap
         if stretch is not None:
-            self.stretch = stretch 
+            self.stretch = stretch
 
         try:
             utils.file_exists('synobs_I.fits')
             utils.fix_header_axes('synobs_I.fits')
 
             utils.get_beam('synobs_I.fits', verbose=True)
-                
+
             if self.polarization:
                 utils.file_exists('synobs_Q.fits')
                 utils.file_exists('synobs_U.fits')
@@ -1212,17 +1283,17 @@ class Pipeline:
                 utils.fix_header_axes('synobs_U.fits')
 
                 fig = utils.polarization_map(
-                    source='synobs', 
-                    render='I', 
-                    stokes_I='synobs_I.fits', 
-                    stokes_Q='synobs_Q.fits', 
-                    stokes_U='synobs_U.fits', 
-                    rotate=0, 
-                    step=15, 
-                    scale=10, 
-                    const_pfrac=True, 
+                    source='synobs',
+                    render='I',
+                    stokes_I='synobs_I.fits',
+                    stokes_Q='synobs_Q.fits',
+                    stokes_U='synobs_U.fits',
+                    rotate=0,
+                    step=15,
+                    scale=10,
+                    const_pfrac=True,
                     vector_color='white',
-                    vector_width=1, 
+                    vector_width=1,
                     verbose=True,
                     distance=self.distance,
                     cmap=self.cmap,
@@ -1231,7 +1302,7 @@ class Pipeline:
             else:
                 fig = utils.plot_map(
                     filename='synobs_I.fits',
-                    scalebar=50*u.au,
+                    scalebar=50 * u.au,
                     bright_temp=False,
                     verbose=False,
                     distance=self.distance,
@@ -1252,18 +1323,18 @@ class Pipeline:
         from matplotlib.colors import LogNorm
 
         if cmap is not None:
-            self.cmap = cmap 
+            self.cmap = cmap
         if stretch is not None:
-            self.stretch = stretch 
+            self.stretch = stretch
 
         if not os.path.exists('tau.fits') or \
-            (os.path.exists('tau.fits') and self.overwrite):
+                (os.path.exists('tau.fits') and self.overwrite):
 
             utils.print_(
-                f'Generating optical depth map at {self.lam} microns ' +\
+                f'Generating optical depth map at {self.lam} microns ' + \
                 f'using RADMC3D')
 
-            if os.path.exists(filename:='image.out'):
+            if os.path.exists(filename := 'image.out'):
                 utils.print_(
                     'Backing up existing image.out to image.out_backup')
                 os.system(f'cp {filename} {filename}_backup ')
@@ -1290,7 +1361,7 @@ class Pipeline:
                 tau=True,
                 fitsfile='tau.fits',
                 radmc3dimage='tau.out',
-                dpc=self.distance, 
+                dpc=self.distance,
             )
 
         else:
@@ -1306,11 +1377,11 @@ class Pipeline:
 
                 try:
                     from matplotlib.colors import AsinhNorm
-                    norm = AsinhNorm(linear_width=1, 
-                            vmin=tau_map.min(), vmax=tau_map.max())
+                    norm = AsinhNorm(linear_width=1,
+                                     vmin=tau_map.min(), vmax=tau_map.max())
                 except ImportError:
                     utils.print_('Current version of Matplotlib does not ' +
-                        'support asinh stretch. Consider upgrading to >=3.8.0')
+                                 'support asinh stretch. Consider upgrading to >=3.8.0')
                     norm = None
             else:
                 norm = None
@@ -1318,7 +1389,7 @@ class Pipeline:
             # Find the size of the box to set the spatial scale 
             if self.bbox is None:
                 bbox = tau_hdr['CDELT1'] * tau_hdr['NAXIS1'] / 2
-                
+
             else:
                 bbox = self.bbox
                 if 'create_grid' in self.steps:
@@ -1335,11 +1406,11 @@ class Pipeline:
 
             plt.title(fr'Optical depth at $\lambda = ${self.lam}$\mu$m')
             plt.imshow(
-                tau_map, 
-                origin='lower', 
-                cmap=self.cmap, 
+                tau_map,
+                origin='lower',
+                cmap=self.cmap,
                 norm=norm,
-                extent = [-bbox, bbox] * 2
+                extent=[-bbox, bbox] * 2
             )
             plt.xlabel('X (AU)')
             plt.ylabel('Y (AU)')
@@ -1365,16 +1436,16 @@ class Pipeline:
         nspec = int(dens[2])
         if nspec == 1:
             dens = dens[3:]
-        else: 
+        else:
             utils.print_('Found two dust species, I plot only the first one')
-            dens = dens[3: ncells+3]
+            dens = dens[3: ncells + 3]
         nx = int(np.cbrt(dens.size))
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
         grid = gridder.Grid('cartesian', nx, bbox)
-        grid.plot_2d('density', data=dens, cmap=self.cmap)
+        grid.plot_2d('density', data=dens, cmap=self.cmap, write_fits=False)
 
-        if temp: 
+        if temp:
             utils.file_exists('dust_temperature.dat')
             utils.print_('Reading temperature from dust_temperature.dat')
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
@@ -1385,7 +1456,7 @@ class Pipeline:
 
         # Register the pipeline step
         self.steps.append('plot_grid_2d')
-        
+
     @utils.elapsed_time
     def plot_grid_3d(self, temp=False, cmap=None):
         """ 
@@ -1402,17 +1473,17 @@ class Pipeline:
         nspec = int(dens[2])
         if nspec == 1:
             dens = dens[3:]
-        else: 
+        else:
             utils.print_('Found two dust species, I plot only the first one')
-            dens = dens[3: ncells+3]
+            dens = dens[3: ncells + 3]
         nx = int(np.cbrt(dens.size))
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
         utils.print_(f'Rendering a box of {nx}^3 pixels')
         grid = gridder.Grid('cartesian', nx, bbox)
-        grid.plot_3d('density', data=dens, cmap=self.cmap)
+        grid.plot_3d('density', data=dens, cmap=self.cmap, write_fits=False)
 
-        if temp: 
+        if temp:
             utils.file_exists('dust_temperature.dat')
             utils.print_('Reading temperature from dust_temperature.dat')
             temp = np.loadtxt('dust_temperature.dat', skiprows=3)
@@ -1441,7 +1512,7 @@ class Pipeline:
         utils.file_exists('dustkap*.inp')
         filename = utils.latest_file('dustkap*.inp')
         utils.print_(f'Reading from the most recent opacity table: {filename}')
-        
+
         header = np.loadtxt(filename, max_rows=2)
         iformat = int(header[0])
         nlam = int(header[1])
@@ -1489,8 +1560,8 @@ class Pipeline:
         prefix = 'dustkapscatmat_' if self.polarization else 'dustkappa_'
         self.opacfile = prefix + opacname + '.inp'
 
-        return opacname 
-    
+        return opacname
+
     def _get_opacity(self):
         """ Read in an opacity file, interpolate and find the opacity at lambda """
         from scipy.interpolate import interp1d
@@ -1500,14 +1571,14 @@ class Pipeline:
 
         # Check if it was created by dustmixer
         if self.kappa is not None:
-           return self.kappa 
+            return self.kappa
 
-        # Generate the opacfile string and make sure file exists
+            # Generate the opacfile string and make sure file exists
         self._get_opac_name(csubl=self.csubl)
 
         try:
             # Read in opacity file (dustkap*.inp) and interpolate to find k_ext
-            utils.file_exists(self.opacfile) 
+            utils.file_exists(self.opacfile)
             header = np.loadtxt(self.opacfile, max_rows=2)
             iformat = int(header[0])
             nlam = int(header[1])
@@ -1523,7 +1594,7 @@ class Pipeline:
 
         except Exception as e:
             utils.print_(
-                f"{e} I couldn't obtain the opacity from {self.opacfile}. " +\
+                f"{e} I couldn't obtain the opacity from {self.opacfile}. " + \
                 "I will assume k_ext = 1 g/cm3.")
             self.kappa = 1.0
 
@@ -1531,14 +1602,14 @@ class Pipeline:
 
     def _radmc3d_banner(self):
         print(
-            f'{utils.color.blue}{"="*31}  RADMC3D  {"="*31}{utils.color.none}')
+            f'{utils.color.blue}{"=" * 31}  RADMC3D  {"=" * 31}{utils.color.none}')
 
     def _catch_radmc3d_error(self):
         """ Raise an exception to halt synthesizer if RADMC3D ended in Error """
 
         # Read radmc3d.out and stop the pipeline if RADMC3D finished in error
         utils.file_exists('radmc3d.out')
-        with open ('radmc3d.out', 'r') as out:
+        with open('radmc3d.out', 'r') as out:
             for line in out.readlines():
                 line = line.lower()
                 if 'error' in line or 'stop' in line:
@@ -1570,11 +1641,10 @@ class Pipeline:
             skip = {0: 6, 1: 7, 10: 7}[gridid]
 
             # Number of lines to read
-            nlines = nx * ny * nz + 3 
+            nlines = nx * ny * nz + 3
 
             # Read in the grid
             g = np.loadtxt('amr_grid.inp', skiprows=skip, max_rows=nlines)
 
             # Return bbox as the difference between the first and last vertex
             return (g[-1] - g[0]) / 2
-

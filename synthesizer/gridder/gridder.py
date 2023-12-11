@@ -58,6 +58,7 @@ class Grid():
         self.sootline = sootline
         self.carbon = 0.375
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
+        self.savefig = False
 
     def read_sph(self, filename, source='sphng'):
         """ 
@@ -252,6 +253,12 @@ class Grid():
         )
         mlab.points3d(self.x, self.y, self.z, self.dens)
         mlab.show()
+
+        if self.savefig:
+            figname = 'particles.png' if not isinstance(self.savefig, str) \
+                else self.savefig
+            utils.print_(f'Saving figure to {figname}')
+            mlab.savefig(figname)
 
     def find_resolution(self):
         """
@@ -506,7 +513,7 @@ class Grid():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
-    def plot_2d(self, field, data=None, cmap=None):
+    def plot_2d(self, field, data=None, cmap=None, savefig=False):
         """ Plot the density midplane at z=0 using Matplotlib """
 
         if self.geometry == 'spherical':
@@ -633,32 +640,8 @@ class Grid():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-        try:
-            # Write maps to FITS files
-            utils.write_fits(
-                f'{field}_midplane.fits', 
-                data=np.array([data_xy, data_xz]),
-                header=fits.Header({
-                    'BTYPE': title.split('(')[0],
-                    'BUNIT': title.split('(')[1][:-1].replace('$',''),
-                    'CDELT1': 2 * bbox / self.ncells,
-                    'CRPIX1': self.ncells // 2,
-                    'CRVAL1': 0,
-                    'CUNIT1': 'AU',
-                    'CDELT2': 2 * bbox / self.ncells,
-                    'CRPIX2': self.ncells // 2,
-                    'CRVAL2': 0,
-                    'CUNIT2': 'AU',
-                }),
-                overwrite=True,
-                verbose=True,
-            )
-        except Exception as e:
-            utils.print_('Unable to write data to FITS file',  red=True)
-            utils.print_(e, bold=True)
 
-
-    def plot_3d(self, field, data=None, tau=False, cmap=None): 
+    def plot_3d(self, field, data=None, tau=False, cmap=None, savefig=False):
         """ Render the interpolated 3D field using Mayavi """
 
         if self.geometry == 'spherical':
@@ -771,6 +754,99 @@ class Grid():
             utils.print_('Unable to show the 3D grid.',  red=True)
             utils.print_(e, bold=True)
 
+    def save_grid_2d(self, field, data=None):
+        """ Save the 2D grid as a FITS file """
+
+        if data is None:
+            data = {
+                'density': self.grid_dens,
+                'temperature': self.grid_temp
+            }[field]
+
+        title = {
+            'density': r'Dust Density (g cm$^{-3}$)',
+            'temperature': r'Gas Temperature (g cm$^{-3}$)',
+        }[field]
+
+        # Set the bbox if existent
+        if self.bbox is None:
+            extent = self.bbox
+        else:
+            bbox = self.bbox * u.cm.to(u.au)
+            extent = [-bbox, bbox] * 2
+
+        # Extract the middle plane
+        plane = self.ncells // 2 - 1
+
+        data_xy = data[:, :, plane].T
+        data_xz = data[:, plane, :].T
+
+        try:
+            # Write maps to FITS files
+            utils.write_fits(
+                f'{field}_2d.fits',
+                data=np.array([data_xy, data_xz]),
+                header=fits.Header({
+                    'BTYPE': title.split('(')[0],
+                    'BUNIT': title.split('(')[1][:-1].replace('$', ''),
+                    'CDELT1': 2 * bbox / self.nx,
+                    'CRPIX1': self.nx // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / self.ny,
+                    'CRPIX2': self.ny // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+        except Exception as e:
+            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_(e, bold=True)
+
+
+    def save_grid_3d(self, field, data=None):
+        """ Save the 3D grid as a FITS file """
+
+        if data is None:
+            data = {
+                'density': self.grid_dens,
+                'temperature': self.grid_temp
+            }[field]
+
+        title = {
+            'density': r'Dust Density (g cm$^{-3}$)',
+            'temperature': r'Gas Temperature (g cm$^{-3}$)',
+        }[field]
+
+        try:
+            # Write maps to FITS files
+            utils.write_fits(
+                f'{field}_3d.fits',
+                data=data,
+                header=fits.Header({
+                    'BTYPE': title.split('(')[0],
+                    'BUNIT': title.split('(')[1][:-1].replace('$', ''),
+                    'CDELT1': 2 * bbox / self.nx,
+                    'CRPIX1': self.nx // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / self.ny,
+                    'CRPIX2': self.ny // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                    'CDELT3': 2 * bbox / self.ny,
+                    'CRPIX3': self.ny // 2,
+                    'CRVAL3': 0,
+                    'CUNIT3': 'AU',
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+        except Exception as e:
+            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_(e, bold=True)
 
     def create_vtk(self, dust_density=False, dust_temperature=False, rename=False):
         """ Call radmc3d to create a VTK file of the grid """

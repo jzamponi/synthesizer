@@ -18,7 +18,7 @@ class AnalyticalModel():
     def __init__(self, model, bbox, geometry, ncells=100, g2d=100, temp=False, 
             nspec=1, csubl=0, sootline=300, rin=None, rout=None, rc=None, 
             r0=None, h0=None, alpha=None, flare=None, mdisk=None, r_rim=None, 
-            r_gap=None, w_gap=None, dr_gap=None, rho0=None, rflat=None, 
+            r_gap=None, w_gap=None, dr_gap=None, rho0=None, rflat=None,
         ):
         """
         Create an analytical density model indexed by the variable model.
@@ -26,6 +26,9 @@ class AnalyticalModel():
         """
 
         self.ncells = ncells
+        self.nx = ncells
+        self.ny = ncells
+        self.nz = ncells
         self.geometry = geometry
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
@@ -78,17 +81,27 @@ class AnalyticalModel():
     
         # Set up a coordinate grid: cell walls and cell centers
         if self.geometry == 'cartesian':
+            utils.print_(f'Using a cartesian grid (x, y, z): {[self.ncells]*3}')
             self.xw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
             self.yw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
             self.zw = np.linspace(-self.bbox, self.bbox, self.ncells + 1)
 
         elif self.geometry == 'spherical':
-            self.xw = np.linspace(0, self.bbox, self.ncells+1)
-            self.yw = np.linspace(0, 2 * np.pi, self.ncells+1)
-            self.zw = np.linspace(0, np.pi, self.ncells+1)
+            utils.print_(f'Using a spherical grid (r, theta, phi): ' +
+                         f'{[self.ncells]*3}')
+            self.xw = np.linspace(
+                1*u.au.to(u.cm) if self.rin is None else self.rin*u.au.to(u.cm),
+                self.bbox,
+                self.ncells+1
+            )
+            self.yw = np.linspace(0, np.pi, self.ncells+1)
+            self.zw = np.linspace(0, 2 * np.pi, self.ncells+1)
 
         else:
             utils.not_implemented(f'{self.geometry = }')
+
+        bbox_au = self.bbox * u.cm.to(u.au)
+        utils.print_(f'Size of the box: [-{bbox_au}, {bbox_au}] AU')
 
         # Create a grid
         xc = 0.5 * (self.xw[0: self.ncells] + self.xw[1: self.ncells + 1])
@@ -452,26 +465,6 @@ class AnalyticalModel():
             utils.print_('Unable to show the 2D grid slice.',  red=True)
             utils.print_(e, bold=True)
 
-        # Write maps to FITS files
-        utils.write_fits(
-            f'{field}_midplane.fits', 
-            data=np.array([data_xy, data_xz]),
-            header=fits.Header({
-                'BTYPE': title.split('(')[0],
-                'BUNIT': title.split('(')[1][:-1].replace('$',''),
-                'CDELT1': 2 * bbox / self.ncells,
-                'CRPIX1': self.ncells // 2,
-                'CRVAL1': 0,
-                'CUNIT1': 'AU',
-                'CDELT2': 2 * bbox / self.ncells,
-                'CRPIX2': self.ncells // 2,
-                'CRVAL2': 0,
-                'CUNIT2': 'AU',
-            }),
-            overwrite=True,
-            verbose=True,
-        )
-
     def plot_3d(self, field, data=None, tau=False, cmap=None): 
         """ Render the interpolated 3D field using Mayavi """
         try:
@@ -583,6 +576,99 @@ class AnalyticalModel():
             utils.print_('Unable to show the 3D grid.',  red=True)
             utils.print_(e, bold=True)
 
+    def save_grid_2d(self, field, data=None):
+        """ Save the 2D grid as a FITS file """
+
+        if data is None:
+            data = {
+                'density': self.dens,
+                'temperature': self.temp
+            }[field]
+
+        title = {
+            'density': r'Dust Density (g cm$^{-3}$)',
+            'temperature': r'Gas Temperature (g cm$^{-3}$)',
+        }[field]
+
+        # Set the bbox if existent
+        if self.bbox is None:
+            extent = self.bbox
+        else:
+            bbox = self.bbox * u.cm.to(u.au)
+            extent = [-bbox, bbox] * 2
+
+        # Extract the middle plane
+        plane = self.ncells // 2 - 1
+
+        data_xy = data[:, :, plane].T
+        data_xz = data[:, plane, :].T
+
+        try:
+            # Write maps to FITS files
+            utils.write_fits(
+                f'{field}_2d.fits',
+                data=np.array([data_xy, data_xz]),
+                header=fits.Header({
+                    'BTYPE': title.split('(')[0],
+                    'BUNIT': title.split('(')[1][:-1].replace('$', ''),
+                    'CDELT1': 2 * bbox / self.nx,
+                    'CRPIX1': self.nx // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / self.ny,
+                    'CRPIX2': self.ny // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+        except Exception as e:
+            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_(e, bold=True)
+
+
+    def save_grid_3d(self, field, data=None):
+        """ Save the 3D grid as a FITS file """
+
+        if data is None:
+            data = {
+                'density': self.dens,
+                'temperature': self.temp
+            }[field]
+
+        title = {
+            'density': r'Dust Density (g cm$^{-3}$)',
+            'temperature': r'Gas Temperature (g cm$^{-3}$)',
+        }[field]
+
+        try:
+            # Write maps to FITS files
+            utils.write_fits(
+                f'{field}_3d.fits',
+                data=data,
+                header=fits.Header({
+                    'BTYPE': title.split('(')[0],
+                    'BUNIT': title.split('(')[1][:-1].replace('$', ''),
+                    'CDELT1': 2 * bbox / self.nx,
+                    'CRPIX1': self.nx // 2,
+                    'CRVAL1': 0,
+                    'CUNIT1': 'AU',
+                    'CDELT2': 2 * bbox / self.ny,
+                    'CRPIX2': self.ny // 2,
+                    'CRVAL2': 0,
+                    'CUNIT2': 'AU',
+                    'CDELT3': 2 * bbox / self.ny,
+                    'CRPIX3': self.ny // 2,
+                    'CRVAL3': 0,
+                    'CUNIT3': 'AU',
+                }),
+                overwrite=True,
+                verbose=True,
+            )
+        except Exception as e:
+            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_(e, bold=True)
 
     def create_vtk(self, dust_density=False, dust_temperature=True, rename=False):
         """ Call radmc3d to create a VTK file of the grid """
