@@ -12,7 +12,7 @@ from synthesizer import utils
 
 
 class Grid():
-    def __init__(self, ncells, bbox=None, regular=True,
+    def __init__(self, geometry, ncells, bbox=None, regular=True,
             rin=None, rout=None, nspec=1, csubl=0, sootline=300, g2d=100, 
             temp=False, vfield=None):
         """
@@ -49,6 +49,7 @@ class Grid():
         self.grid_vy = None
         self.grid_vz = None
         self.vfield = vfield
+        self.heatsource = np.zeros((self.nx, self.ny, self.nz))
         self.add_temp = temp
         self.bbox = bbox
         self.rout = rout
@@ -513,6 +514,16 @@ class Grid():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
+    def write_heatsource(self):
+        """ Write internal heat source file """
+        utils.print_('Writing internal heat source file')
+
+        with open('heatsource.inp','w+') as f:
+            f.write('1\n')
+            f.write(f'{self.heatsource.size:d}\n')
+            for h in self.heatsource.ravel(order='F'):
+                f.write(f'{h:13.6e}\n')
+
     def plot_2d(self, field, data=None, cmap=None, savefig=False):
         """ Plot the density midplane at z=0 using Matplotlib """
 
@@ -819,6 +830,8 @@ class Grid():
             'density': r'Dust Density (g cm$^{-3}$)',
             'temperature': r'Gas Temperature (g cm$^{-3}$)',
         }[field]
+
+        bbox = self.bbox * u.cm.to(u.au)
 
         try:
             # Write maps to FITS files

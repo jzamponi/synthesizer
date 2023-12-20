@@ -140,7 +140,7 @@ class PPdisk(BaseModel):
     """
 
     def __init__(self, x, y, z, field, rin, rout, rc, r0, h0, alpha, flare, 
-                mdisk):
+                mdisk, mstar, mdot):
         super().__init__(x, y, z, field)
 
         # Default model parameters
@@ -152,6 +152,8 @@ class PPdisk(BaseModel):
         self.alpha = 1 if alpha is None else alpha
         self.flare = 0.3 if flare is None else flare
         self.mdisk = 1e-1 * u.Msun.to(u.g) if mdisk is None else mdisk
+        self.mstar = 1 * u.Msun.to(u.g) if mstar is None else mstar
+        self.mdot = 1e-5 * (u.Msun/u.yr).to(u.g/u.s) if mdot is None else mdot
 
     @property
     def dens(self):
@@ -164,7 +166,6 @@ class PPdisk(BaseModel):
         r3d = np.sqrt(x**2 + y**2 + z**2)
 
         # Set star mass in order to change how to calculate scale height
-        Mstar = 0 * u.Msun.to(u.g)
         rho_bg = 1e-30
         self.plotmin = rho_bg
 
@@ -182,10 +183,10 @@ class PPdisk(BaseModel):
                 np.exp(-(r/self.rc)**(2-self.alpha))
 
         # If Mstar is set, set scale height from s. speed and kep. vel.
-        if Mstar > 0:
-            c_s = np.sqrt(kB * self.T_r / m_H2)
-            v_K = np.sqrt(G * Mstar / r**3)
-            h0 = c_s / v_K 
+#        if self.mstar > 0:
+#            c_s = np.sqrt(kB * self.T_r / m_H2)
+#            v_K = np.sqrt(G * self.mstar / r**3)
+#            h0 = c_s / v_K
 
         # Scale height & Flaring 
         h = self.h0 * (r/self.r0)**self.flare
@@ -204,6 +205,16 @@ class PPdisk(BaseModel):
         return rho_g
 
     @property
+    def heatsource(self):
+        # Heating source term from viscous heating
+        r = np.sqrt(self.x**2 + self.y**2)
+        #return (3 / 4 / np.pi) * G * self.mdot * self.mstar / r3d**3
+        self.alpha = 1e-1
+        self.c_s = np.sqrt(kB * self.T_r / m_H2)
+        self.omega = np.sqrt(G * self.mstar / r**3)
+        return (9/4) * self.alpha * self.c_s**2 * self.dens * self.omega
+
+    @property
     def temp(self):
         # Radial temperature profile
         return self.T_r
@@ -214,7 +225,7 @@ class PPdiskGapRim(BaseModel):
     """ Protoplanetary disk with a gap and soft inner rim """
 
     def __init__(self, x, y, z, field, rin, rout, rc, r0, h0, alpha, flare, 
-                mdisk, r_rim, r_gap, w_gap, dr_gap):
+                mdisk, mstar, mdot, r_rim, r_gap, w_gap, dr_gap):
         super().__init__(x, y, z, field)
 
         # Default model parameters

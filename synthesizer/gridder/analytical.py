@@ -14,11 +14,12 @@ m_H2 = (2.3 * (const.m_p + const.m_e).cgs.value)
 G = const.G.cgs.value
 kB = const.k_B.cgs.value
 
-class AnalyticalModel():
+class AnalyticalModel:
     def __init__(self, model, bbox, geometry, ncells=100, g2d=100, temp=False, 
             nspec=1, csubl=0, sootline=300, rin=None, rout=None, rc=None, 
-            r0=None, h0=None, alpha=None, flare=None, mdisk=None, r_rim=None, 
-            r_gap=None, w_gap=None, dr_gap=None, rho0=None, rflat=None,
+            r0=None, h0=None, alpha=None, flare=None, mdisk=None, mstar=None,
+            mdot=None, r_rim=None, r_gap=None, w_gap=None, dr_gap=None,
+            rho0=None, rflat=None,
         ):
         """
         Create an analytical density model indexed by the variable model.
@@ -33,6 +34,7 @@ class AnalyticalModel():
         self.dens = np.zeros((ncells, ncells, ncells))
         self.temp = np.zeros((ncells, ncells, ncells))
         self.vfield = None
+        self.heatsource = np.zeros((ncells, ncells, ncells))
         self.add_temp = temp
         self.model = model 
         self.g2d = g2d
@@ -49,6 +51,8 @@ class AnalyticalModel():
         self.alpha = alpha
         self.flare = flare
         self.mdisk = mdisk
+        self.mstar = mstar
+        self.mdot = mdot
         self.r_rim = r_rim
         self.r_gap = r_gap
         self.w_gap = w_gap
@@ -144,15 +148,15 @@ class AnalyticalModel():
         # Protoplanetary Disk
         elif self.model == 'ppdisk':
             model = models.PPdisk(x, y, z, field, self.rin, self.rout, 
-                        self.rc, self.r0, self.h0, self.alpha, self.flare, 
-                        self.mdisk)
+                        self.rc, self.r0, self.h0, self.alpha, self.flare,
+                        self.mdisk, self.mstar, self.mdot)
 
         # Protoplanetary Disk with a gap and inner rim
         elif self.model == 'ppdisk-gap-rim':
             model = models.PPdiskGapRim(x, y, z, field, self.rin, 
                         self.rout, self.rc, self.r0, self.h0, self.alpha, 
-                        self.flare, self.mdisk, self.r_rim, self.r_gap, 
-                        self.w_gap, self.dr_gap)
+                        self.flare, self.mdisk, self.mstar, self.mdot,
+                        self.r_rim, self.r_gap, self.w_gap, self.dr_gap)
 
         # Gravitationally unstable disk
         elif self.model == 'gidisk':
@@ -247,10 +251,16 @@ class AnalyticalModel():
 
         # Copy the model density and temperature to the current obj (anaytical)
         self.dens = model.dens / self.g2d
-        if self.add_temp: self.temp = model.temp
-        if self.vfield is not None: self.vfield = model.vfield                
-        if model.plotmin is not None: self.plotmin = model.plotmin
-        if model.plotmax is not None: self.plotmax = model.plotmax
+        if self.add_temp:
+            self.temp = model.temp
+        if self.vfield is not None:
+            self.vfield = model.vfield
+        if self.heatsource is not None:
+            self.heatsource = model.heatsource
+        if model.plotmin is not None:
+            self.plotmin = model.plotmin
+        if model.plotmax is not None:
+            self.plotmax = model.plotmax
 
 
     def write_grid_file(self):
@@ -343,6 +353,16 @@ class AnalyticalModel():
                                 f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
                                 f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
 
+    def write_heatsource(self):
+        """ Write internal heat source file """
+        utils.print_('Writing internal heat source file')
+
+        with open('heatsource.inp','w+') as f:
+            f.write('1\n')
+            f.write(f'{self.heatsource.size:d}\n')
+            for h in self.heatsource.ravel(order='F'):
+                f.write(f'{h:13.6e}\n')
+
     def plot_2d(self, field, data=None, cmap=None):
         """ Plot the density midplane at z=0 using Matplotlib """
         try:
@@ -360,7 +380,8 @@ class AnalyticalModel():
             if data is None:
                 data = {
                     'density': self.dens, 
-                    'temperature': self.temp
+                    'temperature': self.temp,
+                    'heatsource': self.heatsource
                 }[field]
             else:
                 data = data.T
@@ -369,6 +390,7 @@ class AnalyticalModel():
             title = {
                 'density': r'Dust Density (g cm$^{-3}$)', 
                 'temperature': r'Dust Temperature (K)',
+                'heatsource': r'Heating Source Energy (erg/cm$^3$/s)',
             }[field]
 
             # Set the bbox if existent

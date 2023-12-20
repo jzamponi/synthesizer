@@ -86,11 +86,17 @@ class Pipeline:
         self.xstar = 0
         self.ystar = 0
         self.zstar = 0
-        self.rstar = 2e11
-        self.mstar = 2e33
+        self.rstar = 2.87 * u.Rsun.to(u.cm)
+        self.mstar = 1 * u.Msun.to(u.g)
         self.tstar = 4000
 
+        self.mdisk = None
+        self.mdot = None
+        self.viscous_heating = False
+
         self.bbox = bbox
+        self.save_grid_2d = False
+        self.save_grid_3d = False
         self.savefig = savefig
         self.overwrite = overwrite
         self.verbose = verbose
@@ -102,8 +108,8 @@ class Pipeline:
             vector_field=None, show_2d=False, show_3d=False, vtk=False,
             render=False, g2d=100, temperature=False, show_particles=False,
             alignment=False, cmap=None, rin=None, rout=None, rc=None, r0=None,
-            h0=None, alpha=None, flare=None, mdisk=None, r_rim=None,
-            r_gap=None, w_gap=None, dr_gap=None, rho0=None,
+            h0=None, alpha=None, flare=None, mdisk=None, mstar=None, mdot=None,
+            r_rim=None, r_gap=None, w_gap=None, dr_gap=None, rho0=None,
             save_grid_2d=False, save_grid_3d=False,
     ):
         """ Initial step in the pipeline: creates an input grid for RADMC3D """
@@ -120,6 +126,8 @@ class Pipeline:
         self.r0 = r0 * u.au.to(u.cm) if r0 is not None else r0
         self.h0 = h0 * u.au.to(u.cm) if h0 is not None else h0
         self.mdisk = mdisk * u.Msun.to(u.g) if mdisk is not None else mdisk
+        self.mstar = mstar * u.Msun.to(u.g) if mstar is not None else mstar
+        self.mdot = mdot*(u.Msun/u.yr).to(u.g/u.s) if mdot is not None else mdot
         self.r_rim = r_rim * u.au.to(u.cm) if r_rim is not None else r_rim
         self.r_gap = r_gap * u.au.to(u.cm) if r_gap is not None else r_gap
         self.w_gap = w_gap * u.au.to(u.cm) if w_gap is not None else w_gap
@@ -129,6 +137,8 @@ class Pipeline:
         self.rho0 = rho0
         self.save_grid_2d = save_grid_2d
         self.save_grid_3d = save_grid_3d
+        if self.mdot is not None and self.mdot > 0:
+            self.viscous_heating = True
 
         # Parse grid geometry 
         if geometry not in ['cartesian', 'spherical']:
@@ -165,6 +175,8 @@ class Pipeline:
                 alpha=self.alpha,
                 flare=self.flare,
                 mdisk=self.mdisk,
+                mstar=self.mstar,
+                mdot=self.mdot,
                 r_rim=self.r_rim,
                 r_gap=self.r_gap,
                 w_gap=self.w_gap,
@@ -247,6 +259,10 @@ class Pipeline:
         if vector_field is not None or alignment:
             self.grid.write_vector_field(morphology=vector_field)
 
+        # Write viscous heating energy source to radmc3d file format
+        if self.viscous_heating:
+            self.grid.write_heatsource()
+
         # Plot the density midplane
         if show_2d:
             self.grid.plot_2d('density', cmap=cmap)
@@ -254,6 +270,10 @@ class Pipeline:
         # Plot the temperature midplane
         if show_2d and temperature:
             self.grid.plot_2d('temperature', cmap=cmap)
+
+        # Plot the heating source midplane
+        if show_2d and self.viscous_heating:
+            self.grid.plot_2d('heatsource', cmap=cmap)
 
         # Render the density volume in 3D using Mayavi
         if show_3d:
@@ -734,7 +754,7 @@ class Pipeline:
         self.steps.append('generate_input_files')
 
     @utils.elapsed_time
-    def monte_carlo(self, nphot, star=None, write_fits_2d=True,
+    def monte_carlo(self, nphot, star=None, show=False, write_fits_2d=True,
                     write_fits_3d=False, radmc3d_cmds=''):
         """ 
             Call radmc3d to calculate the radiative temperature distribution 
@@ -812,6 +832,14 @@ class Pipeline:
             nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
             temp_mc = temp_mc.reshape((nx, ny, nz))
             bbox = self._get_bbox() * u.cm.to(u.au)
+
+        if show:
+            temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
+            dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+            nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
+            temp_mc = temp_mc.reshape((nx, ny, nz))
+            grid = gridder.Grid('cartesian', nx, bbox)
+            grid.plot_2d('temperature', data=temp_mc, cmap=self.cmap)
 
         if write_fits_2d:
             utils.write_fits(
@@ -1443,7 +1471,9 @@ class Pipeline:
         dens = dens.reshape((nx, nx, nx))
         bbox = self._get_bbox()
         grid = gridder.Grid('cartesian', nx, bbox)
-        grid.plot_2d('density', data=dens, cmap=self.cmap, write_fits=False)
+        grid.plot_2d('density', data=dens, cmap=self.cmap)
+        if self.save_grid_2d:
+            grid.save_grid_2d('density', data=dens)
 
         if temp:
             utils.file_exists('dust_temperature.dat')
@@ -1452,6 +1482,10 @@ class Pipeline:
             temp = temp.reshape((nx, nx, nx))
             grid = gridder.Grid('cartesian', nx, bbox)
             grid.plot_2d('temperature', data=temp, cmap=self.cmap)
+
+            if self.save_grid_2d:
+                grid.save_grid_2d('temperature', data=temp)
+
             del temp
 
         # Register the pipeline step
