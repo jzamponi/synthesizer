@@ -4,8 +4,6 @@ import astropy.units as u
 import astropy.constants as c
 from abc import ABC, abstractmethod
 
-import yt
-
 from synthesizer.gridder.vector_field import VectorField
 from synthesizer import utils
 

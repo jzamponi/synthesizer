@@ -89,6 +89,7 @@ class Pipeline:
         self.rstar = 2.87 * u.Rsun.to(u.cm)
         self.mstar = 1 * u.Msun.to(u.g)
         self.tstar = 4000
+        self.maxtau_mc = 5
 
         self.mdisk = None
         self.mdot = None
@@ -126,7 +127,7 @@ class Pipeline:
         self.r0 = r0 * u.au.to(u.cm) if r0 is not None else r0
         self.h0 = h0 * u.au.to(u.cm) if h0 is not None else h0
         self.mdisk = mdisk * u.Msun.to(u.g) if mdisk is not None else mdisk
-        self.mstar = mstar * u.Msun.to(u.g) if mstar is not None else mstar
+        self.mstar = mstar * u.Msun.to(u.g) if mstar is not None else self.mstar
         self.mdot = mdot*(u.Msun/u.yr).to(u.g/u.s) if mdot is not None else mdot
         self.r_rim = r_rim * u.au.to(u.cm) if r_rim is not None else r_rim
         self.r_gap = r_gap * u.au.to(u.cm) if r_gap is not None else r_gap
@@ -648,7 +649,7 @@ class Pipeline:
                 f.write(f'nphot = {int(self.nphot)}\n')
                 f.write(f'nphot_scat = {int(self.nphot)}\n')
                 f.write(f'iseed = {random.randint(-1000, 1000)}\n')
-                f.write(f'mc_scat_maxtauabs = {int(5)}\n')
+                f.write(f'mc_scat_maxtauabs = {int(self.maxtau_mc)}\n')
                 f.write(f'scattering_mode = {self.scatmode}\n')
                 if self.alignment and not mc:
                     f.write(f'alignment_mode = 1\n')
@@ -754,8 +755,8 @@ class Pipeline:
         self.steps.append('generate_input_files')
 
     @utils.elapsed_time
-    def monte_carlo(self, nphot, star=None, show=False, write_fits_2d=True,
-                    write_fits_3d=False, radmc3d_cmds=''):
+    def monte_carlo(self, nphot, star=None, maxtau=5, show=False,
+                    write_fits_2d=True, write_fits_3d=False, radmc3d_cmds=''):
         """ 
             Call radmc3d to calculate the radiative temperature distribution 
         """
@@ -775,6 +776,7 @@ class Pipeline:
                 """)
 
         self.nphot = nphot
+        self.maxtau_mc = maxtau
 
         if star is not None:
             self.xstar = star[0] * u.au.to(u.cm)
@@ -814,16 +816,16 @@ class Pipeline:
         # Call RADMC3D and pipe the output also to radmc3d.out
         try:
             utils.print_(f'Executing command: radmc3d mctherm {radmc3d_cmds}')
-            self._radmc3d_banner()
+            self.radmc3d_banner()
             os.system(
                 f'radmc3d mctherm {radmc3d_cmds} 2>&1 | tee -a radmc3d.out')
 
         except KeyboardInterrupt:
             raise Exception('Received SIGKILL. Execution halted by user.')
 
-        self._radmc3d_banner()
+        self.radmc3d_banner()
 
-        self._catch_radmc3d_error()
+        self.catch_radmc3d_error()
 
         if write_fits_2d or write_fits_3d:
             # Read in the new temperature
@@ -1007,14 +1009,14 @@ class Pipeline:
         # Call RADMC3D and pipe the output also to radmc3d.out
         try:
             utils.print_(f'Executing command: {cmd}')
-            self._radmc3d_banner()
+            self.radmc3d_banner()
             os.system(f'{cmd} 2>&1 | tee -a radmc3d.out')
-            self._radmc3d_banner()
+            self.radmc3d_banner()
 
         except KeyboardInterrupt:
             raise Exception('Received SIGKILL. Execution halted by user.')
 
-        self._catch_radmc3d_error()
+        self.catch_radmc3d_error()
 
         utils.print_(
             f'Dust opacity used: kappa({self.lam}um) = ' +
@@ -1634,19 +1636,27 @@ class Pipeline:
 
             return 1.0
 
-    def _radmc3d_banner(self):
+    def radmc3d_banner(self):
         print(
             f'{utils.color.blue}{"=" * 31}  RADMC3D  {"=" * 31}{utils.color.none}')
 
-    def _catch_radmc3d_error(self):
+    def catch_radmc3d_error(self):
         """ Raise an exception to halt synthesizer if RADMC3D ended in Error """
+
+        ERROR_LIST = [
+            'error',
+            'stop',
+            'forrtl'
+            'severe'
+            '3189',
+        ]
 
         # Read radmc3d.out and stop the pipeline if RADMC3D finished in error
         utils.file_exists('radmc3d.out')
         with open('radmc3d.out', 'r') as out:
             for line in out.readlines():
                 line = line.lower()
-                if 'error' in line or 'stop' in line:
+                if any(i in line for i in ERROR_LIST):
 
                     msg = lambda m: f'{utils.color.red}\r{m}{utils.color.none}'
                     errmsg = msg(f'[RADMC3D] {line}...')

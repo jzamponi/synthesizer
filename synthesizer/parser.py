@@ -194,6 +194,16 @@ def synthesizer():
         action='store_true', default=False, 
         help='Call RADMC3D to raytrace the new grid and plot an image')
 
+    parser.add_argument('--star', action='store', default=None, nargs=6,
+                        metavar=('x', 'y', 'z', 'Rstar', 'Mstar', 'Teff'),
+                        type=float,
+                        help='6 parameters used to define a radiating star ' + \
+                             '(AU, AU, AU, Rsun, Msun, K)')
+
+    parser.add_argument('--max-tau', action='store', type=float, default=1e4,
+                        help='Set the maximum optical depth before ' +
+                             'considering a photon as absorbed.')
+
     parser.add_argument('--nphot', action='store', type=float, default=1e4,
         help='Set the number of photons for scattering and thermal Monte Carlo')
 
@@ -237,12 +247,7 @@ def synthesizer():
     parser.add_argument('--distance', action='store', type=float, default=140,
         help='Physical distance in pc, used to convert fluxes into Jy/pixel.')
 
-    parser.add_argument('--star', action='store', default=None, nargs=6,
-        metavar=('x', 'y', 'z', 'Rstar', 'Mstar', 'Teff'), type=float, 
-        help='6 parameters used to define a radiating star ' +\
-            '(AU, AU, AU, Rsun, Msun, K)')
-        
-    parser.add_argument('--tau', action='store_true', default=False,  
+    parser.add_argument('--tau', action='store_true', default=False,
         help='Generate a 2D optical depth map.')
 
     parser.add_argument('--tau-surf', default=None, type=float, metavar=('tau'), 
@@ -431,6 +436,7 @@ def synthesizer():
         pipeline.monte_carlo(
             nphot=cli.nphot, 
             star=cli.star,
+            maxtau=cli.maxtau,
             radmc3d_cmds=cli.radmc3d,
             write_fits_2d=True,
             write_fits_3d=cli.save_grid_3d,

@@ -25,13 +25,10 @@ dependencies = [
     "progressbar2",
     "aplpy",
     "h5py",
-]
-requires-python = ">=3.8"
-
-[project.optional-dependencies]
-gui = [
+    "yt",
     "mayavi",
 ]
+requires-python = ">=3.8"
 
 [project.urls]
 Homepage = "https://github.com/jzamponi/synthesizer"
