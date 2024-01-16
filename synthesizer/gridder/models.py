@@ -207,12 +207,12 @@ class PPdisk(BaseModel):
     @property
     def heatsource(self):
         # Heating source term from viscous heating
-        r = np.sqrt(self.x**2 + self.y**2)
-        #return (3 / 4 / np.pi) * G * self.mdot * self.mstar / r3d**3
-        self.alpha = 1e-1
-        self.c_s = np.sqrt(kB * self.T_r / m_H2)
-        self.omega = np.sqrt(G * self.mstar / r**3)
-        return (9/4) * self.alpha * self.c_s**2 * self.dens * self.omega
+        r_cyl = np.sqrt(self.x**2 + self.y**2)
+        return (3 / 4 / np.pi) * G * self.mdot * self.mstar / r_cyl**3
+        #self.alpha = 1e-1
+        #self.c_s = np.sqrt(kB * self.T_r / m_H2)
+        #self.omega = np.sqrt(G * self.mstar / r**3)
+        #return (9/4) * self.alpha * self.c_s**2 * self.dens * self.omega
 
     @property
     def temp(self):

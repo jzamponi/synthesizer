@@ -200,7 +200,7 @@ def synthesizer():
                         help='6 parameters used to define a radiating star ' + \
                              '(AU, AU, AU, Rsun, Msun, K)')
 
-    parser.add_argument('--max-tau', action='store', type=float, default=1e4,
+    parser.add_argument('--maxtau', action='store', type=float, default=5,
                         help='Set the maximum optical depth before ' +
                              'considering a photon as absorbed.')
 
@@ -400,7 +400,7 @@ def synthesizer():
             alpha=cli.alpha,
             flare=cli.flare,
             mdisk=cli.mdisk,
-            mstar=cli.star[4],
+            mstar=cli.star[4] if cli.star is not None else None,
             mdot=cli.mdot,
             r_rim=cli.r_rim,
             r_gap=cli.r_gap,

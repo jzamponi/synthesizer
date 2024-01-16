@@ -355,7 +355,9 @@ class AnalyticalModel:
 
     def write_heatsource(self):
         """ Write internal heat source file """
-        utils.print_('Writing internal heat source file')
+        utils.print_('Writing heat source file from viscous heating (' +
+                    f'Mstar = {np.round(self.mstar*u.g.to(u.Msun), 1)} Msun |' +
+                    f' Mdot = {self.mdot*(u.g/u.s).to(u.Msun/u.yr)} Msun/yr)')
 
         with open('heatsource.inp','w+') as f:
             f.write('1\n')
