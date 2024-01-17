@@ -355,9 +355,10 @@ class AnalyticalModel:
 
     def write_heatsource(self):
         """ Write internal heat source file """
-        utils.print_('Writing heat source file from viscous heating (' +
-                    f'Mstar = {np.round(self.mstar*u.g.to(u.Msun), 1)} Msun |' +
-                    f' Mdot = {self.mdot*(u.g/u.s).to(u.Msun/u.yr)} Msun/yr)')
+        utils.print_('Writing heatsource file from viscous heating (' +
+                    f'Mstar = {np.round(self.mstar*u.g.to(u.Msun), 1)} Msun | '+
+                    f'Mdot = {self.mdot*(u.g/u.s).to(u.Msun/u.yr):.1e} Msun/yr)'
+                    )
 
         with open('heatsource.inp','w+') as f:
             f.write('1\n')
@@ -392,7 +393,7 @@ class AnalyticalModel:
             title = {
                 'density': r'Dust Density (g cm$^{-3}$)', 
                 'temperature': r'Dust Temperature (K)',
-                'heatsource': r'Heating Source Energy (erg/cm$^3$/s)',
+                'heatsource': r'Heating Source Energy (erg/cm$^2$/s)',
             }[field]
 
             # Set the bbox if existent

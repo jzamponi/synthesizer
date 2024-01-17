@@ -166,8 +166,8 @@ class PPdisk(BaseModel):
         r3d = np.sqrt(x**2 + y**2 + z**2)
 
         # Set star mass in order to change how to calculate scale height
-        rho_bg = 1e-30
-        self.plotmin = rho_bg
+        self.rho_bg = 1e-30
+        self.plotmin = self.rho_bg
 
         # Temperature profile
         T_0 = 30
@@ -195,12 +195,12 @@ class PPdisk(BaseModel):
         rho_g = sigma_g / np.sqrt(2*np.pi) / h * np.exp(-z*z / (2*h*h))
 
         # Add a background gas density
-        rho_g = rho_g + rho_bg
-        rho_g[r3d < self.rin] = rho_bg
-        rho_g[r3d > self.rout] = rho_bg
+        rho_g = rho_g + self.rho_bg
+        rho_g[r3d < self.rin] = self.rho_bg
+        rho_g[r3d > self.rout] = self.rho_bg
 
         # Trim temperature to region with background density
-        self.T_r[rho_g == rho_bg] = 2.73
+        self.T_r[rho_g == self.rho_bg] = 2.73
 
         return rho_g
 
@@ -208,11 +208,13 @@ class PPdisk(BaseModel):
     def heatsource(self):
         # Heating source term from viscous heating
         r_cyl = np.sqrt(self.x**2 + self.y**2)
-        return (3 / 4 / np.pi) * G * self.mdot * self.mstar / r_cyl**3
-        #self.alpha = 1e-1
-        #self.c_s = np.sqrt(kB * self.T_r / m_H2)
-        #self.omega = np.sqrt(G * self.mstar / r**3)
-        #return (9/4) * self.alpha * self.c_s**2 * self.dens * self.omega
+        dl = np.abs(self.z[0][0][1] - self.z[0][0][0])
+        heat = np.where(
+            (self.dens > self.rho_bg) & (r_cyl > self.rin),
+            (3 / 4 / np.pi) * G * self.mdot * self.mstar / r_cyl**3 / dl,
+            0
+        )
+        return heat
 
     @property
     def temp(self):
