@@ -4,9 +4,29 @@
 
 ## Generate synthetic observations from 3D numerical simulations
 
-Synthesizer is a program to calculate synthetic ALMA/JVLA images from an SPH model directly from the command-line. 
-It interpolates SPH particle positions into a rectangular grid and then uses RADMC3D to do the Monte-Carlo and raytracing. It can use CASA to generate a final synthetic observation. It can also include the effects of polarization either by scattering or grain alignment.
-Additionally, Synthesizer includes Dustmixer. This is a tool to generate dust opacity tables, including full scattering matrices, for a given dust composition (via optical constants) and allows to experiment with the mixing of different materials.  
+Synthesizer is a program to calculate synthetic images from either analytical 
+models or hydrodynamical simulations (both grid and particle based). 
+You can use Synthesizer via API and CLI. 
+Command-line interaction offers a fast way to test your modelling setup, without 
+the need to write any scripts. 
+API interaction comes in handy during the production phase. Its modular form 
+allows to easily script a full modelling pipeline by simply calling the relevant 
+modules of Synthesizer. 
+
+For the post-processing of particle based simulations, Synthesizer interpolates 
+particle positions into a rectangular grid and then performs Monte-Carlo heating 
+and raytracing, using the RADMC3D radiative transfer code. 
+It can also optionally use the CASA software to generate a final synthetic 
+observation of your model. 
+
+Polarization effects, either by scattering or grain alignment, can easily be 
+added to your setup. 
+
+Additionally, Synthesizer includes the DustMixer module. This is a tool to 
+easily generate dust opacity tables for a given dust composition, supporting 
+full scattering matrices for polarization observations.   
+This module serves as a testing tool to experiment mixing different materials 
+and different laboratory measurements of optical constants.   
 
 ## Installation
     $ pip install astro-synthesizer
@@ -25,13 +45,16 @@ Synthesizer requires at least one of its five main options to run:
 
 
 #### Example
-Create a protoplanetary disk model, let radmc3d generate an image and then casa observe it.
+Create a protoplanetary disk model, containing dust grains of DSHARP composition, 
+let RADMC3D generate an image and then let CASA observe it (the order of command-
+line arguments is irrelevant).
 
-    $ synthesizer --grid --model ppdisk --show-grid-2d 
-      --temperature --show-grid-3d --raytrace --synobs
-      --opacity --show-rt --show-synobs
+    $ synthesizer --grid --model ppdisk --temperature --raytrace --synobs 
+      --opacity --material dsharp --show-grid-2d --show-grid-3d --show-opac 
+      --show-rt --show-synobs
 
-Given the --show-* flags, synthesizer will plot the results of every step. You can also read in snapshots from an SPH simulation:
+Given the optional --show-* flags, synthesizer will plot the results of every step. 
+You can also read in snapshots from an SPH simulation:
 
 
 
@@ -40,12 +63,15 @@ Given the --show-* flags, synthesizer will plot the results of every step. You c
      --opacity --show-rt --show-synobs
 
 
-Previous results can also be shown without having to re-run a full step, with commands like
+Already existing results can also be displayed without having to re-run a full step, 
+using commands like
 
 
-    $ synthesizer --show-rt --show-synobs --show-opac --show-grid-2d
+    $ synthesizer --show-rt --show-synobs --show-opac --show-grid-2d --show-mc-3d
 
 
+Example API implementations and modelling pipelines are distributed within the 
+source code and can be found in the examples/ directory.
 
         
 For details, run:
@@ -54,22 +80,22 @@ For details, run:
 
 
 #### Compatibility with hydrodynamical codes 
-Currently supported (M)HD codes:
+The coupling of hydrodynamical codes with different origins is now implemented in
+Synthesizer using the snapshot readers from the YT Python package.
+If your code is supported by the YT project, it works with Synthesizer. 
 
-    - GIZMO
-    - AREPO
-    - GADGET
-    - ZeusTW
+For particularly customized hydro readers, use the --source option (or source 
+function argument in you call to the create_grid module).
 
-Synthesizer is very young and at the moment only snapshots from the above listed codes are supported. Creating interfaces to new codes is easy to implement but it takes time. For AMR codes, grid and density (and optionally temperature) information is needed to generate the input for RADMC3D. For SPH codes, all synthesizer needs are point coordinates x, y, z and density (and optionally temperature), all in cgs units. It does the gridding by interpolating point coordinates into a regular cartesian mesh. 
-If you're interested in using synthesizer and your hydro code is not yet supported, feel free to get in contact. The implementation should be quite strightforward.  
+If code is not currently supported and you are interested in using this tool, 
+feel free to get in touch. 
 
 #### Requisites:
 
-    Software:   python3, CASA, RADMC3D, ParaView (optional)
+    Software:   python3, RADMC3D, CASA, Mayavi/ParaView (optional)
         
 ### Feedback
 
-If you have any feedback, please reach out at jzamponi@mpe.mpg.de.
+If you have any feedback, please feel free to reach out at joaquin.zamponi@gmail.com.
 
 

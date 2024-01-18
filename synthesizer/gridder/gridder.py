@@ -60,6 +60,7 @@ class Grid():
         self.carbon = 0.375
         self.subl_mfrac = 1 - self.carbon * self.csubl / 100
         self.savefig = False
+        self.interpolated = False
 
     def read_sph(self, filename, source='sphng'):
         """ 
@@ -372,6 +373,8 @@ class Grid():
         elif field == 'vz':
             self.grid_vz = interp
 
+        self.interpolated = True
+
 
     def create_grid(self):
         """
@@ -667,11 +670,12 @@ class Grid():
             from mayavi.modules.text3d import Text3D
             from mayavi.modules.grid_plane import GridPlane
 
-            utils.print_('Visualizing the interpolated field ...')
+            interpolated = 'interpolated' if self.interpolated else ' '
+            utils.print_(f'Visualizing the {interpolated}{field} field ...')
 
             if data is None:
                 data = {
-                    'density': self.grid_dens, 
+                'density': self.grid_dens,
                     'temperature': self.grid_temp
                 }[field]
             

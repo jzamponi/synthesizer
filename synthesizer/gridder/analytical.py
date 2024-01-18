@@ -498,7 +498,7 @@ class AnalyticalModel:
             from mayavi.modules.text3d import Text3D
             from mayavi.modules.grid_plane import GridPlane
 
-            utils.print_('Visualizing the interpolated field ...')
+            utils.print_(f'Visualizing the {field} field ...')
 
             # Detect what field to use
             if data is None:
@@ -666,6 +666,8 @@ class AnalyticalModel:
             'density': r'Dust Density (g cm$^{-3}$)',
             'temperature': r'Gas Temperature (g cm$^{-3}$)',
         }[field]
+
+        bbox = self.bbox * u.cm.to(u.au)
 
         try:
             # Write maps to FITS files

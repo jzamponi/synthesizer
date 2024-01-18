@@ -306,7 +306,7 @@ class Pipeline:
                 self.grid.save_grid_2d('temperature')
 
         if save_grid_3d:
-            self.save_grid_3d('density')
+            self.grid.save_grid_3d('density')
             if temperature:
                 self.save_grid_3d('temperature')
 
@@ -755,8 +755,9 @@ class Pipeline:
         self.steps.append('generate_input_files')
 
     @utils.elapsed_time
-    def monte_carlo(self, nphot, star=None, maxtau=5, show=False,
-                    write_fits_2d=True, write_fits_3d=False, radmc3d_cmds=''):
+    def monte_carlo(self, nphot, star=None, maxtau=5, show_2d=False,
+                    show_3d=False, write_fits_2d=True, write_fits_3d=False,
+                    radmc3d_cmds=''):
         """ 
             Call radmc3d to calculate the radiative temperature distribution 
         """
@@ -835,13 +836,16 @@ class Pipeline:
             temp_mc = temp_mc.reshape((nx, ny, nz))
             bbox = self._get_bbox() * u.cm.to(u.au)
 
-        if show:
+        if show_2d:
             temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
             dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
             nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
             temp_mc = temp_mc.reshape((nx, ny, nz))
             grid = gridder.Grid('cartesian', nx, bbox)
             grid.plot_2d('temperature', data=temp_mc, cmap=self.cmap)
+
+            if show_3d:
+                grid.plot_3d('temperature', data=temp_mc, cmap=self.cmap)
 
         if write_fits_2d:
             utils.write_fits(
@@ -860,6 +864,8 @@ class Pipeline:
                     'CRPIX2': ny // 2,
                     'CRVAL2': 0,
                     'CUNIT2': 'AU',
+                    'AXIS1': 'XY midplane',
+                    'AXIS2': 'ZX midplane',
                     'NPHOT': self.nphot,
                 }),
                 overwrite=True,
@@ -884,6 +890,7 @@ class Pipeline:
                     'CRPIX3': ny // 2,
                     'CRVAL3': 0,
                     'CUNIT3': 'AU',
+                    'AXIS3': 'Z',
                     'NPHOT': self.nphot,
                 }),
                 overwrite=True,
@@ -1517,7 +1524,7 @@ class Pipeline:
         bbox = self._get_bbox()
         utils.print_(f'Rendering a box of {nx}^3 pixels')
         grid = gridder.Grid('cartesian', nx, bbox)
-        grid.plot_3d('density', data=dens, cmap=self.cmap, write_fits=False)
+        grid.plot_3d('density', data=dens, cmap=self.cmap)
 
         if temp:
             utils.file_exists('dust_temperature.dat')
