@@ -26,7 +26,7 @@ dependencies = [
     "aplpy",
     "h5py",
     "yt",
-    "pyqt5",
+#    "pyqt5",
     #"mayavi",
 ]
 requires-python = ">=3.8"

@@ -11,7 +11,8 @@ Command-line interaction offers a fast way to test your modelling setup, without
 the need to write any scripts. 
 API interaction comes in handy during the production phase. Its modular form 
 allows to easily script a full modelling pipeline by simply calling the relevant 
-modules of Synthesizer. 
+modules of Synthesizer. Pipelines templates are included within the examples/ 
+source directory.
 
 For the post-processing of particle based simulations, Synthesizer interpolates 
 particle positions into a rectangular grid and then performs Monte-Carlo heating 
@@ -50,8 +51,7 @@ let RADMC3D generate an image and then let CASA observe it (the order of command
 line arguments is irrelevant).
 
     $ synthesizer --grid --model ppdisk --temperature --raytrace --synobs 
-      --opacity --material dsharp --show-grid-2d --show-opac 
-      --show-rt --show-synobs
+      --opacity --material dsharp --show-grid-2d --show-opac --show-rt --show-synobs
 
 Given the optional --show-* flags, synthesizer will plot the results of every step. 
 You can also read in snapshots from an SPH simulation:
@@ -91,17 +91,17 @@ mayavi manually from the following source:
 
 
 #### Compatibility with hydrodynamical codes 
-The coupling of hydrodynamical codes with different origins is now implemented in
-Synthesizer using the snapshot readers from the YT Python package.
-If your code is supported by the YT project, it works with Synthesizer. 
+The coupling of hydrodynamical codes from different origins is now implemented in
+Synthesizer using the snapshot readers from the YT Python project.
+If your code is supported by YT, then it works with Synthesizer (beta).
 
 For particularly customized hydro readers, use the --source option (or source 
 function argument in you call to the create_grid module).
 
-If code is not currently supported and you are interested in using this tool, 
+If your code is not currently supported and you are interested in using this tool, 
 feel free to get in touch. 
 
-#### Requisites:
+### Requisites:
 
     Software:   python3, RADMC3D, CASA, Mayavi/ParaView (optional)
         

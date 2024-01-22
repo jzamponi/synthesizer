@@ -97,6 +97,14 @@ class PowerLaw(BaseModel):
         # Radial temperature profile for a massive star with Teff = 35000 K
         return 35000 * 0.5**-0.25 * np.sqrt(0.5 * 2.3e13 / self.r)
 
+    @property
+    def heatsource(self):
+        # Heating source term from viscous heating
+        r3d = np.sqrt(self.x ** 2 + self.y ** 2 + self.z ** 2)
+        heat = 0 / r3d ** 3
+        return heat
+
+
 class PrestellarCore(BaseModel):
     """ Prestellar Core: Bonnort-Eber sphere """
     def __init__(self, x, y, z, field, rc):
@@ -113,7 +121,14 @@ class PrestellarCore(BaseModel):
     @property
     def temp(self):
         return 15 * np.ones(self.dens.shape)
-        
+
+    @property
+    def heatsource(self):
+        # Heating source term from viscous heating
+        r3d = np.sqrt(self.x**2 + self.y**2 + self.z**2)
+        heat = 0 / r3d**3
+        return heat
+
 class L1544(BaseModel):
     """ L1544 Prestellar Core (Chacon-Tanarro et al. 2019) """
     def __init__(self, x, y, z, field, rc, alpha, rho0):
@@ -131,6 +146,13 @@ class L1544(BaseModel):
     @property
     def temp(self):
         return 15 * np.ones(self.dens.shape)
+    
+    @property
+    def heatsource(self):
+        # Heating source term from viscous heating
+        r3d = np.sqrt(self.x**2 + self.y**2 + self.z**2)
+        heat = 0 / r3d**3
+        return heat
 
 class PPdisk(BaseModel):
     """ 

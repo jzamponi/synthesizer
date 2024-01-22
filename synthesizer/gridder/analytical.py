@@ -104,7 +104,7 @@ class AnalyticalModel:
         else:
             utils.not_implemented(f'{self.geometry = }')
 
-        bbox_au = self.bbox * u.cm.to(u.au)
+        bbox_au = np.round(self.bbox * u.cm.to(u.au), 1)
         utils.print_(f'Size of the box: [-{bbox_au}, {bbox_au}] AU')
 
         # Create a grid

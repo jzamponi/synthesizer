@@ -498,6 +498,12 @@ def synthesizer():
     if cli.show_grid_3d and not cli.grid:
         pipeline.plot_grid_3d(temp=cli.temperature, cmap=cli.cmap)
 
+    if cli.show_mc and not cli.monte_carlo:
+        pipeline.plot_mc(cmap=cli.cmap)
+
+    if cli.show_mc_3d and not cli.monte_carlo:
+        pipeline.plot_mc_3d(cmap=cli.cmap)
+
     if cli.show_rt and not cli.raytrace:
         pipeline.plot_rt(
             distance=cli.distance, cmap=cli.cmap, stretch=cli.stretch)
@@ -516,7 +522,7 @@ def synthesizer():
         cli.grid, cli.opacity, cli.monte_carlo, cli.raytrace, 
         cli.synobs, cli.quiet, cli.show_grid_2d, cli.show_grid_3d,
         cli.show_rt, cli.show_synobs, cli.show_opacity, cli.show_nk,
-        cli.show_z12z11,
+        cli.show_z12z11, cli.show_mc, cli.show_mc_3d
     ]):
 
         utils.print_('Nothing to do. Main options are:' +\

@@ -771,7 +771,9 @@ class Pipeline:
                     - git clone https://github.com/dullemond/radmc3d-2.0.git
                     - cd radmc3d-2.0/src
                     - make
-                    - export PATH=$PWD:$PATH    
+                    - export PATH=$PWD:$PATH 
+                    # Add the export to your .bashrc for it to be permanent
+                    # Remember to change $PWD for the radmc3d installation directory
                     - cd ../../
                     - synthesizer --raytrace
                 """)
@@ -1456,6 +1458,27 @@ class Pipeline:
 
         # Register the pipeline step
         self.steps.append('plot_tau')
+
+    @utils.elapsed_time
+    def plot_mc(self, cmap=None):
+        temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
+        dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+        nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
+        temp_mc = temp_mc.reshape((nx, ny, nz))
+        bbox = self._get_bbox() * u.cm.to(u.au)
+        grid = gridder.Grid('cartesian', nx, bbox)
+        grid.plot_2d('temperature', data=temp_mc, cmap=self.cmap)
+        self.steps.append('plot_mc')
+
+    def plot_mc_3d(self, cmap=None):
+        temp_mc = np.loadtxt('dust_temperature.dat', skiprows=3)
+        dims = np.loadtxt('amr_grid.inp', skiprows=5, max_rows=1)
+        nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
+        temp_mc = temp_mc.reshape((nx, ny, nz))
+        bbox = self._get_bbox() * u.cm.to(u.au)
+        grid = gridder.Grid('cartesian', nx, bbox)
+        grid.plot_3d('temperature', data=temp_mc, cmap=self.cmap)
+        self.steps.append('plot_mc')
 
     @utils.elapsed_time
     def plot_grid_2d(self, temp=False, cmap=None):
