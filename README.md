@@ -50,7 +50,7 @@ let RADMC3D generate an image and then let CASA observe it (the order of command
 line arguments is irrelevant).
 
     $ synthesizer --grid --model ppdisk --temperature --raytrace --synobs 
-      --opacity --material dsharp --show-grid-2d --show-grid-3d --show-opac 
+      --opacity --material dsharp --show-grid-2d --show-opac 
       --show-rt --show-synobs
 
 Given the optional --show-* flags, synthesizer will plot the results of every step. 
@@ -77,6 +77,17 @@ source code and can be found in the examples/ directory.
 For details, run:
 
     $ synthesizer --help
+
+
+#### Note on 3D visualization
+Synthesizer uses the Mayavi library for visualization and rendering of 3D 
+data. Mayavi's current latest version presents [issues](https://github.com/enthought/mayavi/issues/1284) 
+on installation via pip and therefore breaks Synthesizer's installation. 
+If you intend to use the --show-grid-3d or --show-mc-3d options, please install 
+mayavi manually from the following source:
+
+
+    $ pip install https://github.com/enthought/mayavi/zipball/master
 
 
 #### Compatibility with hydrodynamical codes 
