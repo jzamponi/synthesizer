@@ -95,6 +95,9 @@ The coupling of hydrodynamical codes from different origins is now implemented i
 Synthesizer using the snapshot readers from the YT Python project.
 If your code is supported by YT, then it works with Synthesizer (beta).
 
+Synthesizer does currently only work with Cartesian grids. 
+Implementation of spherical grids is currently under development. 
+
 For particularly customized hydro readers, use the --source option (or source 
 function argument in you call to the create_grid module).
 
@@ -107,6 +110,6 @@ feel free to get in touch.
         
 ### Feedback
 
-If you have any feedback, please feel free to reach out at joaquin.zamponi@gmail.com.
+If you find any bugs or have any feedback, please feel free to reach out at joaquin.zamponi@gmail.com.
 
 
