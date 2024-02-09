@@ -7,7 +7,7 @@
     The Synthesizer does not include any internal looper for a 
     range of model or observational parameters. 
     Parameter space exploration must be done by explicitly calling 
-    the program with values of interest. 
+    the program and iterating over values of interest. 
     
     For details on default values, formats and units, read the help:
     $ synthesizer --help
@@ -22,7 +22,7 @@ from pathlib import Path
 from synthesizer import utils
 from synthesizer.pipeline import Pipeline
 
-cwd = Path.home()/'testdir'
+cwd = Path(os.getcwd())/'test_suite'
 
 for m, mass in zip([1e-3, 1e-5], ['hm', 'lm']):
     for flare in [0, 0.5, 1]:

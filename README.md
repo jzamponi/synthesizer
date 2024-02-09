@@ -6,10 +6,10 @@
 
 Synthesizer is a program to calculate synthetic images from either analytical 
 models or hydrodynamical simulations (both grid and particle based). 
-You can use Synthesizer via API and CLI. 
+You can use Synthesizer either CLI or in its modular form.   
 Command-line interaction offers a fast way to test your modelling setup, without 
 the need to write any scripts. 
-API interaction comes in handy during the production phase. Its modular form 
+Modular interaction comes in handy during the production phase. Its modular form 
 allows to easily script a full modelling pipeline by simply calling the relevant 
 modules of Synthesizer. Pipelines templates are included within the examples/ 
 source directory.
@@ -35,7 +35,7 @@ and different laboratory measurements of optical constants.
 
 ## Run the code:
 
-Synthesizer requires at least one of its five main options to run:
+To test your installation, call the program without options. Synthesizer will warn you that it requires at least one of its five main options to run. If you get the following output, you're good to go:
 
 
 
@@ -45,7 +45,7 @@ Synthesizer requires at least one of its five main options to run:
 
 
 
-#### Example
+#### Example (command-line)
 Create a protoplanetary disk model, containing dust grains of DSHARP composition, 
 let RADMC3D generate an image and then let CASA observe it (the order of command-
 line arguments is irrelevant).
@@ -70,8 +70,48 @@ using commands like
     $ synthesizer --show-rt --show-synobs --show-opac --show-grid-2d --show-mc-3d
 
 
-Example API implementations and modelling pipelines are distributed within the 
-source code and can be found in the examples/ directory.
+#### Example (module)
+Alternatively, you can use Synthesizer on your modelling python scripts by importing the relevant modules from the package. Following is a minimal example on how to use the package. 
+
+```python
+from synthesizer.pipeline import Pipeline
+
+# Initialize the pipeline
+pipeline = Pipeline()
+
+# Create a ppdisk
+pipeline.create_grid(
+  model = 'ppdisk', 
+  show_2d = True,
+)
+
+# Create opacity table
+pipeline.dustmixer(
+  material = 'dsharp',
+  show_opac = True
+)
+
+# Create dust temperature
+pipeline.monte_carlo(
+  nphot = 1e5, 
+  star = [0, 0, 0, 3,  1, 4000]
+)
+
+# Create an ideal image
+pipeline.raytrace(
+  lam = 1300,
+  show = True,
+)
+
+# Create a synthetic image
+pipeline.synthetic_observation(
+  resolution = 0.1,
+  show=True
+)
+```
+ 
+Further example scripts and modelling pipelines are distributed with the 
+source code and can be found within the examples/ directory.
 
         
 For details, run:
