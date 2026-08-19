@@ -47,3 +47,33 @@ Homepage = "https://github.com/jzamponi/synthesizer"
 
 [project.scripts]
 synthesizer = "synthesizer.parser:synthesizer"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "astropy.*",
+    "aplpy.*",
+    "yt.*",
+    "mayavi.*",
+    "scipy.*",
+    "progressbar.*",
+    "h5py.*",
+    "pyface.*",
+    "traits.*",
+    "traitsui.*",
+]
+ignore_missing_imports = true
