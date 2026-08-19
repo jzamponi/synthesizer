@@ -30,7 +30,6 @@ from synthesizer.pipeline import Pipeline
 
 @utils.elapsed_time
 def synthesizer():
-
     # Initialize the argument parser
     parser = argparse.ArgumentParser(prog="Synthesizer", description="")
 

@@ -5,7 +5,7 @@
 # For details on every option available, uncomment the line below. Long output!
 #!synthesizer --help
 
-synthesizer --grid --raytrace --monte-carlo --synobs 
+synthesizer --grid --raytrace --monte-carlo --synobs
     --model ppdisk
     --mdisk 0.1
     --rin 1
@@ -25,7 +25,7 @@ synthesizer --grid --raytrace --monte-carlo --synobs
     --distance 140
     --tau
     --show-rt
-    --obstime 1 
+    --obstime 1
     --resolution 0.1
     --obsmode sd
     --telescope ALMA

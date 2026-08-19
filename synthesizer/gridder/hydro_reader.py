@@ -150,7 +150,6 @@ class Gizmo(HydroCode):
     """Handle HDF5 snapshots from the GIZMO code."""
 
     def __init__(self, filename, temp=False, vfield=False):
-
         # Read in particle coordinates and density
         self.data = h5py.File(filename, "r")["PartType0"]
         coords = np.array(self.data["Coordinates"])
@@ -207,7 +206,6 @@ class Gadget(HydroCode):
     """Handle snapshots from the Gadget code."""
 
     def __init__(self, filename, temp=False, vfield=False):
-
         self.add_temp = temp
         self.vfield = vfield
 
@@ -264,7 +262,6 @@ class Arepo(HydroCode):
     """Handle snapshots from the AREPO code."""
 
     def __init__(self, filename, temp=False, vfield=False):
-
         self.add_temp = temp
         self.vfield = vfield
 
@@ -347,7 +344,6 @@ class Phantom(HydroCode):
     """Handle snapshots from the PHANTOM code."""
 
     def __init__(self, filename, temp=False, vfield=False):
-
         utils.not_implemented("PHANTOM Interface")
 
         # Read in particle coordinates and density
@@ -393,7 +389,6 @@ class Nbody6(HydroCode):
     """Handle snapshots from the Nbody6 code."""
 
     def __init__(self, filename, temp=False, vfield=False):
-
         self.add_temp = temp
         self.vfield = vfield
 
@@ -448,7 +443,6 @@ class Athena(HydroCode):
     import yt
 
     def __init__(self, filename, units=None, temp=False, vfield=False):
-
         self.add_temp = temp
         self.vfield = vfield
 

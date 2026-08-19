@@ -40,18 +40,18 @@ def bhmie(x, refrel, theta):
     #
     nang = len(theta)
     if theta[0] == 0.0:
-        assert theta[nang - 1] == 180, (
-            "Error in bhmie(): Angle grid must extend from 0 to 180 degrees."
-        )
+        assert (
+            theta[nang - 1] == 180
+        ), "Error in bhmie(): Angle grid must extend from 0 to 180 degrees."
         iang0 = 0
         iang180 = nang - 1
     else:
-        assert theta[0] == 180, (
-            "Error in bhmie(): Angle grid must extend from 0 to 180 degrees."
-        )
-        assert theta[nang - 1] == 0, (
-            "Error in bhmie(): Angle grid must extend from 0 to 180 degrees."
-        )
+        assert (
+            theta[0] == 180
+        ), "Error in bhmie(): Angle grid must extend from 0 to 180 degrees."
+        assert (
+            theta[nang - 1] == 0
+        ), "Error in bhmie(): Angle grid must extend from 0 to 180 degrees."
         iang0 = nang - 1
         iang180 = 0
     #

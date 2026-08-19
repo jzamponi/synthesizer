@@ -50,7 +50,6 @@ class Pipeline:
         overwrite=False,
         verbose=True,
     ):
-
         self.steps = []
         self.lam = int(lam)
         self.freq = const.c.cgs.value / (self.lam * u.micron.to(u.cm))

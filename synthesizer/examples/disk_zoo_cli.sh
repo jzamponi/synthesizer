@@ -1,10 +1,10 @@
 #!/bin/bash -l
 
-# Example implementation of a radiative transfer modelling pipeline 
-# using the command line interface, written in Bash. 
+# Example implementation of a radiative transfer modelling pipeline
+# using the command line interface, written in Bash.
 #
 # Range of values for physical quantities are generated in the form of bash
-# arrays and passed to the synthesizer extenally as command line arguments. 
+# arrays and passed to the synthesizer extenally as command line arguments.
 #
 
 # Define the base directory for all outputs. It is later appended by working_dir
@@ -36,29 +36,29 @@ do
                 mkdir --parents --verbose $working_dir
                 cd $working_dir
                 echo -e "\n\n\nEntering $PWD"
-            
+
                 # Run the Synthesizer
-                synthesizer 
-                    --grid 
-                    --model ppdisk 
-                    --mdisk ${m[i]} 
-                    --flare ${flare[j]} 
-                    --h0 ${s[k]} 
-                    --ncells 100 
-                    --bbox 200 
-                    --monte-carlo 
-                    --nphot 1e5 
-                    --raytrace 
-                    --npix 400 
-                    --sizeau 400 
-                    --lam 1300 
-                    --amax 10 
+                synthesizer
+                    --grid
+                    --model ppdisk
+                    --mdisk ${m[i]}
+                    --flare ${flare[j]}
+                    --h0 ${s[k]}
+                    --ncells 100
+                    --bbox 200
+                    --monte-carlo
+                    --nphot 1e5
+                    --raytrace
+                    --npix 400
+                    --sizeau 400
+                    --lam 1300
+                    --amax 10
                     --na 50
-                    --material sg 
-                    --incl ${incl[l]} 
-                    --use-template 
-                    --nthreads 40 
-                    --overwrite 
+                    --material sg
+                    --incl ${incl[l]}
+                    --use-template
+                    --nthreads 40
+                    --overwrite
                 (( l++ ))
             done
             (( k++ ))

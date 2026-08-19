@@ -48,7 +48,6 @@ class Dust:
         scatmatrix=False,
         pb=True,
     ):
-
         if k is None:
             k = []
         if n is None:

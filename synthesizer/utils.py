@@ -52,7 +52,6 @@ def print_(
     *args,
     **kwargs,
 ):
-
     # Get the name of the calling function by tracing one level up in the stack
     fname = sys._getframe(1).f_code.co_name if fname is None else fname
 

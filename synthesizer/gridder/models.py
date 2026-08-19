@@ -189,7 +189,6 @@ class PPdisk(BaseModel):
 
     @property
     def dens(self):
-
         # Create temporal shorter vars for ease of writing
         x = self.x
         y = self.y
@@ -784,4 +783,3 @@ class HH212(BaseModel):
         T_0 = 250
         q = 0.5
         return T_0 * (r * u.cm.to(u.au)) ** -q
-

@@ -2,14 +2,12 @@ import glob
 import os
 import random
 import warnings
+from typing import Any
 
 import numpy as np
 from astropy.io import ascii
 
 from synthesizer import utils
-
-
-from typing import Any
 
 
 class RADMC3D:

@@ -55,7 +55,7 @@ extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
-ignore = ["E501", "E741", "B008", "B904", "B026", "B007"]
+ignore = ["E501", "E741", "B008", "B904", "B026", "B007", "UP038"]
 
 [tool.ruff.lint.per-file-ignores]
 "synthesizer/synobs/templates/*" = ["F821", "F841", "E501"]
