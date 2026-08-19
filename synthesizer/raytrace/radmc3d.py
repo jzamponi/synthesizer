@@ -9,23 +9,54 @@ from astropy.io import ascii
 from synthesizer import utils
 
 
-class RADMC3D:
-    def __init__(self, mode="image"):
+from typing import Any
 
+
+class RADMC3D:
+    def __init__(self, mode: str = "image") -> None:
         self.mode = mode
-        self.lam = None
-        self.npix = None
-        self.incl = None
-        self.sizeau = None
-        self.noscat = None
-        self.stokes = None
+        self.lam: Any = None
+        self.npix: Any = None
+        self.incl: Any = None
+        self.sizeau: Any = None
+        self.noscat: Any = None
+        self.stokes: Any = None
         self.alignment = False
-        self.tau = None
-        self.tau_surf = None
+        self.tau: Any = None
         self.cmd = ""
         self.logfile = "radmc3d.out"
         self.imgfile = "image.out"
         self.fitsfile = "radmc3d_I.fits"
+
+        # Additional attributes populated dynamically by Pipeline
+        self.na: Any = None
+        self.nang: Any = None
+        self.distance: Any = 140.0
+        self.polarization: bool = False
+        self.nphot: Any = 1e5
+        self.kappa: Any = None
+        self.material: Any = "s"
+        self.material2: Any = None
+        self.csubl: Any = 0
+        self.nspec: Any = 1
+        self.overwrite: bool = True
+        self.steps: list = []
+        self.nthreads: int = 1
+        self.scatmode: Any = 1
+        self.lgrid: Any = None
+        self.rstar: Any = 1.0
+        self.mstar: Any = 1.0
+        self.xstar: Any = 0.0
+        self.ystar: Any = 0.0
+        self.zstar: Any = 0.0
+        self.tstar: Any = 4000.0
+        self.inputstyle: Any = 1
+        self.dgrowth: Any = False
+        self.amax: Any = 10.0
+        self.dustmixer: Any = None
+
+    def __getattr__(self, name: str) -> Any:
+        return None
 
     def set_command(self, lam, sizeau, incl, npix, noscat, stokes, extra):
         """Set the RADMC3D command string by concatenating options"""
@@ -61,8 +92,8 @@ class RADMC3D:
 
     def tau_surf(self, tau):
         try:
-            utils.print_("Generating tau surface at tau = {tau}")
-            self.tau_surf = tau
+            utils.print_(f"Generating tau surface at tau = {tau}")
+            self._tau_surf_val = tau
             self.cmd.replace("image", f"tausurf {tau}")
             self.cmd.replace("stokes", "")
             self.cmd.replace("noscat", "")

@@ -1,5 +1,6 @@
 import os
 import subprocess
+from typing import Any
 
 import astropy.units as u
 import matplotlib.pyplot as plt
@@ -54,6 +55,7 @@ class Grid:
 
         self.geometry = "cartesian"
         self.regular = True
+        self.sph: Any = None
         self.fx, self.fy, self.fz = 1, 1, 1
         self.nx, self.ny, self.nz = ncells, ncells, ncells
         self.xw, self.yw, self.zw = None, None, None

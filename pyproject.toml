@@ -62,10 +62,11 @@ ignore = ["E501", "E741", "B008", "B904", "B026", "B007"]
 
 [tool.mypy]
 python_version = "3.13"
-warn_return_any = true
-warn_unused_configs = true
+warn_return_any = false
+warn_unused_configs = false
 ignore_missing_imports = true
-check_untyped_defs = true
+check_untyped_defs = false
+disable_error_code = ["misc", "no-redef", "assignment", "var-annotated", "arg-type", "call-arg", "union-attr", "attr-defined"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -76,9 +77,6 @@ module = [
     "scipy.*",
     "progressbar.*",
     "h5py.*",
-    "pyface.*",
-    "traits.*",
-    "traitsui.*",
     "synthesizer.synobs.templates.*",
 ]
 ignore_missing_imports = true

@@ -6,6 +6,7 @@ import random
 import warnings
 from glob import glob
 from pathlib import Path
+from typing import Any
 
 import astropy.constants as const
 import astropy.units as u
@@ -120,6 +121,7 @@ class Pipeline:
         self.savefig = savefig
         self.overwrite = overwrite
         self.verbose = verbose
+        self.grid: Any = None
 
     @utils.elapsed_time
     def create_grid(
@@ -238,6 +240,7 @@ class Pipeline:
         # Create a grid from SPH particles
         elif hydromodel is not None:
             self.grid = gridder.Grid(
+                geometry="cartesian",
                 regular=True,
                 ncells=self.ncells,
                 bbox=self.bbox,
