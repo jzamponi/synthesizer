@@ -1,0 +1,64 @@
+version: '3'
+
+tasks:
+  setup:
+    desc: Install virtual environment dependencies and pre-commit hooks
+    cmds:
+      - uv sync
+      - uv run pre-commit install
+
+  lint:
+    desc: Run ruff linter and mypy type checks
+    cmds:
+      - uv run ruff check synthesizer
+      - uv run mypy synthesizer
+
+  format:
+    desc: Format codebase with ruff
+    cmds:
+      - uv run ruff format synthesizer
+
+  test:
+    desc: Run unit tests with pytest
+    cmds:
+      - uv run pytest tests -v
+
+  test-cov:
+    desc: Run unit tests with coverage report
+    cmds:
+      - uv run pytest tests --cov=synthesizer --cov-report=term-missing
+
+  clean:
+    desc: Remove cache files and build artifacts
+    cmds:
+      - rm -rf .pytest_cache .mypy_cache .ruff_cache build dist *.egg-info
+
+  example:disk-zoo:
+    desc: Run disk zoo example script
+    cmds:
+      - uv run python synthesizer/examples/disk_zoo.py
+
+  example:dust-mixing:
+    desc: Run dust mixing example script
+    cmds:
+      - uv run python synthesizer/examples/dust_mixing.py
+
+  example:ppdisk-synobs:
+    desc: Run ppdisk synobs example script
+    cmds:
+      - uv run python synthesizer/examples/ppdisk_synobs.py
+
+  example:disk-zoo-cli:
+    desc: Run disk zoo CLI bash example
+    cmds:
+      - bash synthesizer/examples/disk_zoo_cli.sh
+
+  example:dust-mixing-cli:
+    desc: Run dust mixing CLI bash example
+    cmds:
+      - bash synthesizer/examples/dust_mixing_cli.sh
+
+  example:ppdisk-synobs-cli:
+    desc: Run ppdisk synobs CLI bash example
+    cmds:
+      - bash synthesizer/examples/ppdisk_synobs_cli.sh
