@@ -1,6 +1,6 @@
 import numpy as np
-from synthesizer.gridder.analytical import PPDisk
-from synthesizer.gridder.models import Constant, PowerLaw
+
+from synthesizer.gridder.models import Constant, PPdisk
 from synthesizer.gridder.vector_field import VectorField
 
 
@@ -22,7 +22,26 @@ def test_constant_model():
 
 
 def test_ppdisk_model():
-    disk = PPDisk(mdisk=1e-3, rin=1, rout=100)
-    assert disk.mdisk == 1e-3
+    # PPdisk(x, y, z, field, rin, rout, rc, r0, h0, alpha, flare, mdisk, mstar, mdot)
+    x = np.ones((5, 5, 5))
+    y = np.ones((5, 5, 5))
+    z = np.ones((5, 5, 5))
+    disk = PPdisk(
+        x,
+        y,
+        z,
+        field="z",
+        rin=1,
+        rout=100,
+        rc=140,
+        r0=100,
+        h0=5,
+        alpha=1,
+        flare=0.5,
+        mdisk=1e-3,
+        mstar=1,
+        mdot=1e-5,
+    )
+    assert disk is not None
     assert disk.rin == 1
     assert disk.rout == 100

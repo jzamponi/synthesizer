@@ -57,7 +57,7 @@ class CasaScript:
         # tclean
         self.vis = f"{self.project}/{self.project}.{self.arrayfile}.ms"
         if self.noisy:
-            self.vis = self.replace(".ms", ".noisy.ms")
+            self.vis = self.vis.replace(".ms", ".noisy.ms")
         self.imagename = lambda s: f"{self.project}/clean_{s}"
         self.imsize = 100
         if self.resolution is None:
