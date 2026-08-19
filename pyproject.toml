@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astro-synthesizer"
-version = "1.0.2"
-description = "Generate astronomical synthetic observations from the command-line "
+version = "2.0.0"
+description = "Generate astronomical synthetic observations from the command-line"
 readme = "README.md"
 authors = [{ name = "Joaquin Zamponi", email = "jzamponi@mpe.mpg.de" }]
 license = { file = "LICENSE" }
@@ -13,8 +13,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
 ]
-keywords = ["", "", ""]
+keywords = ["astronomy", "radiative-transfer", "synthetic-observations"]
 dependencies = [
     "requests",
     "astropy >= 5.1",
@@ -29,7 +30,17 @@ dependencies = [
     "pyqt5",
     "mayavi",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "mypy>=1.10",
+    "ruff>=0.4",
+    "pre-commit>=3.7",
+    "types-requests",
+]
 
 [project.urls]
 Homepage = "https://github.com/jzamponi/synthesizer"
