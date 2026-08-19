@@ -51,10 +51,14 @@ synthesizer = "synthesizer.parser:synthesizer"
 [tool.ruff]
 target-version = "py313"
 line-length = 88
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
-ignore = ["E501"]
+ignore = ["E501", "E741", "B008", "B904", "B026", "B007"]
+
+[tool.ruff.lint.per-file-ignores]
+"synthesizer/synobs/templates/*" = ["F821", "F841", "E501"]
 
 [tool.mypy]
 python_version = "3.13"
@@ -75,5 +79,7 @@ module = [
     "pyface.*",
     "traits.*",
     "traitsui.*",
+    "synthesizer.synobs.templates.*",
 ]
 ignore_missing_imports = true
+ignore_errors = true

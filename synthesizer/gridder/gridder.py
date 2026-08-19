@@ -1,37 +1,58 @@
-import os, sys
+import os
 import subprocess
-import numpy as np
+
 import astropy.units as u
-from astropy.io import fits
 import matplotlib.pyplot as plt
+import numpy as np
+from astropy.io import fits
 from scipy.interpolate import griddata
 
-from synthesizer.gridder.vector_field import VectorField
-from synthesizer.gridder.hydro_reader import *
 from synthesizer import utils
+from synthesizer.gridder.hydro_reader import (
+    Arepo,
+    Athena,
+    Gadget,
+    Gizmo,
+    Nbody6,
+    Phantom,
+    SPHng,
+)
+from synthesizer.gridder.vector_field import VectorField
 
 
-class Grid():
-    def __init__(self, geometry, ncells, bbox=None, regular=True,
-            rin=None, rout=None, nspec=1, csubl=0, sootline=300, g2d=100, 
-            temp=False, vfield=None):
+class Grid:
+    def __init__(
+        self,
+        geometry,
+        ncells,
+        bbox=None,
+        regular=True,
+        rin=None,
+        rout=None,
+        nspec=1,
+        csubl=0,
+        sootline=300,
+        g2d=100,
+        temp=False,
+        vfield=None,
+    ):
         """
         Create a cartesian grid from a set of 3D points.
 
-        The input SPH particle coordinates should be given as cartesian 
+        The input SPH particle coordinates should be given as cartesian
         coordinates in units of cm.
 
-        The box can be trimmed to a given size calling self.trim_box. The 
-        size can be given either as single half-length for a retangular box, 
-        as cartesian vertices of a bounding box or as the radius of a sphere. 
+        The box can be trimmed to a given size calling self.trim_box. The
+        size can be given either as single half-length for a retangular box,
+        as cartesian vertices of a bounding box or as the radius of a sphere.
         Any quantity should be given in units of cm.
 
-        Examples: bbox = [[xmin, xmax], [ymin, ymax], [zmin, zmax]]  
-                  bbox = 50 
+        Examples: bbox = [[xmin, xmax], [ymin, ymax], [zmin, zmax]]
+                  bbox = 50
                   rout = 50
         """
 
-        self.geometry = 'cartesian'
+        self.geometry = "cartesian"
         self.regular = True
         self.fx, self.fy, self.fz = 1, 1, 1
         self.nx, self.ny, self.nz = ncells, ncells, ncells
@@ -62,106 +83,111 @@ class Grid():
         self.savefig = False
         self.interpolated = False
 
-    def read_sph(self, filename, source='sphng'):
-        """ 
-            Read SPH data. 
-            Below are defined small interfaces to read in data from SPH codes.
+    def read_sph(self, filename, source="sphng"):
+        """
+        Read SPH data.
+        Below are defined small interfaces to read in data from SPH codes.
 
-            To add new code sources, synthesizer needs (all values in CGS):
-                self.x, self.y, self.z, self.dens and self.temp (optional) 
+        To add new code sources, synthesizer needs (all values in CGS):
+            self.x, self.y, self.z, self.dens and self.temp (optional)
         """
 
         source = source.lower()
-        self.source_type = 'sph'
+        self.source_type = "sph"
 
         # Download the script if a URL is provided
-        if 'http' in filename: 
+        if "http" in filename:
             utils.download_file(filename)
-            filename = filename.split('/')[-1]
+            filename = filename.split("/")[-1]
 
         utils.print_(
-            f'Reading data from: {filename} | ' +\
-            f'Format: {source.upper()} ({self.source_type.upper()})', end='')
+            f"Reading data from: {filename} | "
+            + f"Format: {source.upper()} ({self.source_type.upper()})",
+            end="",
+        )
 
-        if not os.path.exists(filename): 
-            raise FileNotFoundError(f'{utils.color.red}' +\
-                f'Input SPH file does not exist{utils.color.none}')
+        if not os.path.exists(filename):
+            raise FileNotFoundError(
+                f"{utils.color.red}"
+                + f"Input SPH file does not exist{utils.color.none}"
+            )
 
-        if source.lower() == 'sphng':
+        if source.lower() == "sphng":
             self.sph = SPHng(filename, self.add_temp, self.vfield)
 
-        elif source.lower() == 'gizmo':
+        elif source.lower() == "gizmo":
             self.sph = Gizmo(filename, self.add_temp, self.vfield)
 
-        elif source.lower() == 'gadget':
+        elif source.lower() == "gadget":
             self.sph = Gadget(filename, self.add_temp, self.vfield)
 
-        elif source.lower() == 'arepo':
+        elif source.lower() == "arepo":
             self.sph = Arepo(filename, self.add_temp, self.vfield)
 
-        elif source.lower() == 'phantom':
+        elif source.lower() == "phantom":
             utils.not_implemented()
             self.sph = Phantom(filename, self.add_temp, self.vfield)
 
-        elif source.lower() == 'nbody6':
+        elif source.lower() == "nbody6":
             self.sph = Nbody6(filename, self.add_temp, self.vfield)
 
         else:
-            print('')
-            raise ValueError(f'Source = {source} is currently not supported')
-            
+            print("")
+            raise ValueError(f"Source = {source} is currently not supported")
+
         self.x = self.sph.x
         self.y = self.sph.y
         self.z = self.sph.z
         self.dens = self.sph.rho_g / self.g2d
         self.npoints = len(self.dens)
-        print(f' | Particles: {self.npoints}')
+        print(f" | Particles: {self.npoints}")
 
         if self.add_temp:
             self.temp = self.sph.temp
         else:
             self.temp = np.zeros(self.dens.shape)
-        
+
         if self.vfield:
             self.vx = self.sph.vx
             self.vy = self.sph.vy
             self.vz = self.sph.vz
 
-    def read_amr(self, filename, source='athena++'):
-        """ Read AMR data """
+    def read_amr(self, filename, source="athena++"):
+        """Read AMR data"""
 
         source = source.lower()
-        self.source_type = 'amr'
+        self.source_type = "amr"
 
         # Download the script if a URL is provided
-        if 'http' in filename:
+        if "http" in filename:
             utils.download_file(filename)
-            filename = filename.split('/')[-1]
+            filename = filename.split("/")[-1]
 
         utils.print_(
-            f'Reading data from: {filename} | ' +\
-            f'Format: {source.upper()} ({self.source_type.upper()})')
+            f"Reading data from: {filename} | "
+            + f"Format: {source.upper()} ({self.source_type.upper()})"
+        )
 
-        if not os.path.exists(filename): 
-            utils.file_exists(filename, msg='Input AMR file does not exist')
+        if not os.path.exists(filename):
+            utils.file_exists(filename, msg="Input AMR file does not exist")
 
-        if source == 'athena++':
+        if source == "athena++":
             self.amr = Athena(filename, self.add_temp, True)
 
-        elif source == 'zeustw':
+        elif source == "zeustw":
             utils.not_implemented()
 
-        elif source == 'flash':
+        elif source == "flash":
             utils.not_implemented()
 
-        elif source == 'enzo':
+        elif source == "enzo":
             utils.not_implemented()
-            
-        elif source == 'ramses':
+
+        elif source == "ramses":
             utils.not_implemented()
-            
+
         else:
-            raise ValueError(f'Source = {source} is currently not supported')
+            raise ValueError(f"Source = {source} is currently not supported")
 
         self.x = self.amr.x
         self.y = self.amr.y
@@ -174,24 +200,25 @@ class Grid():
             self.grid_temp = self.amr.temp
         else:
             self.grid_temp = np.zeros(self.grid_dens.shape)
-        
+
         if self.vfield:
             self.grid_vx = self.amr.vx
             self.grid_vy = self.amr.vy
             self.grid_vz = self.amr.vz
 
     def trim_box(self):
-        """ 
-        Trim the original grid to a given size, can be rectangular or spherical. 
+        """
+        Trim the original grid to a given size, can be rectangular or spherical.
         """
 
         # Emtpy dynamic array to store the indices of the particles to remove
         to_remove = []
 
         if self.bbox is not None:
-
-            utils.print_(f'Deleting particles outside a box ' +
-                f'half-length of {self.bbox * u.cm.to(u.au)} au')
+            utils.print_(
+                "Deleting particles outside a box "
+                + f"half-length of {self.bbox * u.cm.to(u.au)} au"
+            )
 
             # Iterate over particles and delete upon reject
             for i in range(self.x.size):
@@ -208,8 +235,10 @@ class Grid():
 
         elif self.rout is not None:
             # Override any previous value of rout
-            utils.print_('Deleting particles outside a radius of ' +
-                f'{self.rout * u.cm.to(u.au)} au ...')
+            utils.print_(
+                "Deleting particles outside a radius of "
+                + f"{self.rout * u.cm.to(u.au)} au ..."
+            )
 
             # Convert cartesian to polar coordinates to define a radial trim
             r = np.sqrt(self.x**2 + self.y**2 + self.z**2)
@@ -230,53 +259,54 @@ class Grid():
             self.vy = np.delete(self.vy, to_remove)
             self.vz = np.delete(self.vz, to_remove)
 
-        utils.print_(f'Particles included: {self.x.size} | ' +
-            f'Particles excluded: {self.npoints - self.x.size} ')
+        utils.print_(
+            f"Particles included: {self.x.size} | "
+            + f"Particles excluded: {self.npoints - self.x.size} "
+        )
 
         if self.x.size == 0:
             raise ValueError(
-                utils.color.red +
-                'All particles were removed. Try increasing --bbox or --rout' +
-                utils.color.none
+                utils.color.red
+                + "All particles were removed. Try increasing --bbox or --rout"
+                + utils.color.none
             )
 
     def plot_particles(self):
-        """ 
-            Render the locations of the 3D points weighted by the 
-            normalized density 
+        """
+        Render the locations of the 3D points weighted by the
+        normalized density
         """
 
         from mayavi import mlab
 
-        utils.print_('Rendering particles in 3D weighted by density')
+        utils.print_("Rendering particles in 3D weighted by density")
 
-        fig = mlab.figure(
-            size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2)
-        )
+        mlab.figure(size=(1100, 1000), bgcolor=(1, 1, 1), fgcolor=(0.2, 0.2, 0.2))
         mlab.points3d(self.x, self.y, self.z, self.dens)
         mlab.show()
 
         if self.savefig:
-            figname = 'particles.png' if not isinstance(self.savefig, str) \
-                else self.savefig
-            utils.print_(f'Saving figure to {figname}')
+            figname = (
+                "particles.png" if not isinstance(self.savefig, str) else self.savefig
+            )
+            utils.print_(f"Saving figure to {figname}")
             mlab.savefig(figname)
 
     def find_resolution(self):
         """
-        Find the minimum distance between points. 
-        If particles are too many, it uses only those that are 
+        Find the minimum distance between points.
+        If particles are too many, it uses only those that are
         closer to the geometrical center than the mean distance.
         """
-        
+
         from scipy.spatial import distance
 
-        utils.print_('Calculating minimum distance between all particles')
+        utils.print_("Calculating minimum distance between all particles")
 
         try:
             dmin = distance.pdist(np.vstack([self.x, self.y, self.z]).T).min()
 
-        except MemoryError as e:
+        except MemoryError:
             # Use only the 10000 closest particles to the center
             n = 10000
             x = np.sort(np.abs(self.x))[-n:]
@@ -286,18 +316,19 @@ class Grid():
 
         if self.cellsize > self.resolution:
             utils.print_(
-                f'The current cell size {self.cellsize*u.cm.to(u.au):.1}au '+\
-                f'is larger than the minimum particle separation '+\
-                f'{self.resolution*u.cm.to(u.au):.1}au. ', blue=True)
-            utils.print_('You may want to increase ncells or use a bbox', 
-                blue=True)
+                f"The current cell size {self.cellsize * u.cm.to(u.au):.1}au "
+                + "is larger than the minimum particle separation "
+                + f"{self.resolution * u.cm.to(u.au):.1}au. ",
+                blue=True,
+            )
+            utils.print_("You may want to increase ncells or use a bbox", blue=True)
 
         return dmin
 
-    def interpolate(self, field, method='linear', fill='min'):
+    def interpolate(self, field, method="linear", fill="min"):
         """
-            Interpolate a set of points in cartesian coordinates along with their
-            values into a rectangular regular cartesian grid.
+        Interpolate a set of points in cartesian coordinates along with their
+        values into a rectangular regular cartesian grid.
         """
 
         self.regular = True
@@ -314,81 +345,75 @@ class Grid():
         self.zc = np.linspace(rmin, rmax, self.nz)
         self.X, self.Y, self.Z = np.meshgrid(self.xc, self.yc, self.zc)
 
-        if field == 'dens':
+        if field == "dens":
             utils.print_(
-                f'Creating a box of size [{rmin*u.cm.to(u.au):.1f} au, ' +
-                f'{rmax*u.cm.to(u.au):.1f} au] with {self.ncells} cells ' +
-                f'per side.'
+                f"Creating a box of size [{rmin * u.cm.to(u.au):.1f} au, "
+                + f"{rmax * u.cm.to(u.au):.1f} au] with {self.ncells} cells "
+                + "per side."
             )
 
         # Determine which quantity is to be interpolated
-        if field == 'dens':
-            utils.print_(
-                f'Interpolating density values onto the grid')
+        if field == "dens":
+            utils.print_("Interpolating density values onto the grid")
             values = self.dens
-        elif field == 'temp':
-            utils.print_(
-                f'Interpolating temperature values onto the grid')
+        elif field == "temp":
+            utils.print_("Interpolating temperature values onto the grid")
             values = self.temp
-        elif field == 'vx':
-            utils.print_(
-                f'Interpolating X vector field components onto the grid')
+        elif field == "vx":
+            utils.print_("Interpolating X vector field components onto the grid")
             values = self.vx
-        elif field == 'vy':
-            utils.print_(
-                f'Interpolating Y vector field components onto the grid')
+        elif field == "vy":
+            utils.print_("Interpolating Y vector field components onto the grid")
             values = self.vy
-        elif field == 'vz':
-            utils.print_(
-                f'Interpolating Z vector field components onto the grid')
+        elif field == "vz":
+            utils.print_("Interpolating Z vector field components onto the grid")
             values = self.vz
         else:
             raise ValueError('field must be "dens", "temp", "vx", "vy" or "vz"')
 
         # Set a number or key to fill the values outside the interpol. range
         fill = {
-            'min': np.min(values), 
-            'max': np.max(values), 
-            'mean': np.mean(values), 
+            "min": np.min(values),
+            "max": np.max(values),
+            "mean": np.mean(values),
         }.get(fill, fill)
 
         # Interpolate the point values at the grid points
         interp = griddata(
-            points=np.vstack([self.x, self.y, self.z]).T, 
-            values=values, 
-            xi=(self.X, self.Y, self.Z), 
-            method=method, 
+            points=np.vstack([self.x, self.y, self.z]).T,
+            values=values,
+            xi=(self.X, self.Y, self.Z),
+            method=method,
             fill_value=fill,
         )
- 
+
         # Store the interpolated field
-        if field == 'dens':
+        if field == "dens":
             self.grid_dens = interp
-        elif field == 'temp':
+        elif field == "temp":
             self.grid_temp = interp
-        elif field == 'vx':
+        elif field == "vx":
             self.grid_vx = interp
-        elif field == 'vy':
+        elif field == "vy":
             self.grid_vy = interp
-        elif field == 'vz':
+        elif field == "vz":
             self.grid_vz = interp
 
         self.interpolated = True
 
-
     def create_grid(self):
         """
-            This method creates the final cell walls to then be written to file
-    
-            For conversion of grid codes, makes sure cell walls are set and 
-            populates wall centers.
+        This method creates the final cell walls to then be written to file
+
+        For conversion of grid codes, makes sure cell walls are set and
+        populates wall centers.
         """
 
         # If input file is a grid, just copy the cell walls
-        if self.source_type == 'amr':
+        if self.source_type == "amr":
             if self.x is None:
-                raise ValueError('Cells walls xw, yw, zw have not been set')
-            
+                raise ValueError("Cells walls xw, yw, zw have not been set")
+
             else:
                 self.xw = self.x
                 self.yw = self.y
@@ -418,148 +443,145 @@ class Grid():
         self.ny = self.yc.size
         self.nz = self.zc.size
 
-
     def write_grid_file(self):
-        """ Write the grid file """
-        utils.print_('Writing grid file')
+        """Write the grid file"""
+        utils.print_("Writing grid file")
 
-        with open('amr_grid.inp','w+') as f:
+        with open("amr_grid.inp", "w+") as f:
             # iformat
-            f.write('1\n')                     
+            f.write("1\n")
             # Regular grid
-            f.write(f'{int(not self.regular)}\n')
+            f.write(f"{int(not self.regular)}\n")
             # Coordinate system
-            f.write(f'{int({"cartesian":1, "spherical": 100}[self.geometry])}\n')
+            f.write(f"{int({'cartesian': 1, 'spherical': 100}[self.geometry])}\n")
             # Gridinfo
-            f.write('0\n')                       
+            f.write("0\n")
             # incl_x incl_y incl_z: set to 1 if dimension is fully active
-            f.write('1 1 1\n')                   
+            f.write("1 1 1\n")
             # Number of grid cell centers
-            f.write(f'{self.xc.size:d} {self.yc.size:d} {self.zc.size:d}\n')
+            f.write(f"{self.xc.size:d} {self.yc.size:d} {self.zc.size:d}\n")
 
             # Write the cell walls
             for i in self.xw:
-                f.write(f'{i:13.6e}\n')      
+                f.write(f"{i:13.6e}\n")
             for j in self.yw:
-                f.write(f'{j:13.6e}\n')      
+                f.write(f"{j:13.6e}\n")
             for k in self.zw:
-                f.write(f'{k:13.6e}\n')      
-
+                f.write(f"{k:13.6e}\n")
 
     def write_density_file(self):
-        """ Write the density file """
-        utils.print_('Writing dust density file')
+        """Write the density file"""
+        utils.print_("Writing dust density file")
 
         # Flatten the array into a 1D fortran-style indexing
-        density = self.grid_dens.ravel(order='F')
-        with open('dust_density.inp','w+') as f:
-            f.write('1\n')                      
-            f.write(f'{density.size:d}\n')
-            f.write(f'{self.nspec}\n')                
+        density = self.grid_dens.ravel(order="F")
+        with open("dust_density.inp", "w+") as f:
+            f.write("1\n")
+            f.write(f"{density.size:d}\n")
+            f.write(f"{self.nspec}\n")
 
             if self.nspec == 1:
                 # Write a single dust species
                 for d in density:
-                    f.write(f'{d:13.6e}\n')
+                    f.write(f"{d:13.6e}\n")
             else:
-                utils.print_(f'Writing two density species ...')
-                # Write two densities: 
-                # one with original value outside the sootline and zero within 
-                temp1d = self.grid_temp.ravel(order='F')
+                utils.print_("Writing two density species ...")
+                # Write two densities:
+                # one with original value outside the sootline and zero within
+                temp1d = self.grid_temp.ravel(order="F")
                 for i, d in enumerate(density):
                     if temp1d[i] < self.sootline:
-                        f.write(f'{d:13.6e}\n')
+                        f.write(f"{d:13.6e}\n")
                     else:
-                        f.write('0\n')
+                        f.write("0\n")
 
                 # one with zero outside the sootline and reduced density within
                 for i, d in enumerate(density):
                     if temp1d[i] < self.sootline:
-                        f.write('0\n')
+                        f.write("0\n")
                     else:
-                        f.write(f'{(d * self.subl_mfrac):13.6e}\n')
+                        f.write(f"{(d * self.subl_mfrac):13.6e}\n")
 
     def write_temperature_file(self):
-        """ Write the temperature file """
-        utils.print_('Writing dust temperature file')
-        
-        temperature = self.grid_temp.ravel(order='F')
-        with open('dust_temperature.dat','w+') as f:
-            f.write('1\n')                      
-            f.write(f'{temperature.size:d}\n')
-            f.write(f'{self.nspec}\n')                
+        """Write the temperature file"""
+        utils.print_("Writing dust temperature file")
+
+        temperature = self.grid_temp.ravel(order="F")
+        with open("dust_temperature.dat", "w+") as f:
+            f.write("1\n")
+            f.write(f"{temperature.size:d}\n")
+            f.write(f"{self.nspec}\n")
 
             # Write the temperature Nspec times for Nspec dust species
-            for i in range(self.nspec):
+            for _i in range(self.nspec):
                 for t in temperature:
-                    f.write(f'{t:13.6e}\n')
+                    f.write(f"{t:13.6e}\n")
 
     def write_vector_field(self, morphology):
-        """ Create a vector field for dust alignment """
- 
-        utils.print_('Writing grain alignment direction file')
- 
+        """Create a vector field for dust alignment"""
+
+        utils.print_("Writing grain alignment direction file")
+
         if self.vfield:
-            
             x3d, y3d, z3d = np.meshgrid(self.xc, self.yc, self.zc)
             self.vfield = VectorField(x3d, y3d, z3d, morphology)
-            self.vfield.vx = self.grid_vx 
-            self.vfield.vy = self.grid_vy 
-            self.vfield.vz = self.grid_vz 
- 
-        with open('grainalign_dir.inp','w+') as f:
-            f.write('1\n')
-            f.write(f'{int(self.nx * self.ny * self.nz)}\n')
+            self.vfield.vx = self.grid_vx
+            self.vfield.vy = self.grid_vy
+            self.vfield.vz = self.grid_vz
+
+        with open("grainalign_dir.inp", "w+") as f:
+            f.write("1\n")
+            f.write(f"{int(self.nx * self.ny * self.nz)}\n")
             for iz in range(self.nx):
                 for iy in range(self.ny):
                     for ix in range(self.nz):
-                        f.write(f'{self.vfield.vx[ix, iy, iz]:13.6e} ' +\
-                                f'{self.vfield.vy[ix, iy, iz]:13.6e} ' +\
-                                f'{self.vfield.vz[ix, iy, iz]:13.6e}\n')
+                        f.write(
+                            f"{self.vfield.vx[ix, iy, iz]:13.6e} "
+                            + f"{self.vfield.vy[ix, iy, iz]:13.6e} "
+                            + f"{self.vfield.vz[ix, iy, iz]:13.6e}\n"
+                        )
 
     def write_heatsource(self):
-        """ Write internal heat source file """
-        utils.print_('Writing internal heat source file')
+        """Write internal heat source file"""
+        utils.print_("Writing internal heat source file")
 
-        with open('heatsource.inp','w+') as f:
-            f.write('1\n')
-            f.write(f'{self.heatsource.size:d}\n')
-            for h in self.heatsource.ravel(order='F'):
-                f.write(f'{h:13.6e}\n')
+        with open("heatsource.inp", "w+") as f:
+            f.write("1\n")
+            f.write(f"{self.heatsource.size:d}\n")
+            for h in self.heatsource.ravel(order="F"):
+                f.write(f"{h:13.6e}\n")
 
     def plot_2d(self, field, data=None, cmap=None, savefig=False):
-        """ Plot the density midplane at z=0 using Matplotlib """
+        """Plot the density midplane at z=0 using Matplotlib"""
 
-        if self.geometry == 'spherical':
-            utils.not_implemented('Plot grid 2d in spherical coordinates.')                
+        if self.geometry == "spherical":
+            utils.not_implemented("Plot grid 2d in spherical coordinates.")
 
         if not self.regular:
-            utils.not_implemented('Plot irregular grids.')
+            utils.not_implemented("Plot irregular grids.")
 
         try:
             from matplotlib.colors import LogNorm
-            utils.print_(f'Plotting the {field} grid midplane')
-            plt.rcParams['xtick.direction'] = 'in'
-            plt.rcParams['ytick.direction'] = 'in'
-            plt.rcParams['xtick.top'] = True
-            plt.rcParams['ytick.right'] = True
-            plt.rcParams['xtick.minor.visible'] = True
-            plt.rcParams['ytick.minor.visible'] = True
-            plt.close('all')
+
+            utils.print_(f"Plotting the {field} grid midplane")
+            plt.rcParams["xtick.direction"] = "in"
+            plt.rcParams["ytick.direction"] = "in"
+            plt.rcParams["xtick.top"] = True
+            plt.rcParams["ytick.right"] = True
+            plt.rcParams["xtick.minor.visible"] = True
+            plt.rcParams["ytick.minor.visible"] = True
+            plt.close("all")
 
             # Detect what field to use
             if data is None:
-                data = {
-                    'density': self.grid_dens, 
-                    'temperature': self.grid_temp
-                }[field]
+                data = {"density": self.grid_dens, "temperature": self.grid_temp}[field]
             else:
                 data = data.T
-            
+
             # Set the plot title for the right field
             title = {
-                'density': r'Dust Density (g cm$^{-3}$)', 
-                'temperature': r'Dust Temperature (K)',
+                "density": r"Dust Density (g cm$^{-3}$)",
+                "temperature": r"Dust Temperature (K)",
             }[field]
 
             # Set the bbox if existent
@@ -570,19 +592,19 @@ class Grid():
                 extent = [-bbox, bbox] * 2
 
             # If data cube is in spher. coords., interpolate to a cartesian cube
-            if self.geometry == 'spherical':
-                utils.print_(f'Before conversion: {data.shape = }', blue=True)
+            if self.geometry == "spherical":
+                utils.print_(f"Before conversion: {data.shape = }", blue=True)
                 data = utils.spherical_to_cartesian(
                     data,
-                    self.xc, 
-                    self.yc, 
-                    self.zc, 
+                    self.xc,
+                    self.yc,
+                    self.zc,
                     order=3,
                 )
-                utils.print_(f'After conversion: {data.shape = }', blue=True)
-        
-            # Extract the middle plane 
-            plane = self.ncells//2 - 1
+                utils.print_(f"After conversion: {data.shape = }", blue=True)
+
+            # Extract the middle plane
+            plane = self.ncells // 2 - 1
 
             data_xy = data[:, :, plane].T
             data_xz = data[:, plane, :].T
@@ -590,149 +612,149 @@ class Grid():
             vmin = data_xy.min() if data_xy.min() > 0 else None
             vmax = data_xy.max() if data_xy.max() < np.inf else None
 
-            if np.all(data_xy == np.zeros(data_xy.shape)): 
-                raise ValueError(f'{field} midplane is exactly 0.')
+            if np.all(data_xy == np.zeros(data_xy.shape)):
+                raise ValueError(f"{field} midplane is exactly 0.")
 
             fig, p = plt.subplots(nrows=1, ncols=2, figsize=(10, 5.5))
 
             # Set the colormap in case it was not given
             if cmap is None:
-                cmap = 'BuPu' if field == 'density' else 'inferno'
+                cmap = "BuPu" if field == "density" else "inferno"
 
             pxy = p[0].imshow(
-                data_xy, 
-                norm=LogNorm(vmin=vmin, vmax=vmax), 
+                data_xy,
+                norm=LogNorm(vmin=vmin, vmax=vmax),
                 cmap=cmap,
                 extent=extent,
             )
-            pxz = p[1].imshow(
-                data_xz, 
-                norm=LogNorm(vmin=vmin, vmax=vmax), 
+            p[1].imshow(
+                data_xz,
+                norm=LogNorm(vmin=vmin, vmax=vmax),
                 cmap=cmap,
                 extent=extent,
             )
-            cxy = fig.colorbar(pxy, ax=p[0], pad=0.01, orientation='horizontal')
-            cxz = fig.colorbar(pxy, ax=p[1], pad=0.01, orientation='horizontal')
+            cxy = fig.colorbar(pxy, ax=p[0], pad=0.01, orientation="horizontal")
+            cxz = fig.colorbar(pxy, ax=p[1], pad=0.01, orientation="horizontal")
             cxy.set_label(title)
             cxz.set_label(title)
-            p[0].set_title('Midplane XY')
-            p[1].set_title('Midplane XZ')
-            p[0].set_ylabel('Y (AU)')
-            p[1].set_ylabel('Z (AU)')
+            p[0].set_title("Midplane XY")
+            p[1].set_title("Midplane XZ")
+            p[0].set_ylabel("Y (AU)")
+            p[1].set_ylabel("Z (AU)")
             p[0].set_xticklabels([])
             p[1].set_xticklabels([])
 
             try:
-                if self.vfield and field == 'density':
+                if self.vfield and field == "density":
                     p[0].streamplot(
-                        np.linspace(-bbox, bbox, self.ncells), 
-                        np.linspace(-bbox, bbox, self.ncells), 
-                        self.vfield.vx[..., plane], 
+                        np.linspace(-bbox, bbox, self.ncells),
+                        np.linspace(-bbox, bbox, self.ncells),
+                        self.vfield.vx[..., plane],
                         self.vfield.vy[..., plane],
                         linewidth=0.5,
-                        color='k', 
-                        density=0.7, 
+                        color="k",
+                        density=0.7,
                     )
                     p[1].streamplot(
-                        np.linspace(-bbox, bbox, self.ncells), 
-                        np.linspace(-bbox, bbox, self.ncells), 
-                        self.vfield.vx[:, plane, :], 
+                        np.linspace(-bbox, bbox, self.ncells),
+                        np.linspace(-bbox, bbox, self.ncells),
+                        self.vfield.vx[:, plane, :],
                         self.vfield.vz[:, plane, :],
                         linewidth=0.5,
-                        color='k', 
-                        density=0.7, 
+                        color="k",
+                        density=0.7,
                     )
             except Exception as e:
                 raise
-                utils.print_('Unable to add vector stream lines',  red=True)
+                utils.print_("Unable to add vector stream lines", red=True)
                 utils.print_(e, bold=True)
 
             plt.tight_layout()
             plt.show()
 
         except Exception as e:
-            utils.print_('Unable to show the 2D grid slice.',  red=True)
+            utils.print_("Unable to show the 2D grid slice.", red=True)
             utils.print_(e, bold=True)
 
-
     def plot_3d(self, field, data=None, tau=False, cmap=None, savefig=False):
-        """ Render the interpolated 3D field using Mayavi """
+        """Render the interpolated 3D field using Mayavi"""
 
-        if self.geometry == 'spherical':
-            utils.not_implemented('Plot grid 3d in spherical coordinates.')                
+        if self.geometry == "spherical":
+            utils.not_implemented("Plot grid 3d in spherical coordinates.")
 
         if not self.regular:
-            utils.not_implemented('Plot irregular grids.')
+            utils.not_implemented("Plot irregular grids.")
 
         try:
             from mayavi import mlab
             from mayavi.api import Engine
-            from mayavi.modules.text3d import Text3D
             from mayavi.modules.grid_plane import GridPlane
+            from mayavi.modules.text3d import Text3D
 
-            interpolated = 'interpolated' if self.interpolated else ' '
-            utils.print_(f'Visualizing the {interpolated}{field} field ...')
+            interpolated = "interpolated" if self.interpolated else " "
+            utils.print_(f"Visualizing the {interpolated}{field} field ...")
 
             if data is None:
-                data = {
-                'density': self.grid_dens,
-                    'temperature': self.grid_temp
-                }[field]
-            
+                data = {"density": self.grid_dens, "temperature": self.grid_temp}[field]
+
             title = {
-                'density': r'Dust Density (g cm$^{-3}$)', 
-                'temperature': r'Gas Temperature (g cm$^{-3}$)',
+                "density": r"Dust Density (g cm$^{-3}$)",
+                "temperature": r"Gas Temperature (g cm$^{-3}$)",
             }[field]
 
             # Initialize the figure and scene
             engine = Engine()
             engine.start()
             fig = mlab.figure(
-                size=(1100, 1000),  bgcolor=(1, 1, 1),  fgcolor=(0.2, 0.2, 0.2))
+                size=(1100, 1000), bgcolor=(1, 1, 1), fgcolor=(0.2, 0.2, 0.2)
+            )
 
             # Set the colormap in case it was given
-            if cmap is None: cmap = 'inferno'
+            if cmap is None:
+                cmap = "inferno"
 
             # Render data
-            plot = mlab.contour3d(
-                data, contours=20, opacity=0.2, colormap=cmap)
+            plot = mlab.contour3d(data, contours=20, opacity=0.2, colormap=cmap)
 
             # Add a colorbar
-            cbar = mlab.colorbar(plot, orientation='vertical', title=title)
+            mlab.colorbar(plot, orientation="vertical", title=title)
 
-            # Add a bounding box frame             
+            # Add a bounding box frame
             bbox = int(np.round(self.bbox * u.cm.to(u.au), 1))
             mlab.outline(
-                figure=fig, 
-                extent=[0, self.nx, 0, self.ny, 0, self.nz], 
+                figure=fig,
+                extent=[0, self.nx, 0, self.ny, 0, self.nz],
             )
             mlab.axes(
                 ranges=[-bbox, bbox] * 3,
-                xlabel='AU', ylabel='AU', zlabel='AU', nb_labels=3
+                xlabel="AU",
+                ylabel="AU",
+                zlabel="AU",
+                nb_labels=3,
             )
-        
+
             # Handle figure items
             manager = engine.scenes[0].children[0].children[0]
 
             # Customize the colobar
             lut = manager.scalar_lut_manager
             lut.title_text_property.italic = False
-            lut.title_text_property.font_family = 'times'
+            lut.title_text_property.font_family = "times"
             lut.title_text_property.font_size = 23
 
             # Paint one face of the box to represent the observing plane
             obs_plane = GridPlane()
             engine.add_filter(obs_plane, manager)
-            obs_plane.grid_plane.axis = 'z'
+            obs_plane.grid_plane.axis = "z"
             obs_plane.grid_plane.position = 0
-            obs_plane.actor.property.representation = 'surface'
+            obs_plane.actor.property.representation = "surface"
             obs_plane.actor.property.opacity = 0.2
             obs_plane.actor.property.color = (0.76, 0.72, 0.87)
-            
+
             # Label the plane in 3D
             obs_label = Text3D()
             engine.add_filter(obs_label, manager)
-            obs_label.text = 'Observer Plane'
+            obs_label.text = "Observer Plane"
             obs_label.actor.property.color = (0.76, 0.72, 0.87)
             obs_label.position = np.array([30, 15, 0])
             obs_label.scale = np.array([6, 6, 6])
@@ -741,54 +763,56 @@ class Grid():
 
             # Add an optional tau = 1 surface
             if tau:
-                utils.print_('Adding optical depth surface at tau = 1')
+                utils.print_("Adding optical depth surface at tau = 1")
                 dl = bbox * u.au.to(u.cm) * 2 / data.shape[0]
                 kappa = 1
                 tau1 = np.cumsum(data * kappa * dl, axis=0).T
 
                 if tau1.max() < 1:
                     utils.print_(
-                        f'The highest optical depth is tau = {tau1.max()}. ' +
-                        'No tau = 1 surface will be displayed.')
+                        f"The highest optical depth is tau = {tau1.max()}. "
+                        + "No tau = 1 surface will be displayed."
+                    )
                 else:
-                    tausurf = mlab.contour3d(
-                        tau1, contours=[1], opacity=0.5, color=(0, 0, 1))
+                    mlab.contour3d(tau1, contours=[1], opacity=0.5, color=(0, 0, 1))
 
-            utils.print_('HINT: If you wanna play with the figure, press '+\
-                'the nice icon in the upper left corner.', blue=True)
+            utils.print_(
+                "HINT: If you wanna play with the figure, press "
+                + "the nice icon in the upper left corner.",
+                blue=True,
+            )
             utils.print_(
                 "      Try, IsoSurface -> Actor -> Representation = Wireframe. ",
-                blue=True)
+                blue=True,
+            )
             utils.print_(
-                "      If you don't see much, it's probably a matter of "+\
-                "adjusting the contours. ", blue=True)
+                "      If you don't see much, it's probably a matter of "
+                + "adjusting the contours. ",
+                blue=True,
+            )
 
             mlab.show()
 
         except Exception as e:
-            utils.print_('Unable to show the 3D grid.',  red=True)
+            utils.print_("Unable to show the 3D grid.", red=True)
             utils.print_(e, bold=True)
 
     def save_grid_2d(self, field, data=None):
-        """ Save the 2D grid as a FITS file """
+        """Save the 2D grid as a FITS file"""
 
         if data is None:
-            data = {
-                'density': self.grid_dens,
-                'temperature': self.grid_temp
-            }[field]
+            data = {"density": self.grid_dens, "temperature": self.grid_temp}[field]
 
         title = {
-            'density': r'Dust Density (g cm$^{-3}$)',
-            'temperature': r'Gas Temperature (g cm$^{-3}$)',
+            "density": r"Dust Density (g cm$^{-3}$)",
+            "temperature": r"Gas Temperature (g cm$^{-3}$)",
         }[field]
 
         # Set the bbox if existent
         if self.bbox is None:
-            extent = self.bbox
+            pass
         else:
             bbox = self.bbox * u.cm.to(u.au)
-            extent = [-bbox, bbox] * 2
 
         # Extract the middle plane
         plane = self.ncells // 2 - 1
@@ -799,40 +823,38 @@ class Grid():
         try:
             # Write maps to FITS files
             utils.write_fits(
-                f'{field}_2d.fits',
+                f"{field}_2d.fits",
                 data=np.array([data_xy, data_xz]),
-                header=fits.Header({
-                    'BTYPE': title.split('(')[0],
-                    'BUNIT': title.split('(')[1][:-1].replace('$', ''),
-                    'CDELT1': 2 * bbox / self.nx,
-                    'CRPIX1': self.nx // 2,
-                    'CRVAL1': 0,
-                    'CUNIT1': 'AU',
-                    'CDELT2': 2 * bbox / self.ny,
-                    'CRPIX2': self.ny // 2,
-                    'CRVAL2': 0,
-                    'CUNIT2': 'AU',
-                }),
+                header=fits.Header(
+                    {
+                        "BTYPE": title.split("(")[0],
+                        "BUNIT": title.split("(")[1][:-1].replace("$", ""),
+                        "CDELT1": 2 * bbox / self.nx,
+                        "CRPIX1": self.nx // 2,
+                        "CRVAL1": 0,
+                        "CUNIT1": "AU",
+                        "CDELT2": 2 * bbox / self.ny,
+                        "CRPIX2": self.ny // 2,
+                        "CRVAL2": 0,
+                        "CUNIT2": "AU",
+                    }
+                ),
                 overwrite=True,
                 verbose=True,
             )
         except Exception as e:
-            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_("Unable to write data to FITS file", red=True)
             utils.print_(e, bold=True)
 
-
     def save_grid_3d(self, field, data=None):
-        """ Save the 3D grid as a FITS file """
+        """Save the 3D grid as a FITS file"""
 
         if data is None:
-            data = {
-                'density': self.grid_dens,
-                'temperature': self.grid_temp
-            }[field]
+            data = {"density": self.grid_dens, "temperature": self.grid_temp}[field]
 
         title = {
-            'density': r'Dust Density (g cm$^{-3}$)',
-            'temperature': r'Gas Temperature (g cm$^{-3}$)',
+            "density": r"Dust Density (g cm$^{-3}$)",
+            "temperature": r"Gas Temperature (g cm$^{-3}$)",
         }[field]
 
         bbox = self.bbox * u.cm.to(u.au)
@@ -840,64 +862,62 @@ class Grid():
         try:
             # Write maps to FITS files
             utils.write_fits(
-                f'{field}_3d.fits',
+                f"{field}_3d.fits",
                 data=data,
-                header=fits.Header({
-                    'BTYPE': title.split('(')[0],
-                    'BUNIT': title.split('(')[1][:-1].replace('$', ''),
-                    'CDELT1': 2 * bbox / self.nx,
-                    'CRPIX1': self.nx // 2,
-                    'CRVAL1': 0,
-                    'CUNIT1': 'AU',
-                    'CDELT2': 2 * bbox / self.ny,
-                    'CRPIX2': self.ny // 2,
-                    'CRVAL2': 0,
-                    'CUNIT2': 'AU',
-                    'CDELT3': 2 * bbox / self.ny,
-                    'CRPIX3': self.ny // 2,
-                    'CRVAL3': 0,
-                    'CUNIT3': 'AU',
-                }),
+                header=fits.Header(
+                    {
+                        "BTYPE": title.split("(")[0],
+                        "BUNIT": title.split("(")[1][:-1].replace("$", ""),
+                        "CDELT1": 2 * bbox / self.nx,
+                        "CRPIX1": self.nx // 2,
+                        "CRVAL1": 0,
+                        "CUNIT1": "AU",
+                        "CDELT2": 2 * bbox / self.ny,
+                        "CRPIX2": self.ny // 2,
+                        "CRVAL2": 0,
+                        "CUNIT2": "AU",
+                        "CDELT3": 2 * bbox / self.ny,
+                        "CRPIX3": self.ny // 2,
+                        "CRVAL3": 0,
+                        "CUNIT3": "AU",
+                    }
+                ),
                 overwrite=True,
                 verbose=True,
             )
         except Exception as e:
-            utils.print_('Unable to write data to FITS file',  red=True)
+            utils.print_("Unable to write data to FITS file", red=True)
             utils.print_(e, bold=True)
 
     def create_vtk(self, dust_density=False, dust_temperature=False, rename=False):
-        """ Call radmc3d to create a VTK file of the grid """
+        """Call radmc3d to create a VTK file of the grid"""
 
         if dust_density:
-            subprocess.run('radmc3d vtk_dust_density 1'.split())
+            subprocess.run("radmc3d vtk_dust_density 1".split())
             if rename:
-                subprocess.run('mv model.vtk model_dust_density.vtk'.split())
+                subprocess.run("mv model.vtk model_dust_density.vtk".split())
 
         if dust_temperature:
-            subprocess.run('radmc3d vtk_dust_temperature 1'.split())
+            subprocess.run("radmc3d vtk_dust_temperature 1".split())
             if rename:
-                subprocess.run('mv model.vtk model_dust_temperature.vtk'.split())
+                subprocess.run("mv model.vtk model_dust_temperature.vtk".split())
 
         if not dust_density and not dust_temperature:
-            subprocess.run('radmc3d vtk_grid'.split())
-
+            subprocess.run("radmc3d vtk_grid".split())
 
     def render(self, dust_density=False, dust_temperature=False):
-        """ Render the new grid in 3D using ParaView """
-    
+        """Render the new grid in 3D using ParaView"""
+
         # Make sure ParaView is installed and callable
-        utils.which('paraview')
-    
+        utils.which("paraview")
+
         try:
             if dust_density:
-                subprocess.run(
-                f'paraview model_dust_density.vtk 2>/dev/null'.split())
+                subprocess.run("paraview model_dust_density.vtk 2>/dev/null".split())
             elif dust_temperature:
                 subprocess.run(
-                f'paraview model_dust_temperature.vtk 2>/dev/null'.split())
+                    "paraview model_dust_temperature.vtk 2>/dev/null".split()
+                )
         except Exception as e:
-            utils.print_('Unable to render using ParaView.',  red=True)
+            utils.print_("Unable to render using ParaView.", red=True)
             utils.print_(e, bold=True)
-
-
-

@@ -22,7 +22,7 @@ def bhcoat(x, y, rfrel1, rfrel2):
     x1 = rfrel1 * x
     x2 = rfrel2 * x
     y2 = rfrel2 * y
-    ystop = y + 4e0 * y**(1./3.) + 2e0
+    ystop = y + 4e0 * y ** (1.0 / 3.0) + 2e0
     refrel = rfrel2 / rfrel1
 
     # series terminated after nstop terms
@@ -35,7 +35,7 @@ def bhcoat(x, y, rfrel1, rfrel2):
     psi1y = np.sin(y)
     chi0y = -np.sin(y)
     chi1y = np.cos(y)
-    xi0y = psi0y - ii * chi0y
+    psi0y - ii * chi0y
     xi1y = psi1y - ii * chi1y
     chi0y2 = -np.sin(y2)
     chi1y2 = np.cos(y2)
@@ -64,13 +64,13 @@ def bhcoat(x, y, rfrel1, rfrel2):
             d1x2 = 1e0 / (rn / x2 - d0x2) - rn / x2
             chix2 = (2e0 * rn - 1e0) * chi1x2 / x2 - chi0x2
             chiy2 = (2e0 * rn - 1e0) * chi1y2 / y2 - chi0y2
-            chipx2 = chi1x2 - rn*chix2 / x2
-            chipy2 = chi1y2 - rn*chiy2 / y2
+            chipx2 = chi1x2 - rn * chix2 / x2
+            chipy2 = chi1y2 - rn * chiy2 / y2
             ancap = refrel * d1x1 - d1x2
             ancap = ancap / (refrel * d1x1 * chix2 - chipx2)
             ancap = ancap / (chix2 * d1x2 - chipx2)
-			# ancap sometimes become -inf
-            #print(f'ancap: {ancap}  chix2: {chix2}  d1x2: {d1x2}  chipx2: {chipx2}')
+            # ancap sometimes become -inf
+            # print(f'ancap: {ancap}  chix2: {chix2}  d1x2: {d1x2}  chipx2: {chipx2}')
             brack = ancap * (chiy2 * d1y2 - chipy2)
             bncap = refrel * d1x2 - d1x1
             bncap = bncap / (refrel * chipx2 - d1x1 * chix2)
@@ -102,7 +102,7 @@ def bhcoat(x, y, rfrel1, rfrel2):
         bn = (rfrel2 * gnbar + rn / y) * psiy - psi1y
         bn = bn / ((rfrel2 * gnbar + rn / y) * xiy - xi1y)
         qsca = qsca + (2e0 * rn + 1e0) * (abs(an) * abs(an) + abs(bn) * abs(bn))
-        xback = xback + (2e0 * rn + 1e0) * (-1e0)**n * (an - bn)
+        xback = xback + (2e0 * rn + 1e0) * (-1e0) ** n * (an - bn)
         qext = qext + (2e0 * rn + 1e0) * (np.real(an) + np.real(bn))
         psi0y = psi1y
         psi1y = psiy
@@ -118,7 +118,7 @@ def bhcoat(x, y, rfrel1, rfrel2):
         d0y2 = d1y2
         n = n + 1
 
-        counter = counter + 1 
+        counter = counter + 1
         # main loop breaking condition
         if n - 1 - nstop >= 0e0:
             break
@@ -127,7 +127,7 @@ def bhcoat(x, y, rfrel1, rfrel2):
     qqsca = 2e0 * qsca * iyy
     qqext = 2e0 * qext * iyy
     qqabs = qqext - qqsca
-    qback = (abs(xback))**2
+    qback = (abs(xback)) ** 2
     qback = qback * iyy
 
     return qqext, qqsca, qqabs, qback

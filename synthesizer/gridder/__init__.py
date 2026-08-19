@@ -1,5 +1,5 @@
-from .gridder import Grid
 from .analytical import AnalyticalModel
+from .gridder import Grid
 from .vector_field import VectorField
-from .hydro_reader import *
-#from .athena_reader import AthenaReader
+
+__all__ = ["AnalyticalModel", "Grid", "VectorField"]
